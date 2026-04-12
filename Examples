@@ -1,37 +1,57 @@
-# Build skill — before / after example
+# Examples
 
-## Request
+These are minimal real-world uses that match the intended workflow.
 
-“Add Stripe checkout and deploy it.”
+## Example 1 ? Fix a production build failure
+**Goal:** unblock deploy without digging through logs manually.
 
-## Weak agent behavior
+**Prompt (Claude/Cursor/Windsurf):**
 
-* writes code first
-* discovers env vars late
-* forgets webhook setup
-* deploy breaks
-* asks for one missing value at a time
+~~~
+You are in a failing Next.js project.
+Use the build skill.
+Target: get `npm run build` green and summarize what was fixed.
+~~~
 
-## Better behavior with build skill
+**Expected outcome:**
+- missing env vars identified
+- dependency version conflicts fixed
+- compile errors resolved
+- short decision log + rollback safety
 
-### Pre-scan
+---
 
-* detects missing `STRIPE_SECRET_KEY`
-* detects missing `STRIPE_WEBHOOK_SECRET`
-* detects callback URL requirement
-* detects package install requirement
+## Example 2 ? Dual-agent PR review + rework loop
+**Goal:** merge only after cross-review and rework rounds.
 
-### One grouped request
+**Prompt (Orchestrator):**
 
-“Before I start, I need:
+~~~
+Start dual-agent review for PR #17.
+Codex implements. Claude reviews.
+If review requests changes, trigger rework up to 2 rounds.
+Generate a decision card for approval.
+~~~
 
-1. Stripe secret key
-2. Stripe webhook secret
-3. confirmation of production callback URL”
+**Expected outcome:**
+- cross-review posted to PR
+- rework round(s) applied
+- final decision card (approve/revise/hold)
+- merge only after explicit approval
 
-### After input
+---
 
-* adds config
-* updates code
-* checks build path
-* reports changed files, risks, and deploy status
+## Example 3 ? UI polish + anti-slop pass
+**Goal:** raise UX quality without generic AI look.
+
+**Prompt:**
+~~~
+Use the craft skill on this dashboard.
+Prioritize typography, spacing, contrast, and motion.
+Avoid generic gradients.
+~~~
+
+**Expected outcome:**
+- typography scale tightened
+- spacing system normalized
+- UI looks deliberate, not template-like
