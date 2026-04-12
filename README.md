@@ -1,109 +1,293 @@
 # solo-cto-agent
 
-You're a solo founder. Your AI agent writes code, but you still spend hours on:
-- debugging deploy failures it caused
-- - re-explaining context every new session
-  - - manually checking env vars, API keys, DB migrations before every task
-    - - accepting AI-generated UI that screams "I was made by ChatGPT"
-      - - getting "this is a great idea!" when you need someone to poke holes
-       
-        - This repo fixes that. Six skill files that turn a code-completing agent into one that thinks before it builds, remembers what you decided, and tells you when your idea has a hole in it.
-       
-        - ## Before / After
-       
-        - | Without solo-cto-agent | With solo-cto-agent |
-        - |---|---|
-        - | "Please add DATABASE_URL to your .env" | Agent scans prerequisites, asks once, configures everything |
-        - | Same build error 5 times in a loop | Circuit breaker stops at 3, reports root cause |
-        - | Agent forgets everything next session | Session memory persists decisions across conversations |
-        - | "Should I create the file?" / "Should I use this skill?" | L1 autonomy: just does it, reports after |
-        - | Generic blue gradients, rounded-everything UI | Anti-slop checklist enforces intentional design |
-        - | "Great idea!" (no pushback) | 3-lens review: investor / user / competitor perspectives |
-        - | You explain your stack every time | One-time `{{YOUR_*}}` placeholders, then it knows |
-        - | Deploy > break > panic > manual fix | Deploy > monitor > auto-fix > rollback if needed |
-       
-        - ## What changes in practice
-       
-        - **Context switching** -- you stop re-explaining. The memory skill writes session episodes, compresses them into knowledge articles after 14 days, and loads relevant context at session start. You pick up where you left off.
-       
-        - **Deployment anxiety** -- the ship skill watches the build after push. If it fails, it reads the logs, attempts a fix, and only bothers you if the circuit breaker trips. Three attempts max, then a clear report instead of an error spiral.
-       
-        - **"AI slop" design** -- the craft skill runs a 10-point anti-slop checklist on every UI output. No gratuitous gradients, no blue-500-as-brand-color, no shadow-lg-on-everything. It enforces OKLCH color tokens, intentional font pairing, and motion that respects `prefers-reduced-motion`.
-       
-        - **Idea validation** -- spark takes a one-sentence idea through 6 stages (seed > market scan > competitors > unit economics > scenarios > PRD). Every number is tagged `[confirmed]` / `[estimated]` / `[unverified]`. No "the market is huge."
-       
-        - **Honest feedback** -- review evaluates from three perspectives: a VC seeing your deck for 30 seconds, a target user trying it for the first time, and your smartest competitor deciding whether to copy or ignore you. Output: score /10 with specific gaps.
-       
-        - ## Install
-       
-        - **One-liner:**
-       
-        - ```bash
-          curl -sSL https://raw.githubusercontent.com/seunghunbae-3svs/solo-cto-agent/main/setup.sh | bash
-          ```
+I made this because I got tired of using AI coding tools that were good at writing code, but still left me doing all the messy CTO work around it.
 
-          **Manual:**
+The hard part was rarely “write the feature.”
+It was everything around the feature:
 
-          ```bash
-          git clone https://github.com/seunghunbae-3svs/solo-cto-agent.git
-          cp -r solo-cto-agent/skills/* ~/.claude/skills/
-          cat solo-cto-agent/autopilot.md >> ~/.claude/CLAUDE.md
-          ```
+* catching missing env vars before a deploy breaks
+* not re-explaining the same stack every new session
+* stopping error loops before they waste half an hour
+* getting honest pushback on ideas instead of empty encouragement
+* cleaning up UI that looks obviously AI-generated
 
-          **Cherry-pick** (only want the build pipeline?):
+This repo is my attempt to package those habits into a small set of reusable skills.
 
-          ```bash
-          cp -r solo-cto-agent/skills/build ~/.claude/skills/
-          ```
+It is not magic.
+It is not a replacement for judgment.
+It is just a better operating system for the kind of AI agent I wanted to work with.
 
-          Then open `skills/build/SKILL.md` and replace the placeholders:
+## What this is
 
-          ```
-          {{YOUR_OS}}          >  macOS 15
-          {{YOUR_EDITOR}}      >  Cursor
-          {{YOUR_DEPLOY}}      >  Vercel
-          {{YOUR_FRAMEWORK}}   >  Next.js 15
-          ```
+`solo-cto-agent` is an opinionated skill pack for solo founders, indie hackers, and small teams using Claude as part of their build workflow.
 
-          ## How the autonomy works
+The point is simple:
 
-          The agent operates on 3 levels, defined in `autopilot.md`:
+* less repetitive setup work
+* less context loss between sessions
+* less AI slop in code and design
+* more useful criticism before you commit to bad ideas
+* more initiative from the agent on low-risk work
 
-          **L1 -- Just do it.** Fix typos, create files, load context, search the web, pick output formats. No confirmation needed. This eliminates the back-and-forth that makes agents feel like interns.
+## What changes in practice
 
-          **L2 -- Do, then report.** When the request is ambiguous, the agent picks the best assumption, delivers the result, and notes what it assumed. "Built this assuming Next.js 15 -- say otherwise and I'll adjust." No 5-question interrogation before starting.
+This is the difference I wanted in day-to-day use:
 
-          **L3 -- Ask first.** Production deploys, DB schema changes, anything sent under your name, cost-increasing decisions. These require explicit approval. Everything else doesn't.
+| Without this                                 | With this                                                      |
+| -------------------------------------------- | -------------------------------------------------------------- |
+| Same build error over and over               | Circuit breaker stops the loop and summarizes the likely cause |
+| “Please add this manually to your dashboard” | Agent checks setup earlier and asks once when needed           |
+| New session, same explanation again          | Important decisions get reused                                 |
+| Rounded-blue-gradient AI UI                  | Design checks push for more intentional output                 |
+| “Looks good to me” feedback                  | Review forces actual criticism                                 |
+| Agent asks permission for every tiny step    | Low-risk work gets done without constant back-and-forth        |
 
-          ## What's in the box
+## Who this is for
 
-          ```
-          solo-cto-agent/
-          -- autopilot.md              < Autonomy rules. Merge into CLAUDE.md
-          -- skills/
-          |   -- build/SKILL.md        < Dev pipeline + pre-req scanner + circuit breaker
-          |   -- ship/SKILL.md         < Deploy > monitor > auto-fix > rollback
-          |   -- craft/SKILL.md        < Anti-slop design system (OKLCH, type, motion)
-          |   -- spark/SKILL.md        < Idea > 6-stage validation > PRD
-          |   -- review/SKILL.md       < 3-lens evaluator (investor / user / competitor)
-          |   -- memory/SKILL.md       < Error patterns + session memory + self-improvement
-          -- templates/
-              -- project.md            < Per-project state tracker
-              -- context.md            < Cross-session decision log
-          ```
+This repo is probably useful if you:
 
-          ## Design principles
+* build mostly alone or with a very small team
+* already use Claude in your workflow
+* want the agent to take more initiative
+* care about startup execution, not just code completion
+* are okay with opinionated defaults
 
-          **Agent does the work, you make decisions.** If the agent can figure it out, it should. Your time goes to judgment calls, not copy-pasting env vars.
+It is probably not a good fit if you:
 
-          **Risks before strengths.** Every evaluation leads with what's broken, missing, or contradictory. Strengths come second. No cheerleading.
+* work in a tightly locked-down enterprise environment
+* do not want agents touching files or setup
+* want every action manually approved
+* prefer a neutral framework-agnostic starter pack with very conservative defaults
 
-          **Facts over vibes.** Every number has a source or formula. Claims are tagged `[confirmed]`, `[estimated]`, or `[unverified]`. "Strong pipeline" and "growing rapidly" are banned phrases.
+## What’s inside
 
-          **YAGNI.** Don't design Phase 3 features when Phase 0 isn't validated. If the user says "back to basics," the agent respects it. No expansion pressure.
+```text
+solo-cto-agent/
+├── autopilot.md
+├── skills/
+│   ├── build/
+│   │   └── SKILL.md
+│   ├── ship/
+│   │   └── SKILL.md
+│   ├── craft/
+│   │   └── SKILL.md
+│   ├── spark/
+│   │   └── SKILL.md
+│   ├── review/
+│   │   └── SKILL.md
+│   └── memory/
+│       └── SKILL.md
+└── templates/
+    ├── project.md
+    └── context.md
+```
 
-          **Pre-scan, don't surprise.** Before writing a single line of code, scan for missing env vars, API keys, DB migrations, package dependencies. Ask once, configure everything. Never tell the user to "manually add this to your dashboard."
+## Install
 
-          ## License
+### Quick install
 
-          MIT -- fork it, modify it, ship it.
+```bash
+curl -sSL https://raw.githubusercontent.com/seunghunbae-3svs/solo-cto-agent/main/setup.sh | bash
+```
+
+### Manual install
+
+```bash
+git clone https://github.com/seunghunbae-3svs/solo-cto-agent.git
+cp -r solo-cto-agent/skills/* ~/.claude/skills/
+cat solo-cto-agent/autopilot.md >> ~/.claude/CLAUDE.md
+```
+
+### Only want one skill?
+
+```bash
+cp -r solo-cto-agent/skills/build ~/.claude/skills/
+```
+
+Then open the skill file and replace the placeholders with your actual stack.
+
+Example:
+
+```text
+{{YOUR_OS}}          -> macOS / Windows / Linux
+{{YOUR_EDITOR}}      -> Cursor / VSCode / etc.
+{{YOUR_DEPLOY}}      -> Vercel / Railway / Netlify / etc.
+{{YOUR_FRAMEWORK}}   -> Next.js / Remix / SvelteKit / etc.
+```
+
+## How I use autonomy
+
+Most agent workflows feel too timid in the wrong places and too reckless in the dangerous ones.
+
+So I split behavior into 3 levels.
+
+### L1 — just do it
+
+Small, low-risk work should not need approval.
+
+Examples:
+
+* fixing typos
+* creating obvious files
+* loading context
+* choosing an output format
+* doing routine search or setup checks
+
+### L2 — do it, then explain
+
+If something is a bit ambiguous but still low-risk, the agent makes the best assumption, does the work, and tells me what it assumed.
+
+That is usually better than spending 10 messages clarifying something that could have been resolved in one pass.
+
+### L3 — ask first
+
+Some things still need explicit approval:
+
+* production deploys
+* schema changes
+* cost-increasing decisions
+* anything sent under my name
+* actions that could cause irreversible damage
+
+That split has worked much better for me than asking permission every 30 seconds.
+
+## Skills
+
+### build
+
+This is the one I use most.
+
+Its job is to reduce the annoying parts of implementation work:
+
+* check prerequisites before coding
+* catch missing env vars, packages, migrations, or config earlier
+* keep scope from drifting
+* stop repeated error loops
+* keep build and deploy problems from bouncing back to the user too quickly
+
+The core idea is simple:
+
+> do more of the setup thinking before writing code, not after something fails.
+
+### ship
+
+The job is not done when the code is written.
+It is done when the deploy works.
+
+This skill treats deploy failures as part of the work:
+
+* monitor the build
+* read the logs
+* try reasonable fixes
+* stop when a circuit breaker is hit
+* escalate clearly instead of spiraling
+
+### craft
+
+This exists because AI-generated UI often has a very obvious look.
+
+Too many gradients.
+Too much rounded everything.
+Too many generic SaaS defaults that look “fine” but still feel cheap.
+
+This skill is an opinionated design filter:
+
+* typography rules
+* color discipline
+* spacing consistency
+* motion sanity
+* anti-slop checks
+
+It does not guarantee great design, but it helps avoid lazy AI design.
+
+### spark
+
+For idea work, I wanted something better than “this market is huge.”
+
+This skill takes an early idea and forces it through structure:
+
+* market scan
+* competitors
+* unit economics
+* scenarios
+* risk framing
+* PRD direction
+
+Useful when an idea is still vague but you need something more testable.
+
+### review
+
+This skill is intentionally not friendly.
+
+It looks at a plan from three perspectives:
+
+* investor
+* target user
+* smart competitor
+
+The point is to expose weak points early, not to make the founder feel good.
+
+### memory
+
+This is for reducing repeat explanation and preserving useful context.
+
+Not everything needs to be remembered forever.
+But decisions, repeated failure patterns, and project context should not disappear every session.
+
+## Design principles
+
+### Agent does the work, user makes decisions
+
+If the agent can reasonably figure something out, it should do that.
+The user should spend time on judgment calls, not repetitive setup.
+
+### Risks before strengths
+
+Good review starts with what is broken, vague, or contradictory.
+Praise comes after that.
+
+### Facts over vibes
+
+If a number appears, it should have a source, a formula, or a clear label like:
+
+* `[confirmed]`
+* `[estimated]`
+* `[unverified]`
+
+### Pre-scan, don’t surprise
+
+A lot of agent frustration comes from late discovery:
+missing env vars, missing package installs, missing DB changes, missing credentials.
+
+This pack tries to catch those earlier.
+
+### Keep the loop bounded
+
+If the same problem keeps happening, stop and report clearly.
+An agent that loops forever is worse than one that asks for help.
+
+## What this is not
+
+This is not:
+
+* a hosted product
+* a full framework
+* a universal standard for agent behavior
+* a replacement for technical judgment
+
+It is just a set of operating rules that worked well enough for me to package and share.
+
+## Recommended first use
+
+If you want to try this without changing your whole workflow:
+
+1. install only `build` and `review`
+2. replace the stack placeholders
+3. use them on one real feature or bug
+4. see whether the agent becomes more useful or just more opinionated
+
+That is the easiest way to tell whether this fits how you work.
+
+## License
+
+MIT — fork it, modify it, ship it.
