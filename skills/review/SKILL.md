@@ -1,103 +1,121 @@
 ---
+
 name: review
-description: "Multi-perspective idea/plan evaluator. Stress-tests from investor, user, and competitor viewpoints. Kills blind spots. Activates on: evaluate, review, critique, what do you think, devil's advocate, weakness, risk, is this viable, what's wrong with this, how does this look."
+description: "Multi-perspective evaluator for ideas, plans, PRDs, and pitches. Stress-tests from investor, user, and competitor viewpoints. Activates on: evaluate, review, critique, what do you think, devil's advocate, weakness, risk, is this viable, what's wrong with this, how does this look."
 user-invocable: true
----
+--------------------
 
 # Review — Multi-Perspective Evaluator
 
-Evaluates ideas, plans, PRDs, and pitches from perspectives the creator can't see.
-Not a cheerleader — a stress test.
+This skill is built to be useful, not comforting.
+
+Its job is to pressure-test an idea, plan, or product from angles the creator usually underweights.
+
+Not a cheerleader.
+Not a vibe check.
+A stress test.
 
 ---
 
 ## Evaluation Framework
 
-Every review runs three lenses, then synthesizes.
+Every review runs through three lenses, then synthesizes them.
 
-### Lens 1: First-Time Investor (30 seconds)
+---
 
-What a VC/angel sees in the first 30 seconds:
-```
-□ Can I explain this to my partner in one sentence?
-□ How big is this market? (TAM > $1B for VC-scale?)
-□ Why this team? What's the unfair advantage?
-□ Why now? What changed to make this possible/necessary?
-□ What's the business model? Is it proven in adjacent markets?
-□ How does this become a $100M+ business?
-□ What are the top 3 risks I'd flag in a memo?
+## Lens 1 — First-Time Investor
+
+What a serious investor notices in the first 30 seconds:
+
+```text
+□ Can this be explained clearly in one sentence?
+□ Is the market meaningfully large?
+□ Why this team?
+□ Why now?
+□ Is the business model understandable?
+□ Could this become a large business, or is it inherently capped?
+□ What are the first 3 risks that would go into an investment memo?
 ```
 
 Output format:
-```
+
+```text
 INVESTOR VERDICT: [Strong / Needs Work / Pass]
 One-liner: "..."
 Key concern: "..."
-What would make me invest: "..."
+What would make this investable: "..."
 ```
 
-### Lens 2: Target User (first experience)
+---
 
-What the actual target user thinks:
-```
+## Lens 2 — Target User
+
+What the actual user feels on first contact:
+
+```text
 □ Do I understand what this does in 5 seconds?
-□ Does this solve a problem I actually have?
-□ Is this better than what I currently use? By how much?
-□ What's my switching cost?
-□ Would I pay for this? How much?
-□ Would I recommend this to a friend?
-□ What would make me stop using this after 1 week?
+□ Does it solve a real problem for me?
+□ Is it better than what I already use?
+□ What would make switching worth it?
+□ Would I pay for it?
+□ Would I recommend it?
+□ What would make me stop using it after a week?
 ```
 
 Output format:
-```
+
+```text
 USER VERDICT: [Would use daily / Would try once / Would ignore]
 First reaction: "..."
 Dealbreaker: "..."
 What would make me switch: "..."
 ```
 
-### Lens 3: Smartest Competitor
+---
 
-What the best-funded, fastest competitor would do:
-```
-□ Can we copy this in 3 months?
-□ Do we already have the users/data to do this better?
-□ What's their moat? (network effects, data, brand, regulatory?)
-□ Where is their weakest point?
-□ What would we build to neutralize their advantage?
-□ Can we just acquire them cheaper than competing?
+## Lens 3 — Smartest Competitor
+
+What the strongest competitor would think:
+
+```text
+□ Can this be copied quickly?
+□ Do they already have distribution or data to do it better?
+□ Is there a real moat here?
+□ Where is the weakest point?
+□ What would a strong competitor build to neutralize it?
+□ Is this easier to copy, ignore, or acquire?
 ```
 
 Output format:
-```
+
+```text
 COMPETITOR VERDICT: [Threatening / Annoying / Ignorable]
 Response strategy: "..."
-Their moat assessment: [Strong / Weak / None]
-Time to competitive response: "..."
+Moat assessment: [Strong / Weak / None]
+Time to response: "..."
 ```
 
 ---
 
 ## Synthesis
 
-After all three lenses:
+After the three lenses:
 
-```
+```text
 OVERALL ASSESSMENT: [Score /10]
 
-Strengths (what works):
+Strengths:
 1. ...
 2. ...
 
-Critical Gaps (what's missing or broken):
+Critical gaps:
 1. ...
 2. ...
 
-Contradictions (where the plan conflicts with itself):
+Contradictions:
 1. ...
 
-Recommended Changes (specific, actionable):
+Recommended changes:
 1. ...
 2. ...
 3. ...
@@ -105,52 +123,67 @@ Recommended Changes (specific, actionable):
 
 ---
 
-## Financial Verification (if numbers are present)
+## Financial verification
 
+If numbers are present, check them.
+
+```text
+□ Revenue assumptions realistic?
+□ CAC based on what?
+□ LTV based on what churn or retention assumption?
+□ Margin includes real costs?
+□ Breakeven timeline grounded or hand-wavy?
+□ Every number tagged:
+  [confirmed] / [estimated] / [unverified]
 ```
-□ Revenue assumptions realistic? Based on what?
-□ CAC source — estimated or actual data?
-□ LTV calculation — what churn rate is assumed?
-□ Margin — all costs included? (infra, support, payment processing?)
-□ Breakeven timeline — reasonable given burn rate?
-□ Every number marked: [confirmed] / [estimated] / [unverified]
-```
+
+Do not let clean formatting disguise weak economics.
 
 ---
 
-## Fact-Based Principle
+## Fact-based principle
 
-```
-✓ "Based on [competitor]'s public data, their conversion is ~2%"
-✓ "This market grew 15% YoY per [source]"
-✗ "This market is growing rapidly" (vague)
-✗ "Users will love this" (unsubstantiated)
-✗ "The team is uniquely positioned" (prove it)
+Good review should distinguish:
+
+```text
+✓ "Based on X's public pricing, this seems plausible"
+✓ "This assumption depends on Y"
+✓ "This number is estimated, not validated"
+
+✗ "Huge market"
+✗ "Users will love this"
+✗ "Strong moat" with no mechanism
+✗ "Uniquely positioned" with no evidence
 ```
 
-Every claim needs evidence or an explicit [assumption] tag.
+Every important claim should either have support or be labeled clearly as an assumption.
 
 ---
 
-## When to Use This Skill
+## When to use this skill
 
-- After completing a Spark (idea development) stage
-- Before creating a pitch deck
-- Before committing to a technical architecture
-- When user asks "what do you think?" or "is this viable?"
-- When pivoting or making a major strategic decision
-- As a sanity check before external presentations
+Use it:
+
+* after a spark/idea stage
+* before a deck
+* before committing to a technical direction
+* when asking “is this actually viable?”
+* when deciding whether to pivot
+* before presenting externally
 
 ---
 
-## Anti-Patterns
+## Anti-patterns
 
-```
-❌ "This looks great!" without critique
+```text
 ❌ Only listing strengths
-❌ Soft language that hides real concerns ("might want to consider...")
-❌ Ignoring financial viability
-❌ Comparing to only weaker competitors
-❌ Assuming the market exists without verification
-❌ Treating "first-mover" as an advantage (it's usually not)
+❌ Being so polite that the real problem disappears
+❌ Confusing possibility with evidence
+❌ Ignoring business model risk
+❌ Comparing only to weak competitors
+❌ Treating first-mover status as a moat by default
+❌ Saying something is promising without saying what could break it
 ```
+
+The purpose of this skill is not to kill ideas reflexively.
+It is to make weak assumptions visible early enough to fix.
