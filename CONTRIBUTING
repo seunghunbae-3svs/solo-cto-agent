@@ -29,7 +29,7 @@ The goal is to make AI agents more useful for solo founders and very small teams
 * prefer practical examples
 * be honest about tradeoffs
 * reduce hype where the repo does not fully automate something
-* preserve the repo’s “useful, not polite” tone
+* preserve the repo's "useful, not polite" tone
 
 ## Before opening a PR
 
@@ -50,7 +50,7 @@ Please ask:
 
 ## Bad contribution examples
 
-* adding “AI magic” claims with no implementation behind them
+* adding "AI magic" claims with no implementation behind them
 * introducing framework-specific assumptions as universal rules
 * making the language softer but less useful
 * replacing concrete operator rules with generic fluff
