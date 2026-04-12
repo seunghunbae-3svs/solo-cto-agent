@@ -2,8 +2,7 @@
 
 I made this because I got tired of using AI coding tools that were good at writing code, but still left me doing all the messy CTO work around it.
 
-The hard part was rarely “write the feature.”
-It was everything around the feature:
+The hard part was rarely "write the feature." It was everything around the feature:
 
 * catching missing env vars before a deploy breaks
 * not re-explaining the same stack every new session
@@ -11,15 +10,13 @@ It was everything around the feature:
 * getting honest pushback on ideas instead of empty encouragement
 * cleaning up UI that looks obviously AI-generated
 
-This repo is my attempt to package those habits into a small set of reusable skills.
-
-It is not magic.
-It is not a replacement for judgment.
-It is just a better operating system for the kind of AI agent I wanted to work with.
+This repo is my attempt to package those habits into a small set of reusable skills. It is not magic. It is not a replacement for judgment. It is just a better operating system for the kind of AI agent I wanted to work with.
 
 ## What this is
 
-`solo-cto-agent` is an opinionated skill pack for solo founders, indie hackers, and small teams using Claude as part of their build workflow.
+`solo-cto-agent` is an opinionated skill pack for solo founders, indie hackers, and small teams using AI coding agents in their build workflow.
+
+It was built around Claude Code, but the core rules also work in Cursor, Windsurf, and GitHub Copilot. The repo includes native config files for each.
 
 The point is simple:
 
@@ -33,21 +30,21 @@ The point is simple:
 
 This is the difference I wanted in day-to-day use:
 
-| Without this                                 | With this                                                      |
+| Without this | With this |
 | -------------------------------------------- | -------------------------------------------------------------- |
-| Same build error over and over               | Circuit breaker stops the loop and summarizes the likely cause |
-| “Please add this manually to your dashboard” | Agent checks setup earlier and asks once when needed           |
-| New session, same explanation again          | Important decisions get reused                                 |
-| Rounded-blue-gradient AI UI                  | Design checks push for more intentional output                 |
-| “Looks good to me” feedback                  | Review forces actual criticism                                 |
-| Agent asks permission for every tiny step    | Low-risk work gets done without constant back-and-forth        |
+| Same build error over and over | Circuit breaker stops the loop and summarizes the likely cause |
+| "Please add this manually to your dashboard" | Agent checks setup earlier and asks once when needed |
+| New session, same explanation again | Important decisions get reused |
+| Rounded-blue-gradient AI UI | Design checks push for more intentional output |
+| "Looks good to me" feedback | Review forces actual criticism |
+| Agent asks permission for every tiny step | Low-risk work gets done without constant back-and-forth |
 
 ## Who this is for
 
 This repo is probably useful if you:
 
 * build mostly alone or with a very small team
-* already use Claude in your workflow
+* already use Claude, Cursor, Windsurf, or Copilot in your workflow
 * want the agent to take more initiative
 * care about startup execution, not just code completion
 * are okay with opinionated defaults
@@ -64,6 +61,10 @@ It is probably not a good fit if you:
 ```text
 solo-cto-agent/
 ├── autopilot.md
+├── .cursorrules              ← Cursor picks this up automatically
+├── .windsurfrules            ← Windsurf (Cascade) picks this up automatically
+├── .github/
+│   └── copilot-instructions.md  ← GitHub Copilot workspace instructions
 ├── skills/
 │   ├── build/
 │   │   └── SKILL.md
@@ -84,7 +85,7 @@ solo-cto-agent/
 
 ## Install
 
-### Quick install
+### Quick install (Claude Code)
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/seunghunbae-3svs/solo-cto-agent/main/setup.sh | bash
@@ -104,28 +105,40 @@ cat solo-cto-agent/autopilot.md >> ~/.claude/CLAUDE.md
 cp -r solo-cto-agent/skills/build ~/.claude/skills/
 ```
 
-Then open the skill file and replace the placeholders with your actual stack.
-
-Example:
+Then open the skill file and replace the placeholders with your actual stack. Example:
 
 ```text
-{{YOUR_OS}}          -> macOS / Windows / Linux
-{{YOUR_EDITOR}}      -> Cursor / VSCode / etc.
-{{YOUR_DEPLOY}}      -> Vercel / Railway / Netlify / etc.
-{{YOUR_FRAMEWORK}}   -> Next.js / Remix / SvelteKit / etc.
+{{YOUR_OS}}        -> macOS / Windows / Linux
+{{YOUR_EDITOR}}    -> Cursor / VSCode / etc.
+{{YOUR_DEPLOY}}    -> Vercel / Railway / Netlify / etc.
+{{YOUR_FRAMEWORK}} -> Next.js / Remix / SvelteKit / etc.
 ```
+
+### Using with Cursor, Windsurf, or Copilot
+
+If you use Cursor, Windsurf, or GitHub Copilot instead of (or alongside) Claude, the repo includes native rule files:
+
+* `.cursorrules` — Cursor reads this from your project root automatically
+* `.windsurfrules` — Windsurf (Cascade) reads this from your project root automatically
+* `.github/copilot-instructions.md` — GitHub Copilot reads this as workspace-level instructions
+
+Just copy the files you need into your project:
+
+```bash
+cp solo-cto-agent/.cursorrules ./
+cp solo-cto-agent/.windsurfrules ./
+cp -r solo-cto-agent/.github ./
+```
+
+These files contain the same CTO philosophy as the Claude skills — autonomy levels, build discipline, design standards, review rules — adapted to each tool’s format. They are not watered-down versions. They are the same operating system, just in a different config file.
 
 ## How I use autonomy
 
-Most agent workflows feel too timid in the wrong places and too reckless in the dangerous ones.
-
-So I split behavior into 3 levels.
+Most agent workflows feel too timid in the wrong places and too reckless in the dangerous ones. So I split behavior into 3 levels.
 
 ### L1 — just do it
 
-Small, low-risk work should not need approval.
-
-Examples:
+Small, low-risk work should not need approval. Examples:
 
 * fixing typos
 * creating obvious files
@@ -135,9 +148,7 @@ Examples:
 
 ### L2 — do it, then explain
 
-If something is a bit ambiguous but still low-risk, the agent makes the best assumption, does the work, and tells me what it assumed.
-
-That is usually better than spending 10 messages clarifying something that could have been resolved in one pass.
+If something is a bit ambiguous but still low-risk, the agent makes the best assumption, does the work, and tells me what it assumed. That is usually better than spending 10 messages clarifying something that could have been resolved in one pass.
 
 ### L3 — ask first
 
@@ -155,9 +166,7 @@ That split has worked much better for me than asking permission every 30 seconds
 
 ### build
 
-This is the one I use most.
-
-Its job is to reduce the annoying parts of implementation work:
+This is the one I use most. Its job is to reduce the annoying parts of implementation work:
 
 * check prerequisites before coding
 * catch missing env vars, packages, migrations, or config earlier
@@ -171,8 +180,7 @@ The core idea is simple:
 
 ### ship
 
-The job is not done when the code is written.
-It is done when the deploy works.
+The job is not done when the code is written. It is done when the deploy works.
 
 This skill treats deploy failures as part of the work:
 
@@ -184,11 +192,7 @@ This skill treats deploy failures as part of the work:
 
 ### craft
 
-This exists because AI-generated UI often has a very obvious look.
-
-Too many gradients.
-Too much rounded everything.
-Too many generic SaaS defaults that look “fine” but still feel cheap.
+This exists because AI-generated UI often has a very obvious look. Too many gradients. Too much rounded everything. Too many generic SaaS defaults that look "fine" but still feel cheap.
 
 This skill is an opinionated design filter:
 
@@ -202,7 +206,7 @@ It does not guarantee great design, but it helps avoid lazy AI design.
 
 ### spark
 
-For idea work, I wanted something better than “this market is huge.”
+For idea work, I wanted something better than "this market is huge."
 
 This skill takes an early idea and forces it through structure:
 
@@ -217,9 +221,7 @@ Useful when an idea is still vague but you need something more testable.
 
 ### review
 
-This skill is intentionally not friendly.
-
-It looks at a plan from three perspectives:
+This skill is intentionally not friendly. It looks at a plan from three perspectives:
 
 * investor
 * target user
@@ -231,20 +233,17 @@ The point is to expose weak points early, not to make the founder feel good.
 
 This is for reducing repeat explanation and preserving useful context.
 
-Not everything needs to be remembered forever.
-But decisions, repeated failure patterns, and project context should not disappear every session.
+Not everything needs to be remembered forever. But decisions, repeated failure patterns, and project context should not disappear every session.
 
 ## Design principles
 
 ### Agent does the work, user makes decisions
 
-If the agent can reasonably figure something out, it should do that.
-The user should spend time on judgment calls, not repetitive setup.
+If the agent can reasonably figure something out, it should do that. The user should spend time on judgment calls, not repetitive setup.
 
 ### Risks before strengths
 
-Good review starts with what is broken, vague, or contradictory.
-Praise comes after that.
+Good review starts with what is broken, vague, or contradictory. Praise comes after that.
 
 ### Facts over vibes
 
@@ -256,15 +255,11 @@ If a number appears, it should have a source, a formula, or a clear label like:
 
 ### Pre-scan, don’t surprise
 
-A lot of agent frustration comes from late discovery:
-missing env vars, missing package installs, missing DB changes, missing credentials.
-
-This pack tries to catch those earlier.
+A lot of agent frustration comes from late discovery: missing env vars, missing package installs, missing DB changes, missing credentials. This pack tries to catch those earlier.
 
 ### Keep the loop bounded
 
-If the same problem keeps happening, stop and report clearly.
-An agent that loops forever is worse than one that asks for help.
+If the same problem keeps happening, stop and report clearly. An agent that loops forever is worse than one that asks for help.
 
 ## What this is not
 
@@ -291,3 +286,4 @@ That is the easiest way to tell whether this fits how you work.
 ## License
 
 MIT — fork it, modify it, ship it.
+
