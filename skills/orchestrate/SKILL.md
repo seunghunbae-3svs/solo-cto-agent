@@ -1,3 +1,8 @@
+---
+name: orchestrate
+description: "Dual-agent review orchestrator. Runs paired agents on the same codebase, manages routing, scoring, review dispatch, and rework loops. Activates on: cross-review, dual agent, orchestrator, agent scoring, review dispatch, agent failover."
+user-invocable: true
+---
 # Dual-Agent Review Orchestrator
 
 Run two AI agents (Claude + Codex, or any pair) on the same codebase. One writes code, the other reviews it. This skill manages the handoff, scoring, and failure recovery.
