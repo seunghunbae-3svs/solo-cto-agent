@@ -3,7 +3,7 @@
 name: memory
 description: "Context and pattern memory skill for long-running work. Stores useful decisions, repeated failure patterns, and project context so sessions do not restart from zero. Activates on: remember, context, history, decision log, what did we decide, recurring issue, lesson learned."
 user-invocable: true
---------------------
+---
 
 # Memory — Context and Pattern Retention
 
