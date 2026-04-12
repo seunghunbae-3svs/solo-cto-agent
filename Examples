@@ -1,0 +1,37 @@
+# Build skill — before / after example
+
+## Request
+
+“Add Stripe checkout and deploy it.”
+
+## Weak agent behavior
+
+* writes code first
+* discovers env vars late
+* forgets webhook setup
+* deploy breaks
+* asks for one missing value at a time
+
+## Better behavior with build skill
+
+### Pre-scan
+
+* detects missing `STRIPE_SECRET_KEY`
+* detects missing `STRIPE_WEBHOOK_SECRET`
+* detects callback URL requirement
+* detects package install requirement
+
+### One grouped request
+
+“Before I start, I need:
+
+1. Stripe secret key
+2. Stripe webhook secret
+3. confirmation of production callback URL”
+
+### After input
+
+* adds config
+* updates code
+* checks build path
+* reports changed files, risks, and deploy status
