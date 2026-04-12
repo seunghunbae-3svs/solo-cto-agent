@@ -1,192 +1,372 @@
 ---
+
 name: build
-description: "Development pipeline orchestrator. Architect → Build → Review → Deploy with pre-flight checks, auto-prerequisite scanning, and build error quick-fix catalog. Activates on: code, dev, deploy, build, error, bug, fix, API, DB, git, npm, TypeScript, component, feature, debug, hotfix, patch, schema, migration, auth."
+description: "Development pipeline orchestrator. Architect -> Build -> Review -> Deploy with pre-flight checks, pre-req scanning, and bounded error recovery. Activates on: code, dev, deploy, build, error, bug, fix, API, DB, git, npm, TypeScript, component, feature, debug, hotfix, patch, schema, migration, auth."
 user-invocable: true
----
+--------------------
 
 # Build — Development Pipeline Orchestrator
 
-Single pipeline that covers architecture, coding, review, and deployment.
-Merge into your CLAUDE.md or use standalone.
+This skill is for the part of software work that usually gets bounced back to the founder:
+
+* missing env vars
+* package mismatches
+* half-finished migrations
+* repeated build failures
+* hidden setup work discovered too late
+
+The goal is not “maximum autonomy at any cost.”
+The goal is to reduce repetitive operational work while keeping risky decisions explicit.
 
 ---
 
-## Principle 0 — Agent Does Everything. User Confirms Only.
+## Principle 0 — Agent handles routine work. User approves risky work.
 
-User hates: (1) cascading errors (2) agent asking user to do manual work (3) manual file operations.
-→ Agent writes files directly. Never ask user to run shell commands.
-→ Agent configures secrets/env vars directly. Never say "please add X to your deploy platform."
+The agent should take initiative where it is safe and useful.
+
+* Write files directly when the environment allows it.
+* Reuse known context instead of asking the same setup questions again.
+* Batch setup requests into one clear request when direct access is not available.
+* Avoid offloading obvious routine work back to the user too early.
+
+Preferred behavior:
+
+1. scan first
+2. identify what is missing
+3. ask once if something truly requires user input or restricted access
+4. then continue the task without repeated interruptions
+
+Do not pretend direct configuration is possible when access is not available.
+Do not ask the user to do the same manual step repeatedly across repos or environments.
 
 ---
 
 ## Your Stack (customize this section)
 
-```
+```text
 OS:          {{YOUR_OS}}          # e.g. Windows 11, macOS, Linux
 Editor:      {{YOUR_EDITOR}}      # e.g. VSCode, Cursor
 Deploy:      {{YOUR_DEPLOY}}      # e.g. Vercel, Netlify, Railway
 DB:          {{YOUR_DB}}          # e.g. Supabase PostgreSQL, PlanetScale
 ORM:         {{YOUR_ORM}}         # e.g. Prisma, Drizzle, TypeORM
-Framework:   {{YOUR_FRAMEWORK}}   # e.g. Next.js 14, Remix, SvelteKit
+Framework:   {{YOUR_FRAMEWORK}}   # e.g. Next.js 14, Next.js 15, Remix, SvelteKit
 Style:       {{YOUR_STYLE}}       # e.g. Tailwind CSS + shadcn/ui
 Git:         {{YOUR_GIT_USER}}
 ```
 
-### Stack-Specific Warnings (examples — edit for your stack)
+### Stack-Specific Warnings (edit these for your real stack)
 
-- Next.js 14: `params` is NOT a Promise. Remove `await` on params.
-- Next.js 15: `params` IS a Promise. Add `await`.
-- React 18: react-leaflet v4 only. Not v5.
-- Prisma: Always run `prisma generate` before `next build`.
-- Tailwind v4: Use `@import "tailwindcss"` not `@tailwind`. `@apply` cannot reference custom classes.
+* Next.js 14: `params` is not a Promise. Do not `await` it.
+* Next.js 15: `params` is a Promise. `await` it.
+* React 18: confirm compatible package versions before adopting examples blindly.
+* Prisma: run `prisma generate` before `next build` when relevant.
+* Tailwind v4: use the correct import and utility model for v4. Do not assume old syntax.
 
----
-
-## Pipeline: Architect → Build → Review → Deploy
-
-### 1. Architect (start of task)
-```
-1. Identify project (existing/new)
-2. Separate "what to change" from "why"
-3. Impact scope: files, APIs, DB tables
-4. Prerequisites: DB schema? env vars? packages? → resolve BEFORE coding
-5. Scope lock: one thing at a time. Other issues → Known Gaps log
-```
-
-### 2. Build (write code)
-```
-1. Write code
-2. TypeScript strict type check
-3. Run build command → must succeed before next step
-   ⚠️ VM memory limit → Bus error: for simple fixes, verify syntax then push, rely on deploy platform build
-4. Record changed files + reasons
-```
-
-### 3. Review (verify)
-```
-□ Spec: Does implementation match the request exactly?
-□ Import: Do all imports reference real files?
-□ Type: No `any` abuse?
-□ Error: try-catch where needed?
-□ API: HTTP methods, response shapes correct?
-□ DB: ORM queries match actual schema?
-□ Env: New env vars registered on deploy platform?
-□ Security: Auth, RLS, sensitive data handled?
-```
-
-### 4. Deploy (E2E autonomous)
-```
-1. Write/Edit files directly in user folder
-2. Push to Git (direct .git / web editor / ask user as last resort)
-3. Monitor deploy dashboard
-4. Failure → read build logs → fix → re-push
-5. Success → verify live URL → report done
-```
-
-### Circuit Breaker
-```
-CB_NO_PROGRESS = 3   Same error 3x → report to user
-CB_SAME_ERROR  = 5   Same error 5x → hard stop
-CB_CASCADE     = 3   Fix creates 3+ new errors → stop
-```
+Keep this section grounded in the actual stack, not generic internet advice.
 
 ---
 
-## Pre-flight Checklist (customize for your deploy platform)
+## Working model
 
+The pipeline is:
+
+**Architect -> Build -> Review -> Deploy**
+
+Each phase has a job.
+Do not skip straight to coding if setup risks are obvious.
+
+---
+
+## 1) Architect
+
+Before changing code:
+
+```text
+1. Identify the project and the exact task
+2. Separate "what to change" from "why it matters"
+3. Estimate impact:
+   - files
+   - routes
+   - APIs
+   - DB tables
+   - env vars
+   - deploy behavior
+4. Check prerequisites before coding
+5. Lock scope:
+   - do the requested task
+   - note adjacent issues separately instead of expanding scope silently
 ```
-□ Build command succeeds locally
-□ All .env vars registered on deploy platform
-□ Database connection string uses correct pooler endpoint
-□ Auth callback URL = production domain (not localhost)
-□ ORM generate step in build command (e.g. "prisma generate && next build")
-□ .npmrc: legacy-peer-deps=true (if needed)
-□ Git identity matches deploy platform account
+
+Questions to resolve early:
+
+* Is there a migration involved?
+* Is there a new environment variable?
+* Is there a new dependency?
+* Is there a platform or webhook configuration change?
+* Is the build command still valid after this change?
+* Is there a deployment risk that should be surfaced before coding?
+
+If the answer is yes, handle it early.
+
+---
+
+## 2) Build
+
+When coding:
+
+```text
+1. Make the smallest safe change that solves the task
+2. Keep imports real and local
+3. Avoid unnecessary refactors unless they remove direct risk
+4. Run type checks / build checks where appropriate
+5. Record changed files and why they changed
+```
+
+Practical rules:
+
+* Prefer boring code that is easy to verify over clever code.
+* Do not introduce new abstractions unless they pay for themselves immediately.
+* If the environment cannot run a full build safely, do the highest-signal validation available and say so clearly.
+* If a fix touches a risky area, leave a short risk note.
+
+---
+
+## 3) Review
+
+Before calling the task done, check:
+
+```text
+□ Does the implementation match the request exactly?
+□ Are imports pointing to real files?
+□ Are types explicit where they need to be?
+□ Are error states handled where failure is likely?
+□ Do API methods and response shapes still make sense?
+□ Do DB queries match the actual schema?
+□ Are any new env vars or platform settings required?
+□ Did this introduce auth / security / permission risk?
+```
+
+Also check for these anti-patterns:
+
+* hidden scope expansion
+* “temporary” fixes with no exit plan
+* hand-wavy TODOs in critical paths
+* type assertions used to silence uncertainty
+* retries or loops without a stop condition
+
+---
+
+## 4) Deploy
+
+The task is not fully done until the deploy story is understood.
+
+Deploy loop:
+
+```text
+1. Prepare the code and config needed for deploy
+2. Push or propose changes through the available workflow
+3. Watch the build if the environment supports it
+4. If it fails, read the logs before changing anything
+5. Attempt reasonable fixes only
+6. Stop when the circuit breaker is reached
+7. Report clearly instead of spiraling
+```
+
+Do not treat deployment failure as “someone else’s problem” if the work caused it.
+
+---
+
+## Circuit Breaker
+
+Bound the loop.
+
+```text
+CB_NO_PROGRESS = 3   same error, no real progress -> stop and report
+CB_SAME_ERROR  = 5   same error repeated -> hard stop
+CB_CASCADE     = 3   one fix causes 3+ new breakages -> stop
+```
+
+When the breaker trips, report:
+
+* what was attempted
+* what changed
+* what is still failing
+* what likely needs human judgment
+
+---
+
+## Pre-flight Checklist
+
+Customize this to the actual deployment environment.
+
+```text
+□ Build command is still valid
+□ Required env vars are known
+□ DB connection target is correct for the environment
+□ Auth callback / redirect settings match the target domain
+□ ORM generate / migration steps are included when needed
+□ Package manager configuration is compatible with the repo
+□ Git identity and deployment target are aligned
+```
+
+Do not assume production and local setup are interchangeable.
+
+---
+
+## Pre-Requisite Scan Protocol
+
+### Principle
+
+Scan before coding.
+Ask once if required.
+Do not surprise the user halfway through the task.
+
+### What to scan
+
+Before starting any meaningful code or deploy work, check for:
+
+```text
+□ Env vars
+□ API keys / tokens
+□ Secrets in CI / deploy platform
+□ Webhooks and callback URLs
+□ DB schema / migrations
+□ Package additions or version constraints
+□ Access scope / permissions
+□ Domain / DNS assumptions
+```
+
+### How to handle missing requirements
+
+If something is missing:
+
+* collect the missing items
+* ask in one grouped request
+* proceed after the required values or decisions are provided
+
+Bad behavior:
+
+* asking the same question repo by repo
+* discovering a required key halfway through the task
+* turning one missing input into five separate messages
+
+Good behavior:
+
+* one clear grouped request
+* one explanation of why it is needed
+* one place to continue from once resolved
+
+---
+
+## Batch Automation Guidance
+
+When access is available, apply configuration directly.
+
+Examples:
+
+* env vars on the deploy platform
+* local `.env` updates
+* CI secret insertion where the environment allows it
+* repeated config across multiple repos
+
+When access is not available:
+
+* ask once
+* state exactly what is missing
+* group the required setup into one batch
+* avoid vague “please configure this somewhere” guidance
+
+Preferred summary format:
+
+| target | item           | action            | status  |
+| ------ | -------------- | ----------------- | ------- |
+| repo-a | `DATABASE_URL` | set in deploy env | done    |
+| repo-b | `DATABASE_URL` | waiting on access | blocked |
+
+---
+
+## Avoid these patterns
+
+```text
+- Asking for the same setup value multiple times
+- Discovering required env vars halfway through the task
+- Giving one-repo-at-a-time setup instructions when the same change applies everywhere
+- Offloading obvious routine work back to the user too early
+- Pretending direct configuration is possible when access is not available
+- Repeating the same failed fix without changing the diagnosis
+```
+
+Preferred behavior:
+
+```text
+scan first
+ask once
+apply broadly where possible
+stop loops early
+report clearly when access or policy prevents automation
 ```
 
 ---
 
 ## Build Error Quick Fix Catalog
 
-| Error | Fix |
-|---|---|
-| Module not found | Verify import path, check file actually exists |
-| Type error | Fix per strict mode rules |
-| ORM generate missing | Add generate step to build command |
-| params Promise error | Check framework version — await or don't |
-| @apply unknown utility | Tailwind v4: use inline utilities instead of custom classes |
-| Deploy platform 404 | Check package.json is at project root |
-| 14ms build (instant fail) | Set framework preset manually on deploy platform |
+| Error pattern             | First check                                               |
+| ------------------------- | --------------------------------------------------------- |
+| Module not found          | Verify the import path and that the file exists           |
+| Type error                | Fix to match real types instead of bypassing with `any`   |
+| ORM generate missing      | Add the required generate step before build               |
+| Params / routing mismatch | Check framework version and route conventions             |
+| CSS utility issue         | Confirm framework version and syntax model                |
+| Instant deploy fail       | Check framework preset, root directory, and build command |
+| Auth failure after deploy | Check env vars, callback URLs, and deployment domain      |
+
+Treat this as a starting catalog, not a substitute for reading logs.
 
 ---
 
-## Pre-Requisite Scan & Batch Automation Protocol
+## Session reuse
 
-### Principle: "Scan everything needed BEFORE work → ask user ONCE → agent configures ALL automatically"
+If values or decisions were already established in the session:
 
-Asking the user to do manual setup is a failure. Gather needed values in ONE request, then agent handles all configuration.
+* reuse them
+* mention reuse briefly
+* avoid asking again unless the value is ambiguous or risky
 
-### 1. Pre-Requisite Scan (mandatory before every task)
+Examples of reusable context:
 
-Before starting any code/deploy/infra work, auto-run this checklist:
-
-```
-□ Env vars — Any new env vars needed? (deploy platform, CI, .env.local)
-□ API keys/tokens — External service integration keys needed?
-□ Secrets — CI/CD secrets, deploy platform secrets to add?
-□ Webhooks — New webhook setup needed? (URL, secret, events)
-□ DB — Schema changes, migrations needed?
-□ Packages — New npm/pip packages to install?
-□ Permissions — Repo access, token scope additions needed?
-□ DNS/Domain — Custom domain, CNAME setup needed?
-```
-
-**Result format:**
-- If something is needed: Before starting work, say "This task requires [X, Y, Z]. Please provide [values]." — ONE request only.
-- If already known from this session: Do NOT re-ask. Use the value already provided.
-- If nothing is needed: Start work immediately without announcement.
-
-### 2. Batch Automation
-
-Once user provides values, **agent directly** handles:
-
-```
-CI/CD Secrets       → Configure via platform UI or API
-Deploy Env Vars     → Configure via platform UI or API
-Webhook Setup       → Register via platform UI or API
-.env.local          → Write directly to project folder
-```
-
-**Multi-repo batch:**
-- Same value needed across repos → loop through all repos, auto-insert
-- Never give "please add this to repo X" manual guides
-- Report results as table: `| repo | secret | status |`
-
-### 3. Forbidden Patterns
-
-```
-❌ "Please add this value to Vercel" — agent adds it directly
-❌ "Go to GitHub Settings and add a secret" — agent does it directly
-❌ "Register the webhook URL" — agent does it directly
-❌ Mid-task "this env var is needed" surprise — should have been caught in pre-scan
-❌ Asking for the same value per repo — get it once, apply everywhere
-```
-
-### 4. Session Value Reuse
-
-Secrets/tokens/keys received during session are reused:
-- PAT, Bot Token, Chat ID, Webhook Secret, etc.
-- "Using the [X] you provided earlier." — one line, then apply
-- Next session: Check state files for "which secrets are configured where"
+* deploy platform token already provided
+* bot token already confirmed
+* repo naming convention already established
+* framework/version already known
+* migration policy already decided
 
 ---
 
-## Platform-Specific Notes (add your own)
+## Platform notes
 
 ### Windows PowerShell
-- File creation: Use `[System.IO.File]::WriteAllText()`. echo/Set-Content = UTF-16 BOM → parse failure.
-- App Router directories with special chars `(group)`, `[slug]`: wrap in quotes when cd-ing.
+
+* Be careful with file writing methods and encoding.
+* Paths with special characters or route syntax should be quoted carefully.
 
 ### macOS / Linux
-- No special handling needed for most operations.
-- Check file permissions if deploy scripts fail.
+
+* File permissions and executable bits can matter in deploy scripts.
+* Shell assumptions should be kept conservative.
+
+---
+
+## Output expectations
+
+When this skill is applied to a real task, the final report should usually include:
+
+```text
+- what changed
+- what prerequisites were detected
+- what was configured directly
+- what still needs access or approval
+- build/deploy status
+- risks or rollback notes
+```
+
+This skill should make the user feel like the setup burden got lighter, not heavier.
