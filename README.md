@@ -287,3 +287,39 @@ That is the easiest way to tell whether this fits how you work.
 
 MIT — fork it, modify it, ship it.
 
+
+
+---
+
+# Post-Install Verification
+
+After installation, verify the pack is actually usable before you trust it.
+
+## 1) Skill discovery
+- Verify skills exist in your agent directory (e.g. `~/.claude/skills`).
+- Confirm each skill has a valid frontmatter block (--- ... ---).
+
+## 2) Trigger sanity check
+- Run a simple prompt that should activate each skill.
+- Example: ?Use build to fix a TypeScript error.?
+
+## 3) Template injection
+- Confirm `CLAUDE.md` (or equivalent) includes the autopilot block.
+- Check markers: `<!-- solo-cto-agent:start -->` to `<!-- solo-cto-agent:end -->`.
+
+## 4) Dry run
+- Run a small task and ensure it produces:
+  - decision log
+  - bounded loops (no infinite retries)
+  - explicit approvals
+
+## 5) Rollback safety
+- Ensure no auto-merge or deploy happens without approval.
+
+If any of the above fails, re-run `setup.sh --update` and re-verify.
+
+## Contributing checklist (minimum)
+- Run `setup.sh --update` to validate install flow
+- Ensure all SKILL.md files have valid frontmatter
+- Avoid breaking repo-level instructions (CLAUDE.md / templates)
+- Keep README claims aligned with actual files
