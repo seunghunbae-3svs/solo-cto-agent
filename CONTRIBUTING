@@ -1,0 +1,33 @@
+# Contributing
+
+Thanks for taking a look.
+
+This repo is intentionally opinionated.
+The goal is not to make the most neutral skill pack possible.
+The goal is to make agents more useful for solo founders and very small teams.
+
+## What kinds of contributions are useful
+
+* making the skills clearer without flattening the core philosophy
+* improving setup/update safety
+* adding realistic examples
+* tightening vague language
+* reducing false confidence or over-automation
+* improving portability without pretending every environment is the same
+
+## What is less useful
+
+* making everything generic
+* replacing opinionated rules with vague best practices
+* adding complexity before there is a real use case
+* turning the skills into enterprise compliance documents
+
+## Style
+
+* prefer plain language
+* prefer practical examples
+* avoid hype unless the repo actually delivers it
+* call out tradeoffs honestly
+
+If you think something is too aggressive, too vague, or too hand-wavy, open an issue.
+That is useful feedback here.
