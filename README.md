@@ -56,7 +56,7 @@ It is probably not a good fit if you:
 * want every action manually approved
 * prefer a neutral framework-agnostic starter pack with very conservative defaults
 
-## What’s inside
+## What's inside
 
 ```text
 solo-cto-agent/
@@ -118,9 +118,9 @@ Then open the skill file and replace the placeholders with your actual stack. Ex
 
 If you use Cursor, Windsurf, or GitHub Copilot instead of (or alongside) Claude, the repo includes native rule files:
 
-* `.cursorrules` — Cursor reads this from your project root automatically
-* `.windsurfrules` — Windsurf (Cascade) reads this from your project root automatically
-* `.github/copilot-instructions.md` — GitHub Copilot reads this as workspace-level instructions
+* `.cursorrules` - Cursor reads this from your project root automatically
+* `.windsurfrules` - Windsurf (Cascade) reads this from your project root automatically
+* `.github/copilot-instructions.md` - GitHub Copilot reads this as workspace-level instructions
 
 Just copy the files you need into your project:
 
@@ -130,13 +130,13 @@ cp solo-cto-agent/.windsurfrules ./
 cp -r solo-cto-agent/.github ./
 ```
 
-These files contain the same CTO philosophy as the Claude skills — autonomy levels, build discipline, design standards, review rules — adapted to each tool’s format. They are not watered-down versions. They are the same operating system, just in a different config file.
+These files contain the same CTO philosophy as the Claude skills - autonomy levels, build discipline, design standards, review rules - adapted to each tool's format. They are not watered-down versions. They are the same operating system, just in a different config file.
 
 ## How I use autonomy
 
 Most agent workflows feel too timid in the wrong places and too reckless in the dangerous ones. So I split behavior into 3 levels.
 
-### L1 — just do it
+### L1 - just do it
 
 Small, low-risk work should not need approval. Examples:
 
@@ -146,11 +146,11 @@ Small, low-risk work should not need approval. Examples:
 * choosing an output format
 * doing routine search or setup checks
 
-### L2 — do it, then explain
+### L2 - do it, then explain
 
 If something is a bit ambiguous but still low-risk, the agent makes the best assumption, does the work, and tells me what it assumed. That is usually better than spending 10 messages clarifying something that could have been resolved in one pass.
 
-### L3 — ask first
+### L3 - ask first
 
 Some things still need explicit approval:
 
@@ -253,7 +253,7 @@ If a number appears, it should have a source, a formula, or a clear label like:
 * `[estimated]`
 * `[unverified]`
 
-### Pre-scan, don’t surprise
+### Pre-scan, don't surprise
 
 A lot of agent frustration comes from late discovery: missing env vars, missing package installs, missing DB changes, missing credentials. This pack tries to catch those earlier.
 
@@ -285,7 +285,7 @@ That is the easiest way to tell whether this fits how you work.
 
 ## License
 
-MIT — fork it, modify it, ship it.
+MIT - fork it, modify it, ship it.
 
 
 
