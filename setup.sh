@@ -1,4 +1,3 @@
-```bash
 #!/bin/bash
 set -euo pipefail
 
@@ -121,4 +120,3 @@ echo "Next steps:"
 echo "  1. Replace {{YOUR_*}} placeholders in the skills you plan to use"
 echo "  2. Start with build + review if you want the easiest trial"
 echo "  3. Re-run with --update later if you want refreshed skill files"
-```
