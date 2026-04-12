@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+* added .cursorrules for Cursor IDE support
+* added .windsurfrules for Windsurf (Cascade) support
+* added .github/copilot-instructions.md for GitHub Copilot support
+* all three rule files share the same CTO philosophy, adapted to each tool's format
+
 ## 0.2.0
 
 * rewrote README to sound more human and less sales-heavy
