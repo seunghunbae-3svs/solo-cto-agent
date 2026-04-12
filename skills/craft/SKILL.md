@@ -3,7 +3,7 @@
 name: craft
 description: "Design orchestrator that pushes back against generic AI-looking UI. Focuses on typography, OKLCH color systems, purposeful shadows, spacing, and motion. Activates on: UI, design, component, page, layout, CSS, Tailwind, shadcn, responsive, dark mode, dashboard, landing page, beautiful, sleek, modern."
 user-invocable: true
---------------------
+---
 
 # Craft — Anti-Slop Design Orchestrator
 
