@@ -4,12 +4,12 @@ Thanks for taking a look.
 
 This repo is intentionally opinionated.
 The goal is not to make the most neutral skill pack possible.
-The goal is to make agents more useful for solo founders and very small teams.
+The goal is to make AI agents more useful for solo founders and very small teams.
 
 ## What kinds of contributions are useful
 
 * making the skills clearer without flattening the core philosophy
-* improving setup/update safety
+* improving setup and update safety
 * adding realistic examples
 * tightening vague language
 * reducing false confidence or over-automation
@@ -18,16 +18,42 @@ The goal is to make agents more useful for solo founders and very small teams.
 ## What is less useful
 
 * making everything generic
-* replacing opinionated rules with vague best practices
+* replacing concrete rules with vague best practices
 * adding complexity before there is a real use case
-* turning the skills into enterprise compliance documents
+* turning the skills into compliance-heavy enterprise docs
+* expanding scope just because a feature sounds impressive
 
 ## Style
 
 * prefer plain language
 * prefer practical examples
-* avoid hype unless the repo actually delivers it
-* call out tradeoffs honestly
+* be honest about tradeoffs
+* reduce hype where the repo does not fully automate something
+* preserve the repo’s “useful, not polite” tone
 
-If you think something is too aggressive, too vague, or too hand-wavy, open an issue.
+## Before opening a PR
+
+Please ask:
+
+* does this make the agent more useful in real work?
+* does this reduce repetitive founder/CTO overhead?
+* does this introduce unsafe assumptions about permissions or automation?
+* does this keep the skill understandable by a real user?
+
+## Good contribution examples
+
+* make `setup.sh` safer to rerun
+* improve placeholder instructions
+* add examples that show real usage
+* clarify when a skill should ask first vs act first
+* reduce overclaiming in docs
+
+## Bad contribution examples
+
+* adding “AI magic” claims with no implementation behind them
+* introducing framework-specific assumptions as universal rules
+* making the language softer but less useful
+* replacing concrete operator rules with generic fluff
+
+If you think something feels too aggressive, too vague, too optimistic, or too AI-written, open an issue.
 That is useful feedback here.
