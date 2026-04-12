@@ -57,3 +57,9 @@ Please ask:
 
 If you think something feels too aggressive, too vague, too optimistic, or too AI-written, open an issue.
 That is useful feedback here.
+
+## Contributing checklist (minimum)
+- Run `setup.sh --update` to validate install flow
+- Ensure all SKILL.md files have valid frontmatter
+- Avoid breaking repo-level instructions (CLAUDE.md / templates)
+- Keep README claims aligned with actual files
