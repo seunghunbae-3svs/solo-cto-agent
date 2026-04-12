@@ -3,7 +3,7 @@
 name: spark
 description: "Idea development and early validation skill. Turns rough startup ideas into testable concepts through structured market framing, competitor analysis, assumptions, basic economics, and PRD direction. Activates on: idea, startup, market, validate, business model, PRD, MVP, competitors, GTM, pricing."
 user-invocable: true
---------------------
+---
 
 # Spark — Idea to Testable Plan
 
