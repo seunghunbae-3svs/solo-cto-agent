@@ -2,14 +2,17 @@
 
 ## 0.2.0
 
-* rewrote README to be clearer and less sales-heavy
-* improved `setup.sh` update/idempotency behavior
+* rewrote README to sound more human and less sales-heavy
+* improved `setup.sh` toward safer repeat installs and updates
 * softened over-strong automation claims in `build`
 * clarified `craft` as intentionally opinionated
 * tightened `review` wording
+* added contribution guidance
+* added example files for practical usage
 
 ## 0.1.0
 
 * initial public release
-* added build, ship, craft, spark, review, memory skills
-* added setup script and templates
+* added build, ship, craft, spark, review, and memory skills
+* added setup script
+* added templates for context and project state
