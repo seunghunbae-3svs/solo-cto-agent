@@ -1,9 +1,8 @@
 ---
-
 name: build
 description: "Development pipeline orchestrator. Architect -> Build -> Review -> Deploy with pre-flight checks, pre-req scanning, and bounded error recovery. Activates on: code, dev, deploy, build, error, bug, fix, API, DB, git, npm, TypeScript, component, feature, debug, hotfix, patch, schema, migration, auth."
 user-invocable: true
---------------------
+---
 
 # Build — Development Pipeline Orchestrator
 
