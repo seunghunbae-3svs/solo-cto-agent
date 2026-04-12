@@ -2,7 +2,7 @@
 
 These are minimal real-world uses that match the intended workflow.
 
-## Example 1 ? Fix a production build failure
+## Example 1 - Fix a production build failure
 **Goal:** unblock deploy without digging through logs manually.
 
 **Prompt (Claude/Cursor/Windsurf):**
@@ -21,7 +21,7 @@ Target: get `npm run build` green and summarize what was fixed.
 
 ---
 
-## Example 2 ? Dual-agent PR review + rework loop
+## Example 2 - Dual-agent PR review + rework loop
 **Goal:** merge only after cross-review and rework rounds.
 
 **Prompt (Orchestrator):**
@@ -41,7 +41,7 @@ Generate a decision card for approval.
 
 ---
 
-## Example 3 ? UI polish + anti-slop pass
+## Example 3 - UI polish + anti-slop pass
 **Goal:** raise UX quality without generic AI look.
 
 **Prompt:**
