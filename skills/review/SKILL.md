@@ -3,7 +3,7 @@
 name: review
 description: "Multi-perspective evaluator for ideas, plans, PRDs, and pitches. Stress-tests from investor, user, and competitor viewpoints. Activates on: evaluate, review, critique, what do you think, devil's advocate, weakness, risk, is this viable, what's wrong with this, how does this look."
 user-invocable: true
---------------------
+---
 
 # Review — Multi-Perspective Evaluator
 
