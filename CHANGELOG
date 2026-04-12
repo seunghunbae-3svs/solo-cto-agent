@@ -1,0 +1,15 @@
+# Changelog
+
+## 0.2.0
+
+* rewrote README to be clearer and less sales-heavy
+* improved `setup.sh` update/idempotency behavior
+* softened over-strong automation claims in `build`
+* clarified `craft` as intentionally opinionated
+* tightened `review` wording
+
+## 0.1.0
+
+* initial public release
+* added build, ship, craft, spark, review, memory skills
+* added setup script and templates
