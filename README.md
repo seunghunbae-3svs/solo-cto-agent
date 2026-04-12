@@ -16,7 +16,7 @@ This repo is my attempt to package those habits into a small set of reusable ski
 
 `solo-cto-agent` is an opinionated skill pack for solo founders, indie hackers, and small teams using AI coding agents in their build workflow.
 
-It was built around Claude Code, but the core rules also work in Cursor, Windsurf, and GitHub Copilot. The repo includes native config files for each.
+It was built around Claude Code & OpenAI Codex but the core rules also work in Cursor, Windsurf, and GitHub Copilot. The repo includes native config files for each.
 
 The point is simple:
 
