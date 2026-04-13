@@ -391,8 +391,16 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
   console.log("");
   console.log("[2/4] Installing product-repo workflows...");
 
-  const productWorkflows = tiersData.product_repo_templates.workflows;
+  // Build product-repo workflow list based on tier
+  const builderWorkflows = tiersData.product_repo_templates.builder.workflows;
+  const ctoAdditional = tiersData.product_repo_templates.cto.additional_workflows;
+  const optionalWorkflows = tiersData.product_repo_templates.optional.workflows;
   const productOther = tiersData.product_repo_templates.other;
+
+  // Builder = single-agent (Claude), CTO = dual/triple (Claude + Codex + cross-review)
+  const productWorkflows = isPro
+    ? [...builderWorkflows, ...ctoAdditional, ...optionalWorkflows]
+    : [...builderWorkflows, ...optionalWorkflows];
 
   if (productRepoList.length === 0) {
     console.log("   No product repos specified. Use --repos <repo1,repo2,...>");
@@ -429,7 +437,8 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
         }
       }
 
-      console.log(`   ✅ ${repo} — ${productWorkflows.length} workflows installed`);
+      const agentLabel = isPro ? "dual/triple-agent" : "single-agent";
+      console.log(`   ✅ ${repo} — ${productWorkflows.length} workflows (${agentLabel})`);
     }
   }
 
@@ -469,26 +478,27 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
   console.log("     # Anthropic API key (Claude code review + visual analysis)");
   console.log("     gh secret set ANTHROPIC_API_KEY");
   console.log("");
-  console.log("     # OpenAI API key (Codex agent, AI-powered analysis)");
-  console.log("     gh secret set OPENAI_API_KEY");
-  console.log("");
   if (isPro) {
-    console.log("     # Telegram notifications (optional)");
-    console.log("     gh secret set TELEGRAM_BOT_TOKEN");
-    console.log("     gh secret set TELEGRAM_CHAT_ID");
+    console.log("     # OpenAI API key (Codex agent, AI-powered analysis)");
+    console.log("     gh secret set OPENAI_API_KEY");
     console.log("");
   }
+  console.log("     # Telegram notifications (optional, both tiers)");
+  console.log("     gh secret set TELEGRAM_BOT_TOKEN");
+  console.log("     gh secret set TELEGRAM_CHAT_ID");
+  console.log("");
   console.log("  3. Set SAME secrets on each product repo:");
   console.log("");
+  const secretList = isPro
+    ? "ORCHESTRATOR_PAT && gh secret set ANTHROPIC_API_KEY && gh secret set OPENAI_API_KEY"
+    : "ORCHESTRATOR_PAT && gh secret set ANTHROPIC_API_KEY";
   if (productRepoList.length > 0) {
     for (const repo of productRepoList) {
-      console.log(`     cd ${repo} && gh secret set ORCHESTRATOR_PAT && gh secret set ANTHROPIC_API_KEY && gh secret set OPENAI_API_KEY`);
+      console.log(`     cd ${repo} && gh secret set ${secretList}`);
     }
   } else {
     console.log("     cd your-product-repo");
-    console.log("     gh secret set ORCHESTRATOR_PAT");
-    console.log("     gh secret set ANTHROPIC_API_KEY");
-    console.log("     gh secret set OPENAI_API_KEY");
+    console.log(`     gh secret set ${secretList}`);
   }
   console.log("");
   console.log("  4. Push product repos with new workflows:");
@@ -503,8 +513,13 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
   console.log("  ANTHROPIC_API_KEY Claude code review, visual analysis, UI/UX gate");
   console.log("                    Get: https://console.anthropic.com");
   console.log("");
-  console.log("  OPENAI_API_KEY    Codex agent, AI-powered code analysis");
-  console.log("                    Get: https://platform.openai.com/api-keys");
+  if (isPro) {
+    console.log("  OPENAI_API_KEY    Codex agent, AI-powered code analysis (CTO tier)");
+    console.log("                    Get: https://platform.openai.com/api-keys");
+    console.log("");
+  }
+  console.log("  TELEGRAM_*        Real-time PR/review notifications (optional, both tiers)");
+  console.log("                    Get: https://t.me/BotFather");
   console.log("");
   console.log("  GITHUB_TOKEN      Auto-provided by GitHub Actions (no action needed)");
 }
@@ -512,19 +527,15 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
 function generateEnvGuide(isPro, org) {
   let guide = `# solo-cto-agent — Environment Setup Guide
 # Generated: ${new Date().toISOString()}
-# Tier: ${isPro ? "Pro (Lv5+6)" : "Base (Lv4)"}
+# Tier: ${isPro ? "CTO (Lv5+6) — dual/triple-agent" : "Builder (Lv4) — single-agent"}
 
 # ═══ REQUIRED ═══
 
 # GitHub PAT with repo + workflow scope (cross-repo dispatch)
-# This is referenced as ORCHESTRATOR_PAT in workflows
 ORCHESTRATOR_PAT=
 
-# Anthropic API key (for Claude-powered code review and visual analysis)
+# Anthropic API key (Claude code review + visual analysis)
 ANTHROPIC_API_KEY=
-
-# OpenAI API key (for Codex agent and AI-powered analysis)
-OPENAI_API_KEY=
 
 # GitHub token (auto-provided in GitHub Actions, no action needed)
 GITHUB_TOKEN=
@@ -535,20 +546,24 @@ GITHUB_OWNER=${org || "your-github-org"}
 # ═══ ORCHESTRATOR REPOS ═══
 # Comma-separated list of product repos to monitor
 PRODUCT_REPOS=
-`;
 
-  if (isPro) {
-    guide += `
-# ═══ PRO TIER: TELEGRAM (optional) ═══
+# ═══ OPTIONAL (both tiers) ═══
 
-# Telegram bot token for real-time notifications
+# Telegram bot token for real-time PR/review notifications
 TELEGRAM_BOT_TOKEN=
 
 # Telegram chat/channel ID
 TELEGRAM_CHAT_ID=
+`;
 
-# ═══ PRO TIER: UI/UX VERIFICATION ═══
+  if (isPro) {
+    guide += `
+# ═══ CTO TIER ONLY ═══
 
+# OpenAI API key (Codex agent + AI-powered analysis)
+OPENAI_API_KEY=
+
+# UI/UX VERIFICATION
 # Puppeteer is auto-installed via ops/package.json
 # Design guidelines are in ops/config/design-guidelines.json
 `;
@@ -566,6 +581,7 @@ function setupRepoCommand(repoPath, tier, org, orchName) {
     process.exit(1);
   }
 
+  const isPro = tier === "cto" || tier === "pro";
   const orchestratorRepo = orchName || "dual-agent-orchestrator";
   const replacements = {
     "{{GITHUB_OWNER}}": org,
@@ -583,8 +599,14 @@ function setupRepoCommand(repoPath, tier, org, orchName) {
   }
 
   const tiersData = loadTiers();
-  const productWorkflows = tiersData.product_repo_templates.workflows;
+  const builderWorkflows = tiersData.product_repo_templates.builder.workflows;
+  const ctoAdditional = tiersData.product_repo_templates.cto.additional_workflows;
+  const optionalWorkflows = tiersData.product_repo_templates.optional.workflows;
   const productOther = tiersData.product_repo_templates.other;
+
+  const productWorkflows = isPro
+    ? [...builderWorkflows, ...ctoAdditional, ...optionalWorkflows]
+    : [...builderWorkflows, ...optionalWorkflows];
 
   const wfDir = path.join(resolved, ".github", "workflows");
   ensureDir(wfDir);
@@ -611,7 +633,8 @@ function setupRepoCommand(repoPath, tier, org, orchName) {
     }
   }
 
-  console.log(`✅ ${path.basename(resolved)} — ${count} workflows + ${productOther.length} templates installed`);
+  const agentLabel = isPro ? "dual/triple-agent" : "single-agent";
+  console.log(`✅ ${path.basename(resolved)} — ${count} workflows (${agentLabel}) + ${productOther.length} templates installed`);
   console.log(`   Location: ${wfDir}`);
   console.log("");
   console.log("Next: git add .github/ && git commit -m 'ci: add dual-agent workflows' && git push");

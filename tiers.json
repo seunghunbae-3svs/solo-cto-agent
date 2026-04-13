@@ -111,17 +111,30 @@
     }
   },
   "product_repo_templates": {
-    "description": "Standard dual-agent workflows applied to all product repositories. Shared by both base and pro tiers.",
-    "workflows": [
-      "claude-auto.yml",
-      "codex-auto.yml",
-      "comparison-dispatch.yml",
-      "cross-review-dispatch.yml",
-      "cross-review.yml",
-      "preview-summary.yml",
-      "rework-dispatch.yml",
-      "telegram-notify.yml"
-    ],
+    "description": "Product repo workflows split by tier. Builder = single-agent (Claude), CTO = dual/triple-agent (Claude + Codex + cross-review).",
+    "builder": {
+      "description": "Single-agent CI/CD: Claude auto-review, preview feedback, rework cycle",
+      "workflows": [
+        "claude-auto.yml",
+        "preview-summary.yml",
+        "rework-dispatch.yml"
+      ]
+    },
+    "cto": {
+      "description": "Dual/triple-agent: adds Codex agent, cross-review, comparison reports",
+      "additional_workflows": [
+        "codex-auto.yml",
+        "cross-review-dispatch.yml",
+        "cross-review.yml",
+        "comparison-dispatch.yml"
+      ]
+    },
+    "optional": {
+      "description": "Available for both tiers. User chooses to install.",
+      "workflows": [
+        "telegram-notify.yml"
+      ]
+    },
     "other": [
       ".env.example",
       ".github/ISSUE_TEMPLATE/dual-agent-task.md",
