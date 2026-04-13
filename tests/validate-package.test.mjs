@@ -1,5 +1,5 @@
-const { describe, it, expect } = require("vitest");
-const { spawnSync } = require("child_process");
+import { describe, it, expect } from "vitest";
+import { spawnSync } from "child_process";
 
 describe("validate-package.js", () => {
   it("passes on current repo", () => {

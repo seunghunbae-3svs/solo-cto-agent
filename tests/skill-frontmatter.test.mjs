@@ -1,6 +1,6 @@
-const { describe, it, expect } = require("vitest");
-const fs = require("fs");
-const path = require("path");
+import { describe, it, expect } from "vitest";
+import fs from "fs";
+import path from "path";
 
 function parseFrontmatter(filePath) {
   const content = fs.readFileSync(filePath, "utf8");
