@@ -154,13 +154,17 @@ When you run `setup-pipeline` or `setup-repo`, the CLI scans your project's `pac
 
 ### Local ↔ Remote Sync
 
-The `sync` command bridges the gap between your local skill files and remote CI/CD results:
+The `sync` command bridges the gap between your local skill files and remote CI/CD results. It runs in dry-run mode by default — fetches and displays data without modifying local files. Add `--apply` to merge remote data into local:
 
 ```bash
+# Dry-run: fetch + display only (safe, no local changes)
 GITHUB_TOKEN=ghp_xxx solo-cto-agent sync --org myorg --repos app1,app2
+
+# Apply: merge remote error patterns + update local agent scores
+GITHUB_TOKEN=ghp_xxx solo-cto-agent sync --org myorg --repos app1,app2 --apply
 ```
 
-What it fetches and updates:
+What it fetches and updates (with `--apply`):
 
 | Data | Source | Local file |
 |---|---|---|
@@ -218,7 +222,8 @@ solo-cto-agent status
 
 3) (Optional) Sync CI/CD data
 ```bash
-GITHUB_TOKEN=ghp_xxx solo-cto-agent sync --org myorg
+GITHUB_TOKEN=ghp_xxx solo-cto-agent sync --org myorg           # preview (dry-run)
+GITHUB_TOKEN=ghp_xxx solo-cto-agent sync --org myorg --apply   # merge remote → local
 ```
 
 Presets:
@@ -572,7 +577,7 @@ A: Typical per-PR cost depends on your review depth. A Claude auto-review of a m
 A: The skills (init, build, review, craft, etc.) work independently of CI/CD. You can install them and use them in your editor without ever running setup-pipeline. The CI/CD automation is an optional layer on top.
 
 **Q: How do I keep local skill data in sync with CI/CD results?**
-A: Run `solo-cto-agent sync --org <your-org>`. This fetches agent scores, workflow results, PR reviews, and error patterns from your orchestrator repo via the GitHub API and updates your local skill files. Run it periodically or after significant CI activity.
+A: Run `solo-cto-agent sync --org <your-org>`. This fetches agent scores, workflow results, PR reviews, and error patterns from your orchestrator repo via the GitHub API. By default it runs in dry-run mode (display only). Add `--apply` to merge remote data into local files. This way you always preview what will change before any local files are modified.
 
 **Q: What does a real review look like?**
 A: Here is a trimmed example from a production PR review:

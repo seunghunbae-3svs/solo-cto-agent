@@ -11,6 +11,13 @@ function hasWizardFlag(args) {
 }
 
 /**
+ * Check if running in an interactive TTY environment
+ */
+function isTTY() {
+  return process.stdin.isTTY === true && process.stdout.isTTY === true;
+}
+
+/**
  * Promise-based readline question helper
  */
 function ask(rl, question, defaultVal = '') {
@@ -137,6 +144,14 @@ For CI/CD pipeline setup, run: \`solo-cto-agent setup-pipeline\`
  * Main wizard function
  */
 async function runWizard(targetDir, force = false) {
+  // TTY guard: wizard requires interactive terminal
+  if (!isTTY()) {
+    console.error("❌ --wizard requires an interactive terminal (TTY).");
+    console.error("   In CI or non-interactive environments, edit SKILL.md manually after init.");
+    console.error("   File: ~/.claude/skills/solo-cto-agent/SKILL.md");
+    return { cancelled: true, reason: "no-tty" };
+  }
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -231,5 +246,6 @@ async function runWizard(targetDir, force = false) {
 module.exports = {
   runWizard,
   hasWizardFlag,
+  isTTY,
   ask, // Export for testing
 };

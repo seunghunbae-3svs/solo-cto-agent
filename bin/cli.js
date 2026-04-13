@@ -33,7 +33,7 @@ Usage:
   solo-cto-agent setup-pipeline --org <github-org> [--tier builder|cto] [--repos <repo1,repo2,...>]
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent upgrade --org <github-org> [--repos <repo1,repo2,...>]
-  solo-cto-agent sync --org <github-org> [--repos <repo1,repo2,...>]
+  solo-cto-agent sync --org <github-org> [--repos <repo1,repo2,...>] [--apply]
   solo-cto-agent status [--org <github-org>]
   solo-cto-agent lint [path]
   solo-cto-agent --help
@@ -43,7 +43,7 @@ Commands:
   setup-pipeline    Full pipeline setup: create orchestrator repo + install workflows to product repos
   setup-repo        Install dual-agent workflows to a single product repo
   upgrade           Upgrade Builder (Lv4) → CTO (Lv5+6): add multi-agent workflows + config
-  sync              Fetch CI/CD results from GitHub and update local skill files
+  sync              Fetch CI/CD results from GitHub (dry-run by default, --apply to merge)
   status            Check skill health, error catalog, pipeline status, and latest CI data
   lint              Check skill files for size and structure issues
 
@@ -59,7 +59,8 @@ Examples:
   npx solo-cto-agent setup-pipeline --org myorg    # deploy Lv4 pipeline
   npx solo-cto-agent setup-pipeline --org myorg --tier cto --repos app1,app2,app3
   npx solo-cto-agent setup-repo ./my-project --org myorg
-  npx solo-cto-agent sync --org myorg --repos app1,app2   # fetch CI/CD data
+  npx solo-cto-agent sync --org myorg --repos app1,app2   # dry-run: fetch + display
+  npx solo-cto-agent sync --org myorg --apply              # apply: merge remote data into local
 `);
 }
 
@@ -897,10 +898,14 @@ async function statusCommand() {
     console.log(`  Last sync:     never (run: solo-cto-agent sync --org <org>)`);
   }
 
-  const repo = process.env.GITHUB_REPOSITORY;
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  const ci = await getLatestCiStatus(repo, token);
-  console.log(`  Last CI:       ${ci.status} (${ci.conclusion})`);
+  // CI status from local sync cache only — no network calls
+  if (syncStatus && syncStatus.summary) {
+    const s = syncStatus.summary;
+    const ciLabel = s.workflowRuns === "ok" ? "✅ data available (from last sync)" : "⚠️  no data (run sync first)";
+    console.log(`  CI data:       ${ciLabel}`);
+  } else {
+    console.log(`  CI data:       no data (run: solo-cto-agent sync --org <org>)`);
+  }
   console.log("");
 }
 
@@ -1184,7 +1189,8 @@ async function main() {
       process.exit(1);
     }
     const repoList = repos ? repos.split(",").map(r => r.trim()) : [];
-    await syncCommand(org, orchName, token, repoList);
+    const apply = args.includes("--apply");
+    await syncCommand(org, orchName, token, repoList, apply);
     return;
   }
 

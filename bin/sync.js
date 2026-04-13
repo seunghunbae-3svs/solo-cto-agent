@@ -6,7 +6,7 @@ const https = require("https");
 const SKILLS_DIR = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
 
 // ============================================================================
-// GitHub API Helper
+// GitHub API Helper — with rate limit detection
 // ============================================================================
 
 function ghApi(endpoint, token, method = "GET", body = null) {
@@ -27,16 +27,26 @@ function ghApi(endpoint, token, method = "GET", body = null) {
       let data = "";
       res.on("data", (chunk) => (data += chunk));
       res.on("end", () => {
+        // Rate limit detection
+        if (res.statusCode === 403 || res.statusCode === 429) {
+          const resetHeader = res.headers["x-ratelimit-reset"];
+          const remaining = res.headers["x-ratelimit-remaining"];
+          if (remaining === "0" || res.statusCode === 429) {
+            const resetTime = resetHeader ? new Date(parseInt(resetHeader) * 1000).toLocaleTimeString() : "unknown";
+            return reject(new Error(`RATE_LIMIT: GitHub API rate limit reached. Resets at ${resetTime}. Try again later.`));
+          }
+          return reject(new Error(`GitHub API ${res.statusCode}: ${data.slice(0, 200)}`));
+        }
         // 404 is not an error for optional endpoints
         if (res.statusCode === 404) {
           return resolve(null);
         }
+        // 401 — bad token
+        if (res.statusCode === 401) {
+          return reject(new Error("AUTH_FAILED: GitHub token is invalid or expired. Check your GITHUB_TOKEN."));
+        }
         if (res.statusCode >= 400) {
-          return reject(
-            new Error(
-              `GitHub API ${res.statusCode}: ${data.slice(0, 200)}`
-            )
-          );
+          return reject(new Error(`GitHub API ${res.statusCode}: ${data.slice(0, 200)}`));
         }
         try {
           resolve(JSON.parse(data));
@@ -83,10 +93,10 @@ function decodeBase64(encoded) {
 }
 
 // ============================================================================
-// Fetch Agent Scores
+// Fetch Agent Scores — always writes to local (read-only data, safe)
 // ============================================================================
 
-async function fetchRemoteAgentScores(org, orchRepo, token) {
+async function fetchRemoteAgentScores(org, orchRepo, token, dryRun) {
   try {
     const response = await ghApi(
       `/repos/${org}/${orchRepo}/contents/ops/orchestrator/agent-scores.json`,
@@ -94,38 +104,34 @@ async function fetchRemoteAgentScores(org, orchRepo, token) {
     );
 
     if (!response || !response.content) {
-      return { agents: [], repos: [], lastUpdated: null };
+      return { success: false, error: "not found", agentCount: 0, repoCount: 0 };
     }
 
     const decoded = decodeBase64(response.content);
     const scores = JSON.parse(decoded);
 
-    const filePath = path.join(SKILLS_DIR, "agent-scores-local.json");
-    writeJsonFile(filePath, scores);
+    // Agent scores local mirror is always safe to write (it's a snapshot, not a merge)
+    if (!dryRun) {
+      const filePath = path.join(SKILLS_DIR, "agent-scores-local.json");
+      writeJsonFile(filePath, scores);
+    }
 
     const agentCount = Object.keys(scores.agents || {}).length;
     const repoCount = Object.keys(scores.repos || {}).length;
 
     return {
       success: true,
-      agents: scores.agents || {},
-      repos: scores.repos || {},
       agentCount,
       repoCount,
-      lastUpdated: scores.lastUpdated || new Date().toISOString(),
+      dryRun,
     };
   } catch (error) {
-    return {
-      success: false,
-      error: error.message,
-      agentCount: 0,
-      repoCount: 0,
-    };
+    return { success: false, error: error.message, agentCount: 0, repoCount: 0 };
   }
 }
 
 // ============================================================================
-// Fetch Workflow Runs
+// Fetch Workflow Runs — display only, no local writes
 // ============================================================================
 
 async function fetchRecentWorkflowRuns(org, orchRepo, token) {
@@ -136,7 +142,7 @@ async function fetchRecentWorkflowRuns(org, orchRepo, token) {
     );
 
     if (!response || !response.workflow_runs) {
-      return { success: false, runs: [], summary: "No workflow data" };
+      return { success: false, runs: [], error: "No workflow data" };
     }
 
     const runs = response.workflow_runs.map((run) => ({
@@ -146,32 +152,24 @@ async function fetchRecentWorkflowRuns(org, orchRepo, token) {
       conclusion: run.conclusion,
       createdAt: run.created_at,
       headBranch: run.head_branch,
-      htmlUrl: run.html_url,
     }));
 
     const passCount = runs.filter((r) => r.conclusion === "success").length;
     const failCount = runs.filter((r) => r.conclusion === "failure").length;
-    const pendingCount = runs.filter((r) => r.status === "in_progress").length;
 
     return {
       success: true,
-      runs,
       totalCount: runs.length,
       passCount,
       failCount,
-      pendingCount,
     };
   } catch (error) {
-    return {
-      success: false,
-      error: error.message,
-      runs: [],
-    };
+    return { success: false, error: error.message, totalCount: 0 };
   }
 }
 
 // ============================================================================
-// Fetch PR Reviews
+// Fetch PR Reviews — display only, no local writes
 // ============================================================================
 
 async function fetchRecentPRReviews(org, repos, token) {
@@ -184,9 +182,7 @@ async function fetchRecentPRReviews(org, repos, token) {
         token
       );
 
-      if (!prsResponse || !Array.isArray(prsResponse)) {
-        continue;
-      }
+      if (!prsResponse || !Array.isArray(prsResponse)) continue;
 
       for (const pr of prsResponse) {
         try {
@@ -194,49 +190,34 @@ async function fetchRecentPRReviews(org, repos, token) {
             `/repos/${org}/${repo}/pulls/${pr.number}/reviews`,
             token
           );
-
-          if (!reviewsResponse || !Array.isArray(reviewsResponse)) {
-            continue;
-          }
+          if (!reviewsResponse || !Array.isArray(reviewsResponse)) continue;
 
           for (const review of reviewsResponse) {
             allReviews.push({
               repo,
               prNumber: pr.number,
-              prTitle: pr.title,
               state: review.state,
-              reviewer: review.user?.login,
-              createdAt: review.submitted_at,
-              htmlUrl: review.html_url,
             });
           }
         } catch (e) {
-          // silently skip failed review fetches
+          // silently skip
         }
       }
     } catch (e) {
-      // silently skip failed PR fetches for this repo
+      // silently skip
     }
   }
 
-  const approvals = allReviews.filter(
-    (r) => r.state === "APPROVED"
-  ).length;
-  const changesRequested = allReviews.filter(
-    (r) => r.state === "CHANGES_REQUESTED"
-  ).length;
-
   return {
     success: true,
-    reviews: allReviews,
     totalCount: allReviews.length,
-    approvals,
-    changesRequested,
+    approvals: allReviews.filter((r) => r.state === "APPROVED").length,
+    changesRequested: allReviews.filter((r) => r.state === "CHANGES_REQUESTED").length,
   };
 }
 
 // ============================================================================
-// Fetch Visual Baselines
+// Fetch Visual Baselines — display only
 // ============================================================================
 
 async function fetchVisualBaselines(org, orchRepo, token) {
@@ -247,12 +228,7 @@ async function fetchVisualBaselines(org, orchRepo, token) {
     );
 
     if (!response || !response.content) {
-      return {
-        success: false,
-        error: "No visual-baselines.json found",
-        baselines: [],
-        count: 0,
-      };
+      return { success: false, error: "not found", count: 0 };
     }
 
     const decoded = decodeBase64(response.content);
@@ -260,24 +236,18 @@ async function fetchVisualBaselines(org, orchRepo, token) {
 
     return {
       success: true,
-      baselines: baselines.baselines || baselines,
       count: (baselines.baselines || baselines).length || 0,
     };
   } catch (error) {
-    return {
-      success: false,
-      error: error.message,
-      baselines: [],
-      count: 0,
-    };
+    return { success: false, error: error.message, count: 0 };
   }
 }
 
 // ============================================================================
-// Sync Error Patterns
+// Sync Error Patterns — dry-run by default, --apply to write
 // ============================================================================
 
-async function syncErrorPatterns(org, orchRepo, token) {
+async function syncErrorPatterns(org, orchRepo, token, dryRun) {
   try {
     const localPath = path.join(SKILLS_DIR, "failure-catalog.json");
     const localCatalog = readJsonFile(localPath, { patterns: [] });
@@ -294,64 +264,50 @@ async function syncErrorPatterns(org, orchRepo, token) {
         remoteCatalog = JSON.parse(decoded);
       }
     } catch (e) {
-      // Remote file doesn't exist yet, which is fine
+      // Remote file doesn't exist yet
     }
 
-    // Merge: ensure all remote patterns are in local
-    const remoteIds = new Set(
-      (remoteCatalog.patterns || []).map((p) => p.id)
-    );
     const localIds = new Set((localCatalog.patterns || []).map((p) => p.id));
+    const remoteIds = new Set((remoteCatalog.patterns || []).map((p) => p.id));
 
-    let newFromRemote = 0;
-    for (const pattern of remoteCatalog.patterns || []) {
-      if (!localIds.has(pattern.id)) {
-        localCatalog.patterns.push(pattern);
-        newFromRemote++;
-      }
-    }
+    // Find new patterns from remote
+    const newFromRemote = (remoteCatalog.patterns || []).filter((p) => !localIds.has(p.id));
 
-    // Count local patterns not in remote (future use for dispatch)
-    let newLocal = 0;
-    for (const pattern of localCatalog.patterns) {
-      if (!remoteIds.has(pattern.id)) {
-        newLocal++;
-      }
-    }
+    // Count local-only patterns
+    const newLocal = (localCatalog.patterns || []).filter((p) => !remoteIds.has(p.id)).length;
 
-    if (newFromRemote > 0) {
+    // Only write if --apply and there are new patterns
+    if (!dryRun && newFromRemote.length > 0) {
+      localCatalog.patterns.push(...newFromRemote);
       writeJsonFile(localPath, localCatalog);
     }
 
     return {
       success: true,
       localPatternCount: localCatalog.patterns.length,
-      newFromRemote,
+      newFromRemote: newFromRemote.length,
       newLocal,
+      dryRun,
+      applied: !dryRun && newFromRemote.length > 0,
     };
   } catch (error) {
-    return {
-      success: false,
-      error: error.message,
-      localPatternCount: 0,
-      newFromRemote: 0,
-      newLocal: 0,
-    };
+    return { success: false, error: error.message, newFromRemote: 0, newLocal: 0 };
   }
 }
 
 // ============================================================================
-// Update Sync Status
+// Update Sync Status — always writes (metadata only, safe)
 // ============================================================================
 
-function updateSyncStatus(summary) {
+function updateSyncStatus(summary, dryRun) {
   ensureSkillsDir();
   const statusPath = path.join(SKILLS_DIR, "sync-status.json");
 
   const status = {
     lastSync: new Date().toISOString(),
+    mode: dryRun ? "dry-run" : "apply",
     summary,
-    version: "1.0",
+    version: "1.1",
   };
 
   writeJsonFile(statusPath, status);
@@ -361,59 +317,60 @@ function updateSyncStatus(summary) {
 // Format Output
 // ============================================================================
 
-function formatOutput(results) {
-  const {
-    agentScores,
-    workflowRuns,
-    prReviews,
-    visualBaselines,
-    errorPatterns,
-  } = results;
+function formatOutput(results, dryRun) {
+  const { agentScores, workflowRuns, prReviews, visualBaselines, errorPatterns } = results;
 
-  let output = "\nsolo-cto-agent sync\n";
-  output += "───────────────────\n";
+  let output = "";
 
   // Agent scores
   if (agentScores.success) {
-    output += `  [1/5] Agent scores ............... ✅ synced (${agentScores.agentCount} agents, ${agentScores.repoCount} repos)\n`;
+    const action = dryRun ? "fetched" : "synced";
+    output += `  [1/5] Agent scores ............... ✅ ${action} (${agentScores.agentCount} agents, ${agentScores.repoCount} repos)\n`;
   } else {
-    output += `  [1/5] Agent scores ............... ❌ failed (${agentScores.error})\n`;
+    output += `  [1/5] Agent scores ............... ⚠️  ${agentScores.error}\n`;
   }
 
   // Workflow runs
   if (workflowRuns.success) {
     output += `  [2/5] Workflow runs .............. ✅ ${workflowRuns.totalCount} recent (${workflowRuns.passCount} pass, ${workflowRuns.failCount} fail)\n`;
   } else {
-    output += `  [2/5] Workflow runs .............. ❌ failed (${workflowRuns.error})\n`;
+    output += `  [2/5] Workflow runs .............. ⚠️  ${workflowRuns.error}\n`;
   }
 
   // PR reviews
   if (prReviews.success) {
     output += `  [3/5] PR reviews ................ ✅ ${prReviews.totalCount} reviews (${prReviews.approvals} approved, ${prReviews.changesRequested} changes)\n`;
   } else {
-    output += `  [3/5] PR reviews ................ ❌ failed (${prReviews.error})\n`;
+    output += `  [3/5] PR reviews ................ ⚠️  ${prReviews.error}\n`;
   }
 
   // Visual baselines
   if (visualBaselines.success) {
     output += `  [4/5] Visual baselines .......... ✅ ${visualBaselines.count} baselines tracked\n`;
   } else {
-    output += `  [4/5] Visual baselines .......... ❌ failed (${visualBaselines.error})\n`;
+    output += `  [4/5] Visual baselines .......... ⚠️  ${visualBaselines.error}\n`;
   }
 
-  // Error patterns
+  // Error patterns — show dry-run vs applied
   if (errorPatterns.success) {
-    const summary =
-      errorPatterns.newFromRemote > 0
-        ? `${errorPatterns.localPatternCount} patterns (${errorPatterns.newFromRemote} new)`
-        : `${errorPatterns.localPatternCount} patterns`;
-    output += `  [5/5] Error patterns ............ ✅ ${summary}\n`;
+    if (errorPatterns.newFromRemote > 0) {
+      if (dryRun) {
+        output += `  [5/5] Error patterns ............ 📋 ${errorPatterns.newFromRemote} new from remote (dry-run, use --apply to merge)\n`;
+      } else {
+        output += `  [5/5] Error patterns ............ ✅ ${errorPatterns.newFromRemote} new patterns merged\n`;
+      }
+    } else {
+      output += `  [5/5] Error patterns ............ ✅ ${errorPatterns.localPatternCount} patterns (up to date)\n`;
+    }
   } else {
-    output += `  [5/5] Error patterns ............ ❌ failed (${errorPatterns.error})\n`;
+    output += `  [5/5] Error patterns ............ ⚠️  ${errorPatterns.error}\n`;
   }
 
-  output += `\n  Last sync: ${new Date().toISOString()}\n`;
-  output += `  Local scores: ${path.join(SKILLS_DIR, "agent-scores-local.json")}\n`;
+  output += `\n  Last sync: ${new Date().toISOString()}`;
+  if (dryRun) {
+    output += `  (dry-run)`;
+  }
+  output += "\n";
 
   return output;
 }
@@ -422,71 +379,92 @@ function formatOutput(results) {
 // Main Sync Command
 // ============================================================================
 
-async function syncCommand(org, orchRepo, token, repos = []) {
+/**
+ * @param {string} org - GitHub org/username
+ * @param {string} orchRepo - Orchestrator repo name
+ * @param {string|null} token - GitHub token
+ * @param {string[]} repos - Product repo names
+ * @param {boolean} apply - If false (default), dry-run: fetch + display only, no local file merges
+ */
+async function syncCommand(org, orchRepo, token, repos = [], apply = false) {
   ensureSkillsDir();
+  const dryRun = !apply;
 
   if (!token) {
     console.error("❌ GitHub token required.");
     console.error("   Set GITHUB_TOKEN, GH_TOKEN, or ORCHESTRATOR_PAT environment variable.");
     console.error("   Or pass via: GITHUB_TOKEN=ghp_xxx solo-cto-agent sync --org <org>");
-    return;
+    return { success: false, error: "no token" };
   }
 
   console.log("\nsolo-cto-agent sync");
   console.log("───────────────────");
   console.log(`  Org:          ${org}`);
-  console.log(`  Orchestrator: ${orchRepo}\n`);
+  console.log(`  Orchestrator: ${orchRepo}`);
+  console.log(`  Mode:         ${dryRun ? "dry-run (add --apply to write changes)" : "apply"}\n`);
 
-  try {
-    console.log("  [1/5] Fetching agent scores ...");
-    const agentScores = await fetchRemoteAgentScores(org, orchRepo, token);
+  // Track if we hit rate limit — abort remaining calls if so
+  let rateLimited = false;
 
-    console.log("  [2/5] Fetching workflow runs ...");
-    const workflowRuns = await fetchRecentWorkflowRuns(org, orchRepo, token);
+  const safeCall = async (label, fn) => {
+    if (rateLimited) return { success: false, error: "skipped (rate limited)" };
+    try {
+      return await fn();
+    } catch (e) {
+      if (e.message && e.message.startsWith("RATE_LIMIT:")) {
+        rateLimited = true;
+        console.error(`\n  ⚠️  ${e.message}`);
+        console.error("  Remaining steps skipped. Run sync again later.\n");
+        return { success: false, error: "rate limited" };
+      }
+      return { success: false, error: e.message };
+    }
+  };
 
-    console.log("  [3/5] Fetching PR reviews ...");
-    const prReviews = await fetchRecentPRReviews(org, repos, token);
+  console.log("  [1/5] Fetching agent scores ...");
+  const agentScores = await safeCall("agent scores", () =>
+    fetchRemoteAgentScores(org, orchRepo, token, dryRun)
+  );
 
-    console.log("  [4/5] Fetching visual baselines ...");
-    const visualBaselines = await fetchVisualBaselines(org, orchRepo, token);
+  console.log("  [2/5] Fetching workflow runs ...");
+  const workflowRuns = await safeCall("workflow runs", () =>
+    fetchRecentWorkflowRuns(org, orchRepo, token)
+  );
 
-    console.log("  [5/5] Syncing error patterns ...");
-    const errorPatterns = await syncErrorPatterns(org, orchRepo, token);
+  console.log("  [3/5] Fetching PR reviews ...");
+  const prReviews = await safeCall("PR reviews", () =>
+    fetchRecentPRReviews(org, repos, token)
+  );
 
-    // Update sync status
-    const summary = {
-      agentScores: agentScores.success ? "ok" : "failed",
-      workflowRuns: workflowRuns.success ? "ok" : "failed",
-      prReviews: prReviews.success ? "ok" : "failed",
-      visualBaselines: visualBaselines.success ? "ok" : "failed",
-      errorPatterns: errorPatterns.success ? "ok" : "failed",
-    };
+  console.log("  [4/5] Fetching visual baselines ...");
+  const visualBaselines = await safeCall("visual baselines", () =>
+    fetchVisualBaselines(org, orchRepo, token)
+  );
 
-    updateSyncStatus(summary);
+  console.log("  [5/5] Syncing error patterns ...");
+  const errorPatterns = await safeCall("error patterns", () =>
+    syncErrorPatterns(org, orchRepo, token, dryRun)
+  );
 
-    // Print formatted output
-    const output = formatOutput({
-      agentScores,
-      workflowRuns,
-      prReviews,
-      visualBaselines,
-      errorPatterns,
-    });
+  // Update sync status (metadata file, always safe)
+  const summary = {
+    agentScores: agentScores.success ? "ok" : "failed",
+    workflowRuns: workflowRuns.success ? "ok" : "failed",
+    prReviews: prReviews.success ? "ok" : "failed",
+    visualBaselines: visualBaselines.success ? "ok" : "failed",
+    errorPatterns: errorPatterns.success ? "ok" : "failed",
+  };
+  updateSyncStatus(summary, dryRun);
 
-    console.log(output);
+  // Print formatted output
+  const output = formatOutput({ agentScores, workflowRuns, prReviews, visualBaselines, errorPatterns }, dryRun);
+  console.log(output);
 
-    return {
-      success: true,
-      agentScores,
-      workflowRuns,
-      prReviews,
-      visualBaselines,
-      errorPatterns,
-    };
-  } catch (error) {
-    console.error(`\n  Sync failed: ${error.message}\n`);
-    return { success: false, error: error.message };
+  if (rateLimited) {
+    console.log("  ⚠️  Some data was not fetched due to rate limit. Try again later.\n");
   }
+
+  return { success: !rateLimited, dryRun, agentScores, workflowRuns, prReviews, visualBaselines, errorPatterns };
 }
 
 // ============================================================================
