@@ -48,7 +48,7 @@ This is the difference I wanted in day-to-day use:
 This repo is probably useful if you:
 
 * build mostly alone or with a very small team
-* already use Claude, Cursor, Windsurf, or Copilot in your workflow
+* already use Claude, Codex, Cursor, Windsurf, or Copilot in your workflow
 * want the agent to take more initiative
 * care about startup execution, not just code completion
 * are okay with opinionated defaults
@@ -118,9 +118,9 @@ Then open the skill file and replace the placeholders with your actual stack. Ex
 {{YOUR_FRAMEWORK}} -> Next.js / Remix / SvelteKit / etc.
 ```
 
-### Using with Cursor, Windsurf, or Copilot
+### Using with Codex, Cursor, Windsurf, or Copilot
 
-If you use Cursor, Windsurf, or GitHub Copilot instead of (or alongside) Claude, the repo includes native rule files:
+If you use Codex, Cursor, Windsurf, or GitHub Copilot instead of (or alongside) Claude, the repo includes native rule files:
 
 * `.cursorrules` - Cursor reads this from your project root automatically
 * `.windsurfrules` - Windsurf (Cascade) reads this from your project root automatically
