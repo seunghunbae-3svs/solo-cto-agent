@@ -323,3 +323,24 @@ If any of the above fails, re-run `setup.sh --update` and re-verify.
 - Ensure all SKILL.md files have valid frontmatter
 - Avoid breaking repo-level instructions (CLAUDE.md / templates)
 - Keep README claims aligned with actual files
+
+
+---
+
+## Validation
+
+Run this after install to confirm the pack is clean:
+
+```
+bash scripts/validate.sh
+```
+
+This checks frontmatter, setup.sh integrity, and required files.
+
+
+---
+
+## Automation
+
+CI runs package validation and changelog updates on push.
+If CI fails, treat it as a release blocker.
