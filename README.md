@@ -152,6 +152,33 @@ Visual checks use Playwright for real browser screenshots (desktop 1280px + mobi
 
 When you run `setup-pipeline` or `setup-repo`, the CLI scans your project's `package.json` and file structure to detect required services (NextAuth, Supabase, Stripe, Prisma, Firebase, AWS, etc.). It then prints every secret needed and generates copy-paste `gh secret set` commands for one-shot setup. No more discovering missing secrets mid-deployment.
 
+### Local Code Review (No CI/CD Required)
+
+Run a Claude-powered code review directly from your terminal, no GitHub Actions needed:
+
+```bash
+# Review last commit
+ANTHROPIC_API_KEY=sk-xxx solo-cto-agent review
+
+# Review a branch diff (dry-run: see the prompt without calling API)
+solo-cto-agent review --diff main..feature --dry-run
+
+# Review specific directory
+solo-cto-agent review --path ./src --diff HEAD~3
+```
+
+The review checks your diff against the local failure catalog (known error patterns), then sends it to Claude for security, performance, correctness, and style analysis. Results are saved as markdown reports in `~/.claude/skills/solo-cto-agent/reviews/`. This is the same review quality as the CI/CD pipeline, but runs entirely locally — useful for private repos, offline work, or pre-push checks.
+
+### Knowledge Articles
+
+After CI/CD data accumulates (via `sync`), generate synthesized knowledge articles:
+
+```bash
+solo-cto-agent learn
+```
+
+This scans your failure catalog, agent scores, and sync history, then generates markdown articles grouped by category (deploy failures, database patterns, auth issues, etc.) at `~/.claude/skills/solo-cto-agent/knowledge/`. The articles include pattern frequencies, prevention checklists, and agent performance notes — making the accumulated data immediately useful to your AI agent.
+
 ### Local ↔ Remote Sync
 
 The `sync` command bridges the gap between your local skill files and remote CI/CD results. It runs in dry-run mode by default — fetches and displays data without modifying local files. Add `--apply` to merge remote data into local:

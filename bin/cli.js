@@ -8,6 +8,8 @@ const { execSync } = require("child_process");
 
 const { syncCommand } = require("./sync");
 const { runWizard, hasWizardFlag } = require("./wizard");
+const { learnCommand } = require("./knowledge");
+const { reviewCommand } = require("./review");
 
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CATALOG = path.join(ROOT, "failure-catalog.json");
@@ -33,8 +35,10 @@ Usage:
   solo-cto-agent setup-pipeline --org <github-org> [--tier builder|cto] [--repos <repo1,repo2,...>]
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent upgrade --org <github-org> [--repos <repo1,repo2,...>]
-  solo-cto-agent sync --org <github-org> [--repos <repo1,repo2,...>] [--apply]
-  solo-cto-agent status [--org <github-org>]
+  solo-cto-agent sync --org <github-org> [--apply] [--repos <repo1,repo2,...>]
+  solo-cto-agent review [--diff HEAD~1] [--agent claude] [--dry-run]
+  solo-cto-agent learn [--force] [--category <name>]
+  solo-cto-agent status
   solo-cto-agent lint [path]
   solo-cto-agent --help
 
@@ -43,8 +47,10 @@ Commands:
   setup-pipeline    Full pipeline setup: create orchestrator repo + install workflows to product repos
   setup-repo        Install dual-agent workflows to a single product repo
   upgrade           Upgrade Builder (Lv4) → CTO (Lv5+6): add multi-agent workflows + config
-  sync              Fetch CI/CD results from GitHub (dry-run by default, --apply to merge)
-  status            Check skill health, error catalog, pipeline status, and latest CI data
+  sync              Fetch CI/CD results from GitHub (dry-run by default, --apply to write)
+  review            Run local code review via Claude API (no CI/CD required)
+  learn             Generate knowledge articles from accumulated CI/CD data
+  status            Check skill health, error catalog, sync status (local only, no network)
   lint              Check skill files for size and structure issues
 
 Presets / Tiers:
@@ -61,6 +67,9 @@ Examples:
   npx solo-cto-agent setup-repo ./my-project --org myorg
   npx solo-cto-agent sync --org myorg --repos app1,app2   # dry-run: fetch + display
   npx solo-cto-agent sync --org myorg --apply              # apply: merge remote data into local
+  npx solo-cto-agent review                                # local Claude review of last commit
+  npx solo-cto-agent review --diff main..feature --dry-run # preview review prompt
+  npx solo-cto-agent learn                                 # generate knowledge articles
 `);
 }
 
@@ -802,37 +811,9 @@ function countFiles(dir) {
   return count;
 }
 
-function getLatestCiStatus(repo, token) {
-  return new Promise((resolve) => {
-    if (!repo || !token) {
-      resolve({ status: "unavailable", conclusion: "missing token or repo" });
-      return;
-    }
-    const options = {
-      hostname: "api.github.com",
-      path: `/repos/${repo}/actions/runs?per_page=1`,
-      headers: {
-        "User-Agent": "solo-cto-agent",
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-      },
-    };
-    https.get(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          const json = JSON.parse(data);
-          const run = json.workflow_runs && json.workflow_runs[0];
-          if (!run) return resolve({ status: "unavailable", conclusion: "no runs" });
-          resolve({ status: run.status || "unknown", conclusion: run.conclusion || "unknown" });
-        } catch { resolve({ status: "unavailable", conclusion: "parse error" }); }
-      });
-    }).on("error", () => resolve({ status: "unavailable", conclusion: "request failed" }));
-  });
-}
+// status is now pure-local — no network calls. Use `sync` to fetch remote data.
 
-async function statusCommand() {
+function statusCommand() {
   const targetDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
   const skillPath = path.join(targetDir, "SKILL.md");
   const catalogPath = path.join(targetDir, "failure-catalog.json");
@@ -1194,8 +1175,29 @@ async function main() {
     return;
   }
 
+  if (cmd === "review") {
+    const diffIndex = args.indexOf("--diff");
+    const diff = diffIndex >= 0 ? args[diffIndex + 1] : "HEAD~1";
+    const agentIndex = args.indexOf("--agent");
+    const agent = agentIndex >= 0 ? args[agentIndex + 1] : "claude";
+    const pathIndex = args.indexOf("--path");
+    const reviewPath = pathIndex >= 0 ? args[pathIndex + 1] : ".";
+    const dryRun = args.includes("--dry-run");
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    await reviewCommand({ path: reviewPath, agent, diff, apiKey, dryRun });
+    return;
+  }
+
+  if (cmd === "learn") {
+    const forceLearn = args.includes("--force");
+    const catIndex = args.indexOf("--category");
+    const category = catIndex >= 0 ? args[catIndex + 1] : null;
+    await learnCommand({ force: forceLearn, category });
+    return;
+  }
+
   if (cmd === "status") {
-    await statusCommand();
+    statusCommand();
     return;
   }
 
