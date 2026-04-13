@@ -23,7 +23,8 @@ This repo is my attempt to package those habits into a small set of reusable ski
 
 `solo-cto-agent` is an opinionated skill pack for solo founders, indie hackers, and small teams using AI coding agents in their build workflow.
 
-It was built around Claude Code & OpenAI Codex but the core rules also work in Cursor, Windsurf, and GitHub Copilot. The repo includes native config files for each.
+Primary workflow: Cowork + Codex.  
+It was built around Claude Code & OpenAI Codex but the core rules also work in Cursor, Windsurf, and GitHub Copilot. The repo includes native config files where needed.
 
 The point is simple:
 
@@ -169,6 +170,10 @@ Then open the skill file and replace the placeholders with your actual stack. Ex
 {{YOUR_DEPLOY}}    -> Vercel / Railway / Netlify / etc.
 {{YOUR_FRAMEWORK}} -> Next.js / Remix / SvelteKit / etc.
 ```
+
+### Using with Cowork + Codex
+
+Codex is a first-class target. Use the SKILL.md files directly as your instruction source. No extra Codex-specific files are required.
 
 ### Using with Codex, Cursor, Windsurf, or Copilot
 
