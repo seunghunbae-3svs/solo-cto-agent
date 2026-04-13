@@ -4,7 +4,7 @@
   "private": false,
   "description": "Opinionated skill pack for AI coding agents with CTO-grade operating rules.",
   "bin": {
-    "solo-cto-agent": "./bin/cli.js"
+    "solo-cto-agent": "bin/cli.js"
   },
   "scripts": {
     "test": "vitest run",
