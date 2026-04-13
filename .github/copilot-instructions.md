@@ -1,5 +1,5 @@
 # Copilot Instructions
-# solo-cto-agent — https://github.com/{{GITHUB_OWNER}}/solo-cto-agent
+# solo-cto-agent — https://github.com/seunghunbae-3svs/solo-cto-agent
 # Place this at .github/copilot-instructions.md
 # GitHub Copilot reads it as workspace-level instructions.
 
