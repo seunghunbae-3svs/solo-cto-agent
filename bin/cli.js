@@ -26,8 +26,8 @@ function printHelp() {
 
 Usage:
   solo-cto-agent init [--force] [--preset maker|builder|cto]
-  solo-cto-agent setup-pipeline [--tier base|pro] [--org <github-org>] [--repos <repo1,repo2,...>]
-  solo-cto-agent setup-repo <repo-path> [--tier base|pro]
+  solo-cto-agent setup-pipeline --org <github-org> [--tier builder|cto] [--repos <repo1,repo2,...>]
+  solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent status
   solo-cto-agent lint [path]
   solo-cto-agent --help
@@ -39,14 +39,17 @@ Commands:
   status            Check skill health, error catalog, and pipeline status
   lint              Check skill files for size and structure issues
 
-Tiers:
-  base    Lv4 — Core dual-agent CI/CD (Claude + Codex cross-review, routing, circuit breaker)
-  pro     Lv5+6 — Base + UI/UX quality gate + analytics + Telegram notifications
+Presets / Tiers:
+  maker       Spark + Review + Memory + Craft (idea validation only)
+  builder     Lv4 — Maker + Build + Ship (default, full dev/deploy cycle)
+  cto         Lv5+6 — Builder + Orchestrate + UI/UX quality gate + analytics + Telegram
 
 Examples:
-  npx solo-cto-agent init --preset cto
-  npx solo-cto-agent setup-pipeline --tier pro --org myorg --repos app1,app2,app3
-  npx solo-cto-agent setup-repo ./my-project --tier base
+  npx solo-cto-agent init --preset builder        # install skills (default)
+  npx solo-cto-agent init --preset cto             # install all skills
+  npx solo-cto-agent setup-pipeline --org myorg    # deploy Lv4 pipeline
+  npx solo-cto-agent setup-pipeline --org myorg --tier cto --repos app1,app2,app3
+  npx solo-cto-agent setup-repo ./my-project --org myorg
 `);
 }
 
@@ -173,9 +176,13 @@ Style: {{YOUR_STYLE}}
 function setupPipelineCommand(tier, org, repos, orchName, force) {
   if (!org) {
     console.error("❌ --org is required. Specify your GitHub org/username.");
-    console.error("   Example: solo-cto-agent setup-pipeline --org myorg --tier base");
+    console.error("   Example: solo-cto-agent setup-pipeline --org myorg --tier builder");
     process.exit(1);
   }
+
+  // Normalize tier: builder=base(Lv4), cto=pro(Lv5+6)
+  const normalizedTier = (tier === "cto" || tier === "pro") ? "cto" : "builder";
+  const isPro = normalizedTier === "cto";
 
   const orchestratorRepo = orchName || "dual-agent-orchestrator";
   const productRepoList = repos ? repos.split(",").map(r => r.trim()) : [];
@@ -196,7 +203,7 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
 
   console.log("╔══════════════════════════════════════════════════╗");
   console.log("║  solo-cto-agent — Pipeline Setup                ║");
-  console.log(`║  Tier: ${(tier === "pro" ? "Pro (Lv5+6)" : "Base (Lv4)").padEnd(42)}║`);
+  console.log(`║  Tier: ${(isPro ? "CTO (Lv5+6)" : "Builder (Lv4)").padEnd(42)}║`);
   console.log(`║  Org:  ${org.padEnd(42)}║`);
   console.log("╚══════════════════════════════════════════════════╝");
   console.log("");
@@ -209,7 +216,6 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
   const tiersData = loadTiers();
   const baseTier = tiersData.tiers.base;
   const proTier = tiersData.tiers.pro;
-  const isPro = tier === "pro";
 
   // ── Step 1: Create orchestrator repo ──
   console.log("[1/4] Setting up orchestrator repo...");
@@ -436,34 +442,64 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
   fs.writeFileSync(envPath, envContent, "utf8");
   console.log(`   ✅ Setup guide: ${envPath}`);
 
-  // ── Step 4: Summary ──
+  // ── Step 4: Summary + Secret Guide ──
+  const wfCount = isPro
+    ? baseTier.orchestrator_workflows.length + proTier.additional_orchestrator_workflows.length
+    : baseTier.orchestrator_workflows.length;
+
   console.log("");
   console.log("[4/4] Pipeline setup complete!");
   console.log("");
-  console.log("┌──────────────────────────────────────────────────┐");
-  console.log("│  Setup Summary                                   │");
-  console.log("├──────────────────────────────────────────────────┤");
-  console.log(`│  Tier:         ${isPro ? "Pro (Lv5+6)" : "Base (Lv4)"}${" ".repeat(isPro ? 24 : 26)}│`);
-  console.log(`│  Orchestrator: ${orchDir.length > 33 ? "..." + orchDir.slice(-30) : orchDir.padEnd(33)}│`);
-  console.log(`│  Workflows:    ${String(isPro ? baseTier.orchestrator_workflows.length + proTier.additional_orchestrator_workflows.length : baseTier.orchestrator_workflows.length).padEnd(33)}│`);
-  console.log(`│  Product repos: ${productRepos.length || "none"}${" ".repeat(31 - String(productRepos.length || "none").length)}│`);
-  console.log("└──────────────────────────────────────────────────┘");
+  console.log(`  Tier:          ${isPro ? "CTO (Lv5+6)" : "Builder (Lv4)"}`);
+  console.log(`  Orchestrator:  ${orchDir}`);
+  console.log(`  Workflows:     ${wfCount}`);
+  console.log(`  Product repos: ${productRepoList.length || "none"}`);
   console.log("");
-  console.log("Required GitHub Secrets:");
-  console.log("  GITHUB_TOKEN          — auto-provided by GitHub Actions");
-  console.log("  ANTHROPIC_API_KEY     — for Claude code/visual review");
+  console.log("═══ NEXT STEPS ═══");
+  console.log("");
+  console.log(`  1. cd ${orchestratorRepo}`);
+  console.log("     git add -A && git commit -m 'feat: init dual-agent orchestrator'");
+  console.log(`     gh repo create ${org}/${orchestratorRepo} --push --source . --private`);
+  console.log("");
+  console.log("  2. Set secrets on orchestrator repo:");
+  console.log("");
+  console.log("     # GitHub PAT with repo + workflow scope (cross-repo dispatch)");
+  console.log("     gh secret set PAT_TOKEN");
+  console.log("");
+  console.log("     # Anthropic API key (Claude code review + visual analysis)");
+  console.log("     gh secret set ANTHROPIC_API_KEY");
+  console.log("");
   if (isPro) {
-    console.log("  TELEGRAM_BOT_TOKEN    — for Telegram notifications (optional)");
-    console.log("  TELEGRAM_CHAT_ID      — for Telegram channel (optional)");
+    console.log("     # Telegram notifications (optional)");
+    console.log("     gh secret set TELEGRAM_BOT_TOKEN");
+    console.log("     gh secret set TELEGRAM_CHAT_ID");
+    console.log("");
+  }
+  console.log("  3. Set SAME secrets on each product repo:");
+  console.log("");
+  if (productRepoList.length > 0) {
+    for (const repo of productRepoList) {
+      console.log(`     cd ${repo} && gh secret set PAT_TOKEN && gh secret set ANTHROPIC_API_KEY`);
+    }
+  } else {
+    console.log("     cd your-product-repo");
+    console.log("     gh secret set PAT_TOKEN");
+    console.log("     gh secret set ANTHROPIC_API_KEY");
   }
   console.log("");
-  console.log("Next steps:");
-  console.log(`  1. cd ${orchestratorRepo} && git add -A && git commit -m 'feat: init orchestrator'`);
-  console.log("  2. gh repo create <name> --push --source . --private");
-  console.log("  3. Add secrets: gh secret set ANTHROPIC_API_KEY");
-  if (productRepoList.length > 0) {
-    console.log(`  4. cd each product repo → git add . && git commit -m 'ci: add dual-agent workflows' && git push`);
-  }
+  console.log("  4. Push product repos with new workflows:");
+  console.log("     git add .github/ && git commit -m 'ci: add dual-agent workflows' && git push");
+  console.log("");
+  console.log("═══ WHY EACH SECRET ═══");
+  console.log("");
+  console.log("  PAT_TOKEN         Cross-repo dispatch (product → orchestrator)");
+  console.log("                    Scope: repo + workflow");
+  console.log("                    Create: https://github.com/settings/tokens");
+  console.log("");
+  console.log("  ANTHROPIC_API_KEY Claude code review, visual analysis, UI/UX gate");
+  console.log("                    Get: https://console.anthropic.com");
+  console.log("");
+  console.log("  GITHUB_TOKEN      Auto-provided by GitHub Actions (no action needed)");
 }
 
 function generateEnvGuide(isPro, org) {
@@ -745,7 +781,7 @@ async function main() {
 
   if (cmd === "setup-pipeline") {
     const tierIndex = args.indexOf("--tier");
-    const tier = tierIndex >= 0 ? args[tierIndex + 1] : "base";
+    const tier = tierIndex >= 0 ? args[tierIndex + 1] : "builder";
     const orgIndex = args.indexOf("--org");
     const org = orgIndex >= 0 ? args[orgIndex + 1] : null;
     const reposIndex = args.indexOf("--repos");
@@ -759,11 +795,11 @@ async function main() {
   if (cmd === "setup-repo") {
     const repoPath = args[1];
     if (!repoPath) {
-      console.error("Usage: solo-cto-agent setup-repo <path> --org <github-org> [--tier base|pro]");
+      console.error("Usage: solo-cto-agent setup-repo <path> --org <github-org> [--tier builder|cto]");
       process.exit(1);
     }
     const tierIndex = args.indexOf("--tier");
-    const tier = tierIndex >= 0 ? args[tierIndex + 1] : "base";
+    const tier = tierIndex >= 0 ? args[tierIndex + 1] : "builder";
     const orgIndex = args.indexOf("--org");
     const org = orgIndex >= 0 ? args[orgIndex + 1] : null;
     const orchIndex = args.indexOf("--orchestrator-name");

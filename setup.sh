@@ -1,25 +1,68 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO="https://github.com/{{GITHUB_OWNER}}/solo-cto-agent.git"
+# ═══════════════════════════════════════════════════════
+# solo-cto-agent — One-Command Setup
+# Usage:
+#   curl -sSL https://raw.githubusercontent.com/seunghunbae-3svs/solo-cto-agent/main/setup.sh | bash
+#   bash setup.sh --org myorg --tier cto --repos app1,app2
+# ═══════════════════════════════════════════════════════
+
+REPO="https://github.com/seunghunbae-3svs/solo-cto-agent.git"
 CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
 SKILLS_DIR="$CLAUDE_DIR/skills"
 TEMP_DIR="$(mktemp -d)"
-MODE="${1:---full}"
-TIER="${2:-base}"
 
-cleanup() {
-  rm -rf "$TEMP_DIR"
-}
+# ─── Parse Arguments ───
+ORG=""
+TIER="builder"
+REPOS=""
+ORCH_NAME="dual-agent-orchestrator"
+MODE="--install"
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --org) ORG="$2"; shift 2 ;;
+    --tier) TIER="$2"; shift 2 ;;
+    --repos) REPOS="$2"; shift 2 ;;
+    --orchestrator-name) ORCH_NAME="$2"; shift 2 ;;
+    --update|--force) MODE="$1"; shift ;;
+    --help|-h)
+      echo "Usage: bash setup.sh --org <github-org> [--tier builder|cto] [--repos repo1,repo2]"
+      echo ""
+      echo "Options:"
+      echo "  --org <org>                GitHub org or username (REQUIRED)"
+      echo "  --tier builder|cto         builder=Lv4 base (default), cto=Lv5+6 pro"
+      echo "  --repos <repo1,repo2>      Product repos to install workflows into"
+      echo "  --orchestrator-name <name> Custom orchestrator repo name (default: dual-agent-orchestrator)"
+      echo "  --update                   Overwrite existing skills"
+      exit 0
+      ;;
+    *) shift ;;
+  esac
+done
+
+if [ -z "$ORG" ]; then
+  echo "❌ --org is required."
+  echo ""
+  echo "Usage: bash setup.sh --org <github-org> [--tier builder|cto]"
+  echo "Example: bash setup.sh --org mycompany --tier cto --repos myapp1,myapp2"
+  exit 1
+fi
+
+cleanup() { rm -rf "$TEMP_DIR"; }
 trap cleanup EXIT
 
 echo "╔══════════════════════════════════════════════════╗"
 echo "║  solo-cto-agent — Full Setup                    ║"
-echo "║  Dual-Agent CI/CD Orchestrator                  ║"
+echo "║  Org:  $ORG"
+echo "║  Tier: $TIER"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
 
-echo "[1/6] Downloading repository..."
+# ─── Step 1: Download ───
+
+echo "[1/7] Downloading repository..."
 git clone --depth 1 "$REPO" "$TEMP_DIR/solo-cto-agent" >/dev/null 2>&1
 echo "  done"
 
@@ -28,7 +71,13 @@ mkdir -p "$SKILLS_DIR" "$CLAUDE_DIR" "$CLAUDE_DIR/templates"
 
 # ─── Step 2: Install Skills ───
 
-SKILLS=(build ship craft spark review memory orchestrate)
+# Builder (Lv4): build + ship + craft + spark + review + memory
+# CTO (Lv5+6): Builder + orchestrate
+if [ "$TIER" = "cto" ]; then
+  SKILLS=(build ship craft spark review memory orchestrate)
+else
+  SKILLS=(build ship craft spark review memory)
+fi
 
 install_skill() {
   local skill="$1"
@@ -36,7 +85,7 @@ install_skill() {
   local dst="$SKILLS_DIR/$skill"
 
   if [ ! -d "$src" ]; then
-    echo "  $skill — not found in package, skipping"
+    echo "  $skill — not found, skipping"
     return
   fi
 
@@ -48,7 +97,7 @@ install_skill() {
       ;;
     *)
       if [ -d "$dst" ]; then
-        echo "  $skill — already exists, skipping"
+        echo "  $skill — exists, skipping"
       else
         cp -r "$src" "$dst"
         echo "  $skill — installed"
@@ -57,17 +106,17 @@ install_skill() {
   esac
 }
 
-echo "[2/6] Installing skills..."
+echo "[2/7] Installing skills..."
 for skill in "${SKILLS[@]}"; do
   install_skill "$skill"
 done
 
-# ─── Step 3: Copy Templates ───
+# ─── Step 3: Templates ───
 
-echo "[3/6] Copying templates..."
+echo "[3/7] Copying templates..."
 cp "$SRC/templates/context.md" "$CLAUDE_DIR/templates/" 2>/dev/null || true
 cp "$SRC/templates/project.md" "$CLAUDE_DIR/templates/" 2>/dev/null || true
-echo "  templates — copied"
+echo "  done"
 
 # ─── Step 4: CLAUDE.md Autopilot Block ───
 
@@ -76,7 +125,7 @@ CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 START_MARK="<!-- solo-cto-agent:start -->"
 END_MARK="<!-- solo-cto-agent:end -->"
 
-echo "[4/6] Updating CLAUDE.md..."
+echo "[4/7] Updating CLAUDE.md..."
 if [ -f "$AUTOPILOT_SRC" ]; then
   TMP_BLOCK="$TEMP_DIR/autopilot_block.md"
   {
@@ -113,24 +162,49 @@ fi
 
 # ─── Step 5: Setup Orchestrator Repo ───
 
-echo "[5/6] Setting up orchestrator repo..."
+echo "[5/7] Setting up orchestrator repo..."
 
-ORCH_DIR="$(pwd)/{{ORCHESTRATOR_REPO}}"
+ORCH_DIR="$(pwd)/$ORCH_NAME"
 ORCH_TEMPLATE="$SRC/templates/orchestrator"
 
 if [ -d "$ORCH_DIR/.git" ]; then
-  echo "  Found existing orchestrator at $ORCH_DIR"
+  echo "  Found existing: $ORCH_DIR"
 else
   mkdir -p "$ORCH_DIR"
   git -C "$ORCH_DIR" init >/dev/null 2>&1
-  echo "  Created orchestrator repo at $ORCH_DIR"
+  echo "  Created: $ORCH_DIR"
 fi
 
-# Read tiers.json and copy files based on tier
-TIERS_JSON="$SRC/tiers.json"
+# Template variable replacement function
+replace_placeholders() {
+  local file="$1"
+  if [ -f "$file" ]; then
+    sed -i "s|{{GITHUB_OWNER}}|$ORG|g" "$file"
+    sed -i "s|{{ORCHESTRATOR_REPO}}|$ORCH_NAME|g" "$file"
+    # Replace product repo placeholders with generic names if not specified
+    for i in $(seq 1 10); do
+      sed -i "s|{{PRODUCT_REPO_$i}}|your-product-repo-$i|g" "$file"
+    done
+  fi
+}
 
-# Copy all base orchestrator workflows
-echo "  Copying orchestrator workflows..."
+# Replace product repo placeholders with actual names if provided
+IFS=',' read -ra REPO_ARRAY <<< "${REPOS:-}"
+set_product_repo_names() {
+  local file="$1"
+  local idx=1
+  for repo in "${REPO_ARRAY[@]}"; do
+    repo=$(echo "$repo" | xargs) # trim
+    if [ -n "$repo" ]; then
+      sed -i "s|{{PRODUCT_REPO_$idx}}|$(basename "$repo")|g" "$file"
+      idx=$((idx + 1))
+    fi
+  done
+}
+
+# Copy orchestrator workflows based on tier
+TIERS_JSON="$SRC/tiers.json"
+echo "  Copying workflows..."
 mkdir -p "$ORCH_DIR/.github/workflows"
 
 BASE_WORKFLOWS=$(python3 -c "
@@ -146,8 +220,8 @@ for wf in $BASE_WORKFLOWS; do
   fi
 done
 
-# If pro tier, add pro workflows
-if [ "$TIER" = "pro" ]; then
+# CTO tier = pro (Lv5+6)
+if [ "$TIER" = "cto" ]; then
   PRO_WORKFLOWS=$(python3 -c "
 import json
 d = json.load(open('$TIERS_JSON'))
@@ -159,59 +233,122 @@ for w in d['tiers']['pro']['additional_orchestrator_workflows']:
       cp "$ORCH_TEMPLATE/.github/workflows/$wf" "$ORCH_DIR/.github/workflows/"
     fi
   done
-  echo "  Pro tier workflows added"
 fi
 
-# Copy full ops directory (simpler than parsing JSON for each file)
-echo "  Copying ops directory..."
-if [ -d "$ORCH_TEMPLATE/ops" ]; then
-  cp -r "$ORCH_TEMPLATE/ops" "$ORCH_DIR/"
-fi
-
-# Copy other directories
-for dir in api lib docs .claude .codex; do
+# Copy ops, api, lib, docs, .claude, .codex
+echo "  Copying operational code..."
+for dir in ops api lib docs .claude .codex; do
   if [ -d "$ORCH_TEMPLATE/$dir" ]; then
     cp -r "$ORCH_TEMPLATE/$dir" "$ORCH_DIR/"
   fi
 done
 
-# Copy root config files
+# Copy root config
 for f in package.json vercel.json tsconfig.json .env.example .gitignore CLAUDE.md; do
   if [ -f "$ORCH_TEMPLATE/$f" ]; then
     cp "$ORCH_TEMPLATE/$f" "$ORCH_DIR/"
   fi
 done
 
+# Replace all placeholders in copied files
+echo "  Replacing placeholders with your org/repo names..."
+find "$ORCH_DIR" -type f \( -name "*.yml" -o -name "*.js" -o -name "*.ts" -o -name "*.md" -o -name "*.json" -o -name "*.sh" \) | while read -r file; do
+  if [ ${#REPO_ARRAY[@]} -gt 0 ] && [ -n "${REPO_ARRAY[0]}" ]; then
+    set_product_repo_names "$file"
+  fi
+  replace_placeholders "$file"
+done
+
 WF_COUNT=$(ls -1 "$ORCH_DIR/.github/workflows/"*.yml 2>/dev/null | wc -l)
 echo "  ✅ Orchestrator: $WF_COUNT workflows deployed"
 
-# ─── Step 6: Summary ───
+# ─── Step 6: Install Product Repo Workflows ───
 
-echo "[6/6] Setup complete!"
-echo ""
-echo "┌──────────────────────────────────────────────────┐"
-echo "│  Installed:                                      │"
-echo "│  • ${#SKILLS[@]} skills → $SKILLS_DIR            │"
-echo "│  • Orchestrator → $ORCH_DIR                      │"
-echo "│  • $WF_COUNT workflows                           │"
-echo "│  • Tier: $TIER                                   │"
-echo "└──────────────────────────────────────────────────┘"
-echo ""
-echo "Required GitHub Secrets:"
-echo "  ANTHROPIC_API_KEY     — for Claude code/visual review"
-echo "  GITHUB_TOKEN          — auto-provided by GitHub Actions"
-if [ "$TIER" = "pro" ]; then
-echo "  TELEGRAM_BOT_TOKEN    — for Telegram notifications (optional)"
-echo "  TELEGRAM_CHAT_ID      — for Telegram channel (optional)"
+echo "[6/7] Installing product repo workflows..."
+
+if [ -z "$REPOS" ]; then
+  echo "  No --repos specified. Run later:"
+  echo "  npx solo-cto-agent setup-repo ./my-app --org $ORG"
+else
+  IFS=',' read -ra PRODUCT_REPOS <<< "$REPOS"
+  for repo in "${PRODUCT_REPOS[@]}"; do
+    repo=$(echo "$repo" | xargs)
+    repo_dir="$(pwd)/$repo"
+    if [ ! -d "$repo_dir" ]; then
+      repo_dir="$repo"
+    fi
+    if [ ! -d "$repo_dir" ]; then
+      echo "  ⚠️  $repo — not found, skipping"
+      continue
+    fi
+
+    mkdir -p "$repo_dir/.github/workflows"
+    for wf in "$SRC/templates/product-repo/.github/workflows/"*.yml; do
+      cp "$wf" "$repo_dir/.github/workflows/"
+    done
+
+    # Replace placeholders in product repo workflows
+    find "$repo_dir/.github/workflows" -name "*.yml" | while read -r file; do
+      replace_placeholders "$file"
+    done
+
+    echo "  ✅ $repo — workflows installed"
+  done
 fi
+
+# ─── Step 7: Summary + Required Secrets ───
+
 echo ""
-echo "Next steps:"
-echo "  1. cd {{ORCHESTRATOR_REPO}}"
-echo "  2. git add -A && git commit -m 'feat: init dual-agent orchestrator'"
-echo "  3. gh repo create <name> --push --source . --private"
-echo "  4. gh secret set ANTHROPIC_API_KEY"
+echo "[7/7] Setup complete!"
 echo ""
-echo "To add workflows to a product repo:"
-echo "  npx solo-cto-agent setup-repo ./my-product-repo"
+echo "┌──────────────────────────────────────────────────────────┐"
+echo "│  Summary                                                 │"
+echo "├──────────────────────────────────────────────────────────┤"
+echo "│  Org:          $ORG"
+echo "│  Tier:         $TIER ($([ "$TIER" = "cto" ] && echo "Lv5+6 Pro" || echo "Lv4 Base"))"
+echo "│  Skills:       ${#SKILLS[@]} installed"
+echo "│  Orchestrator: $ORCH_DIR"
+echo "│  Workflows:    $WF_COUNT"
+echo "└──────────────────────────────────────────────────────────┘"
 echo ""
-echo "Documentation: https://github.com/{{GITHUB_OWNER}}/solo-cto-agent"
+echo "═══ REQUIRED: Set GitHub Secrets ═══"
+echo ""
+echo "Run these commands in your orchestrator repo:"
+echo ""
+echo "  cd $ORCH_NAME"
+echo "  git add -A && git commit -m 'feat: init dual-agent orchestrator'"
+echo "  gh repo create $ORG/$ORCH_NAME --push --source . --private"
+echo ""
+echo "Then set secrets (REQUIRED for automation to work):"
+echo ""
+echo "  # 1. GitHub PAT with repo + workflow scope (for cross-repo dispatch)"
+echo "  gh secret set PAT_TOKEN"
+echo ""
+echo "  # 2. Anthropic API key (for Claude code review + visual analysis)"
+echo "  gh secret set ANTHROPIC_API_KEY"
+echo ""
+if [ "$TIER" = "cto" ]; then
+echo "  # 3. Telegram (optional, for real-time notifications)"
+echo "  gh secret set TELEGRAM_BOT_TOKEN"
+echo "  gh secret set TELEGRAM_CHAT_ID"
+echo ""
+fi
+echo "Also set secrets on EACH product repo:"
+echo ""
+echo "  cd ../your-product-repo"
+echo "  gh secret set PAT_TOKEN          # same PAT as orchestrator"
+echo "  gh secret set ANTHROPIC_API_KEY  # same key"
+echo ""
+echo "═══ Why each secret is needed ═══"
+echo ""
+echo "  PAT_TOKEN         Cross-repo dispatch (product → orchestrator)"
+echo "                    Required scope: repo, workflow"
+echo "                    Create at: https://github.com/settings/tokens"
+echo ""
+echo "  ANTHROPIC_API_KEY Claude-powered code review, visual analysis,"
+echo "                    UI/UX quality gate, auto-fix suggestions"
+echo "                    Get at: https://console.anthropic.com"
+echo ""
+echo "  GITHUB_TOKEN      Auto-provided by GitHub Actions (no action needed)"
+echo ""
+echo "Documentation: https://github.com/seunghunbae-3svs/solo-cto-agent"
