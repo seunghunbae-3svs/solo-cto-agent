@@ -38,5 +38,11 @@
 - apply references/ to remaining skills (craft, memory, review, spark)
 - npm publish automation (release.yml + npm token)
 - terminal GIF demo (replace SVG)
-- `solo-cto-agent doctor` (lint + status + CI in one pass)
+- ✅ `solo-cto-agent doctor` (lint + status + CI in one pass)
+- ✅ cowork-main Phase 1 — `session save/restore/list`, mode-aware guards, dry-run sync
 - plugin marketplace listing
+
+## cowork-main Phases
+- ✅ **Phase 1** — manual pull (sync dry-run default), local-cache status, doctor, session context
+- **Phase 2** — orchestrator repo auto-commits agent-scores + error-patterns post CI run
+- **Phase 3** — opt-in `auto_sync: true` at session start (power users)

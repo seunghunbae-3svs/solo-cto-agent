@@ -41,7 +41,8 @@ describe("npm pack", () => {
     const files = output[0].files.map((f) => f.path);
 
     const testFiles = files.filter((f) => f.startsWith("tests/"));
-    const workflowFiles = files.filter((f) => f.includes(".github/"));
+    // Only flag top-level .github/ files (repo's own CI), not templates/*/.github/ (legitimate template payload)
+    const workflowFiles = files.filter((f) => f.startsWith(".github/"));
 
     expect(testFiles.length).toBe(0);
     expect(workflowFiles.length).toBe(0);

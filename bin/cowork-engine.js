@@ -29,6 +29,7 @@ const CONFIG = {
   skillDir: path.join(os.homedir(), ".claude", "skills", "solo-cto-agent"),
   reviewsDir: path.join(os.homedir(), ".claude", "skills", "solo-cto-agent", "reviews"),
   knowledgeDir: path.join(os.homedir(), ".claude", "skills", "solo-cto-agent", "knowledge"),
+  sessionsDir: path.join(os.homedir(), ".claude", "skills", "solo-cto-agent", "sessions"),
   defaultModel: {
     claude: "claude-sonnet-4-20250514",
     codex: "codex-mini-latest",
@@ -874,6 +875,123 @@ ${diff}
   return dualReviewData;
 }
 
+function sessionSave(options = {}) {
+  const {
+    projectTag = null,
+    decisions = [],
+    errors = [],
+    reviews = [],
+    threads = [],
+  } = options;
+
+  ensureDir(CONFIG.sessionsDir);
+
+  const ts = new Date().toISOString();
+  const sessionData = {
+    timestamp: ts,
+    projectTag,
+    decisions,
+    errors,
+    reviews,
+    threads,
+  };
+
+  const filename = `${timestamp()}-session.json`;
+  const sessionFile = path.join(CONFIG.sessionsDir, filename);
+
+  fs.writeFileSync(sessionFile, JSON.stringify(sessionData, null, 2));
+  logSuccess(`Session saved to ${sessionFile}`);
+
+  // Update latest.json symlink/copy
+  const latestFile = path.join(CONFIG.sessionsDir, "latest.json");
+  fs.writeFileSync(latestFile, JSON.stringify(sessionData, null, 2));
+  logSuccess(`Latest session pointer updated`);
+
+  return sessionFile;
+}
+
+function sessionRestore(options = {}) {
+  const { sessionFile = null } = options;
+
+  const latestFile = path.join(CONFIG.sessionsDir, "latest.json");
+
+  if (!fs.existsSync(latestFile) && !sessionFile) {
+    logWarn("No sessions found");
+    return null;
+  }
+
+  try {
+    const targetFile = sessionFile || latestFile;
+    if (!fs.existsSync(targetFile)) {
+      logError(`Session file not found: ${targetFile}`);
+      return null;
+    }
+
+    const sessionData = JSON.parse(fs.readFileSync(targetFile, "utf8"));
+    logSuccess(`Session restored from ${targetFile}`);
+    return sessionData;
+  } catch (err) {
+    logError(`Failed to restore session: ${err.message}`);
+    return null;
+  }
+}
+
+function sessionList(options = {}) {
+  const { limit = 10 } = options;
+
+  if (!fs.existsSync(CONFIG.sessionsDir)) {
+    logWarn("No sessions directory found");
+    return [];
+  }
+
+  const files = fs.readdirSync(CONFIG.sessionsDir)
+    .filter(f => f.endsWith("-session.json"))
+    .sort()
+    .reverse()
+    .slice(0, limit);
+
+  if (files.length === 0) {
+    logWarn("No sessions found");
+    return [];
+  }
+
+  logSection("Recent Sessions");
+
+  const sessions = [];
+  for (const file of files) {
+    try {
+      const filePath = path.join(CONFIG.sessionsDir, file);
+      const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      const ts = new Date(data.timestamp);
+      const projectLabel = data.projectTag ? ` (${data.projectTag})` : "";
+      const decisionCount = (data.decisions || []).length;
+      const errorCount = (data.errors || []).length;
+      const reviewCount = (data.reviews || []).length;
+
+      log(
+        `${COLORS.blue}${file}${COLORS.reset}${projectLabel}`
+      );
+      log(
+        `  ${ts.toLocaleString()} — ` +
+        `${decisionCount} decisions, ${errorCount} errors, ${reviewCount} reviews`
+      );
+
+      sessions.push({
+        file,
+        timestamp: data.timestamp,
+        projectTag: data.projectTag,
+        decisionCount,
+        errorCount,
+        reviewCount,
+      });
+    } catch (err) {
+      logError(`Failed to parse ${file}: ${err.message}`);
+    }
+  }
+
+  return sessions;
+}
+
 function detectMode() {
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
@@ -945,6 +1063,29 @@ async function main() {
       logInfo(`Current mode: ${mode}`);
       log(`  ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "set" : "missing"}`);
       log(`  OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? "set" : "missing"}`);
+    } else if (command === "session") {
+      const subcommand = args[1] || "list";
+
+      if (subcommand === "save") {
+        const projectIdx = args.indexOf("--project");
+        const projectTag = projectIdx >= 0 ? args[projectIdx + 1] : null;
+        sessionSave({ projectTag });
+      } else if (subcommand === "restore") {
+        const sessionIdx = args.indexOf("--session");
+        const sessionFile = sessionIdx >= 0 ? args[sessionIdx + 1] : null;
+        const data = sessionRestore({ sessionFile });
+        if (data) {
+          log(JSON.stringify(data, null, 2));
+        }
+      } else if (subcommand === "list") {
+        const limitIdx = args.indexOf("--limit");
+        const limit = limitIdx >= 0 ? parseInt(args[limitIdx + 1], 10) : 10;
+        sessionList({ limit });
+      } else {
+        logError(`Unknown session subcommand: ${subcommand}`);
+        log(`Use: session save|restore|list`);
+        process.exit(1);
+      }
     } else if (command === "help" || command === "-h" || command === "--help") {
       log(`
 ${COLORS.bold}cowork-engine.js — Local Cowork Mode${COLORS.reset}
@@ -957,6 +1098,9 @@ ${COLORS.bold}Commands:${COLORS.reset}
   knowledge-capture  Extract session decisions into knowledge articles
   dual-review        Run Claude + OpenAI cross-review
   detect-mode        Check which API keys are configured
+  session save       Save current session context
+  session restore    Load most recent session context
+  session list       List recent sessions
   help               Show this message
 
 ${COLORS.bold}Options:${COLORS.reset}
@@ -1025,6 +1169,9 @@ module.exports = {
   knowledgeCapture,
   dualReview,
   detectMode,
+  sessionSave,
+  sessionRestore,
+  sessionList,
   // Utilities for testing
   parseReviewResponse,
   getDiff,

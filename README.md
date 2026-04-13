@@ -112,6 +112,31 @@ npx solo-cto-agent init --wizard
 # Prompts: Choose mode → [1] codex-main  [2] cowork-main
 ```
 
+### cowork-main — Semi-Automatic Workflow
+
+`cowork-main` is the local-first mode for solo devs who want CTO-grade tooling without depending on GitHub Actions, webhooks, or stable connectivity.
+
+**Default posture:** automation OFF. Every remote operation is opt-in.
+
+| Command | Behavior |
+|---|---|
+| `solo-cto-agent review` | Local Claude review of `git diff` (staged / branch / file). No GitHub required. |
+| `solo-cto-agent dual-review` | Claude + OpenAI cross-review locally. Auto-enabled when both keys present. |
+| `solo-cto-agent knowledge` | Extract decisions / error patterns from recent commits into local knowledge articles. |
+| `solo-cto-agent sync --org <org>` | **Dry-run by default.** Fetch agent-scores / error-patterns from orchestrator repo and display. |
+| `solo-cto-agent sync --org <org> --apply` | Merge remote data into local cache. |
+| `solo-cto-agent session save/restore/list` | Local session context — survives across Claude Code / Cowork sessions. |
+| `solo-cto-agent doctor` | One-pass health check: skills, engine, API keys, lint, sync, catalog. |
+| `solo-cto-agent status` | Local cache only — no network calls. |
+
+#### Phase roadmap
+
+| Phase | Scope | Status |
+|---|---|---|
+| **Phase 1** | Manual pull (`sync` dry-run default), local-cache `status`, `doctor`, session context | ✅ current |
+| **Phase 2** | CI/CD post-run auto-commits `agent-scores.json` + error patterns to orchestrator repo → manual `sync` always gets fresh data | planned |
+| **Phase 3** | Opt-in auto-sync at session start (`auto_sync: true` in SKILL.md) for power users | planned |
+
 ## Tiers
 
 Two tiers, one CLI. Pick what fits your workflow.
