@@ -1,0 +1,23 @@
+{
+  "meta": {
+    "version": 1,
+    "window": 20,
+    "last_updated": "{{SETUP_TIMESTAMP}}"
+  },
+  "agents": {
+    "claude": {
+      "accuracy": 0.5,
+      "test_pass_rate": 0.5,
+      "review_hit_rate": 0.5,
+      "rework_rate": 0,
+      "tasks_completed": 0,
+      "ci_pass": 0,
+      "ci_total": 0,
+      "reviews_submitted": 0,
+      "merges": 0,
+      "hotfixes": 0
+    }
+  },
+  "by_repo": {},
+  "history": []
+}

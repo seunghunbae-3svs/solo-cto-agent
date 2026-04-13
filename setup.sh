@@ -262,43 +262,11 @@ done
 # Builder tier: override routing-policy + agent-scores for single-agent mode
 if [ "$TIER" != "cto" ]; then
   echo "  Applying single-agent config..."
-  python3 -c "
-import json
-policy = {
-    '\$schema': './schemas/routing-policy.schema.json',
-    'version': 1,
-    'defaults': {
-        'mode': 'single-agent',
-        'lead': 'claude',
-        'max_rounds': 2,
-        'auto_merge_after_hours': 24,
-        'minimum_sample': 5,
-        'fallback_implementer': 'claude'
-    },
-    'label_rules': [
-        {'match': {'labels': ['agent-claude']}, 'assign': {'implementer': 'claude', 'mode': 'single-agent'}, 'telegram_tier': 'notify'},
-        {'match': {'labels': ['security', 'auth', 'payments', 'migration', 'regression', 'bug']}, 'assign': {'mode': 'single-agent', 'lead': 'claude'}, 'telegram_tier': 'decision'},
-        {'match': {'labels': ['hotfix', 'urgent']}, 'assign': {'mode': 'single-agent', 'lead': 'claude'}, 'telegram_tier': 'decision', 'max_rounds': 1},
-        {'match': {'labels': ['low-risk', 'docs', 'chore']}, 'assign': {'mode': 'single-agent', 'lead': 'claude'}, 'telegram_tier': 'silent', 'auto_merge_after_hours': 12}
-    ],
-    'score_thresholds': {'lead_eligible_accuracy': 0.7, 'lead_min_gap': 0.1, 'review_min_gap': 0.1, 'dual_required_below': 0.5, 'rework_alert_above': 0.3},
-    'repo_overrides': {}
-}
-with open('$ORCH_DIR/ops/orchestrator/routing-policy.json', 'w') as f:
-    json.dump(policy, f, indent=2)
-
-from datetime import datetime
-scores = {
-    'meta': {'version': 1, 'window': 20, 'last_updated': datetime.utcnow().isoformat() + 'Z'},
-    'agents': {
-        'claude': {'accuracy': 0.5, 'test_pass_rate': 0.5, 'review_hit_rate': 0.5, 'rework_rate': 0, 'tasks_completed': 0, 'ci_pass': 0, 'ci_total': 0, 'reviews_submitted': 0, 'merges': 0, 'hotfixes': 0}
-    },
-    'by_repo': {},
-    'history': []
-}
-with open('$ORCH_DIR/ops/orchestrator/agent-scores.json', 'w') as f:
-    json.dump(scores, f, indent=2)
-"
+  BUILDER_DEFAULTS="$SRC/templates/builder-defaults"
+  cp "$BUILDER_DEFAULTS/routing-policy.json" "$ORCH_DIR/ops/orchestrator/routing-policy.json"
+  # Replace timestamp placeholder in agent-scores
+  TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  sed "s|{{SETUP_TIMESTAMP}}|$TIMESTAMP|g" "$BUILDER_DEFAULTS/agent-scores.json" > "$ORCH_DIR/ops/orchestrator/agent-scores.json"
   echo "  ✅ Single-agent config applied"
 fi
 

@@ -12,6 +12,7 @@ const SKILLS_ROOT = path.join(ROOT, "skills");
 const TIERS_FILE = path.join(ROOT, "tiers.json");
 const ORCH_TEMPLATE = path.join(ROOT, "templates", "orchestrator");
 const PRODUCT_TEMPLATE = path.join(ROOT, "templates", "product-repo");
+const BUILDER_DEFAULTS = path.join(ROOT, "templates", "builder-defaults");
 const PRESETS = {
   maker: ["spark", "review", "memory", "craft"],
   builder: ["spark", "review", "memory", "craft", "build", "ship"],
@@ -28,6 +29,7 @@ Usage:
   solo-cto-agent init [--force] [--preset maker|builder|cto]
   solo-cto-agent setup-pipeline --org <github-org> [--tier builder|cto] [--repos <repo1,repo2,...>]
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
+  solo-cto-agent upgrade --org <github-org> [--repos <repo1,repo2,...>]
   solo-cto-agent status
   solo-cto-agent lint [path]
   solo-cto-agent --help
@@ -36,6 +38,7 @@ Commands:
   init              Install skills to ~/.claude/skills/
   setup-pipeline    Full pipeline setup: create orchestrator repo + install workflows to product repos
   setup-repo        Install dual-agent workflows to a single product repo
+  upgrade           Upgrade Builder (Lv4) → CTO (Lv5+6): add multi-agent workflows + config
   status            Check skill health, error catalog, and pipeline status
   lint              Check skill files for size and structure issues
 
@@ -324,72 +327,17 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
 
   // Builder tier: override routing-policy + agent-scores for single-agent mode
   if (!isPro) {
-    const singleAgentPolicy = {
-      "$schema": "./schemas/routing-policy.schema.json",
-      "version": 1,
-      "defaults": {
-        "mode": "single-agent",
-        "lead": "claude",
-        "max_rounds": 2,
-        "auto_merge_after_hours": 24,
-        "minimum_sample": 5,
-        "fallback_implementer": "claude"
-      },
-      "label_rules": [
-        {
-          "match": { "labels": ["agent-claude"] },
-          "assign": { "implementer": "claude", "mode": "single-agent" },
-          "telegram_tier": "notify"
-        },
-        {
-          "match": { "labels": ["security", "auth", "payments", "migration", "regression", "bug"] },
-          "assign": { "mode": "single-agent", "lead": "claude" },
-          "telegram_tier": "decision"
-        },
-        {
-          "match": { "labels": ["hotfix", "urgent"] },
-          "assign": { "mode": "single-agent", "lead": "claude" },
-          "telegram_tier": "decision",
-          "max_rounds": 1
-        },
-        {
-          "match": { "labels": ["low-risk", "docs", "chore"] },
-          "assign": { "mode": "single-agent", "lead": "claude" },
-          "telegram_tier": "silent",
-          "auto_merge_after_hours": 12
-        }
-      ],
-      "score_thresholds": {
-        "lead_eligible_accuracy": 0.7,
-        "lead_min_gap": 0.1,
-        "review_min_gap": 0.1,
-        "dual_required_below": 0.5,
-        "rework_alert_above": 0.3
-      },
-      "repo_overrides": {}
-    };
-    fs.writeFileSync(
+    const policyReplacements = {};
+    const scoresReplacements = { "{{SETUP_TIMESTAMP}}": new Date().toISOString() };
+    copyFileWithReplace(
+      path.join(BUILDER_DEFAULTS, "routing-policy.json"),
       path.join(orchDir, "ops", "orchestrator", "routing-policy.json"),
-      JSON.stringify(singleAgentPolicy, null, 2),
-      "utf8"
+      policyReplacements
     );
-
-    const singleAgentScores = {
-      "meta": { "version": 1, "window": 20, "last_updated": new Date().toISOString() },
-      "agents": {
-        "claude": {
-          "accuracy": 0.5, "test_pass_rate": 0.5, "review_hit_rate": 0.5,
-          "rework_rate": 0, "tasks_completed": 0,
-          "ci_pass": 0, "ci_total": 0, "reviews_submitted": 0, "merges": 0, "hotfixes": 0
-        }
-      },
-      "by_repo": {},
-      "history": []
-    };
-    fs.writeFileSync(
+    copyFileWithReplace(
+      path.join(BUILDER_DEFAULTS, "agent-scores.json"),
       path.join(orchDir, "ops", "orchestrator", "agent-scores.json"),
-      JSON.stringify(singleAgentScores, null, 2),
-      "utf8"
+      scoresReplacements
     );
     console.log("   ✅ Single-agent config applied (routing-policy + agent-scores)");
   }
@@ -868,6 +816,136 @@ function lintCommand(targetPath) {
   process.exit(errors.length > 0 ? 1 : 0);
 }
 
+// ─── upgrade: Builder → CTO ────────────────────────────────
+
+function upgradeCommand(org, repos, orchName) {
+  if (!org) {
+    console.error("❌ --org is required.");
+    console.error("   Usage: solo-cto-agent upgrade --org <github-org> [--repos repo1,repo2]");
+    process.exit(1);
+  }
+
+  const orchestratorRepo = orchName || "dual-agent-orchestrator";
+  const orchDir = path.resolve(orchestratorRepo);
+
+  if (!fs.existsSync(orchDir) || !fs.existsSync(path.join(orchDir, ".git"))) {
+    console.error(`❌ Orchestrator not found at ${orchDir}`);
+    console.error("   Run setup-pipeline first, or use --orchestrator-name to specify.");
+    process.exit(1);
+  }
+
+  // Check current tier
+  const hasCodexAuto = fs.existsSync(path.join(orchDir, ".github", "workflows", "codex-auto.yml"));
+  if (hasCodexAuto) {
+    console.log("ℹ️  Already at CTO tier (codex-auto.yml detected). Nothing to upgrade.");
+    return;
+  }
+
+  console.log("╔══════════════════════════════════════════════════╗");
+  console.log("║  solo-cto-agent — Upgrade Builder → CTO         ║");
+  console.log("╚══════════════════════════════════════════════════╝");
+  console.log("");
+
+  const tiersData = loadTiers();
+  const proTier = tiersData.tiers.pro;
+  const replacements = { "{{GITHUB_OWNER}}": org, "{{ORCHESTRATOR_REPO}}": orchestratorRepo };
+  const productRepoList = repos ? repos.split(",").map(r => r.trim()) : [];
+  productRepoList.forEach((repo, i) => {
+    replacements[`{{PRODUCT_REPO_${i + 1}}}`] = path.basename(repo);
+  });
+  for (let i = productRepoList.length + 1; i <= 10; i++) {
+    replacements[`{{PRODUCT_REPO_${i}}}`] = `your-product-repo-${i}`;
+  }
+
+  // Step 1: Add CTO orchestrator workflows
+  console.log("[1/4] Adding multi-agent orchestrator workflows...");
+  const workflowDest = path.join(orchDir, ".github", "workflows");
+  let added = 0;
+  for (const wf of proTier.additional_orchestrator_workflows) {
+    const src = path.join(ORCH_TEMPLATE, ".github", "workflows", wf);
+    if (fs.existsSync(src)) {
+      copyFileWithReplace(src, path.join(workflowDest, wf), replacements);
+      added++;
+    }
+  }
+  console.log(`   ✅ ${added} workflows added`);
+
+  // Step 2: Add CTO scripts, libs, config, integrations
+  console.log("[2/4] Adding CTO ops scripts + config...");
+  for (const s of proTier.ops_scripts) {
+    const src = path.join(ORCH_TEMPLATE, "ops", "scripts", s);
+    if (fs.existsSync(src)) copyFileWithReplace(src, path.join(orchDir, "ops", "scripts", s), replacements);
+  }
+  for (const l of proTier.ops_libs) {
+    const src = path.join(ORCH_TEMPLATE, "ops", "lib", l);
+    if (fs.existsSync(src)) copyFileWithReplace(src, path.join(orchDir, "ops", "lib", l), replacements);
+  }
+  ensureDir(path.join(orchDir, "ops", "config"));
+  for (const c of proTier.ops_config) {
+    const src = path.join(ORCH_TEMPLATE, "ops", "config", c);
+    if (fs.existsSync(src)) copyFileWithReplace(src, path.join(orchDir, "ops", "config", c), replacements);
+  }
+  for (const item of proTier.ops_orchestrator_extras) {
+    const src = path.join(ORCH_TEMPLATE, "ops", "orchestrator", item);
+    if (fs.existsSync(src)) copyFileWithReplace(src, path.join(orchDir, "ops", "orchestrator", item), replacements);
+  }
+  ensureDir(path.join(orchDir, "ops", "integrations"));
+  for (const i of proTier.ops_integrations) {
+    const src = path.join(ORCH_TEMPLATE, "ops", "integrations", i);
+    if (fs.existsSync(src)) copyFileWithReplace(src, path.join(orchDir, "ops", "integrations", i), replacements);
+  }
+  for (const c of proTier.ops_codex_extras) {
+    const src = path.join(ORCH_TEMPLATE, "ops", c);
+    if (fs.existsSync(src)) copyFileWithReplace(src, path.join(orchDir, "ops", c), replacements);
+  }
+  console.log("   ✅ Scripts, libs, config added");
+
+  // Step 3: Upgrade routing config to dual-agent
+  console.log("[3/4] Upgrading to dual-agent routing config...");
+  const dualPolicy = path.join(ORCH_TEMPLATE, "ops", "orchestrator", "routing-policy.json");
+  const dualScores = path.join(ORCH_TEMPLATE, "ops", "orchestrator", "agent-scores.json");
+  if (fs.existsSync(dualPolicy)) {
+    copyFileWithReplace(dualPolicy, path.join(orchDir, "ops", "orchestrator", "routing-policy.json"), replacements);
+  }
+  if (fs.existsSync(dualScores)) {
+    copyFileWithReplace(dualScores, path.join(orchDir, "ops", "orchestrator", "agent-scores.json"), replacements);
+  }
+  console.log("   ✅ Dual-agent routing-policy + agent-scores applied");
+
+  // Step 4: Upgrade product repos
+  console.log("[4/4] Upgrading product repo workflows...");
+  const ctoAdditional = tiersData.product_repo_templates.cto.additional_workflows;
+
+  if (productRepoList.length === 0) {
+    console.log("   No --repos specified. Add multi-agent workflows manually:");
+    console.log("   solo-cto-agent setup-repo <path> --org " + org + " --tier cto");
+  } else {
+    for (const repo of productRepoList) {
+      const repoDir = path.resolve(repo);
+      if (!fs.existsSync(repoDir)) { console.log(`   ⚠️  ${repo} — not found`); continue; }
+      const wfDir = path.join(repoDir, ".github", "workflows");
+      ensureDir(wfDir);
+      let count = 0;
+      for (const wf of ctoAdditional) {
+        const src = path.join(PRODUCT_TEMPLATE, ".github", "workflows", wf);
+        if (fs.existsSync(src)) { copyFileWithReplace(src, path.join(wfDir, wf), replacements); count++; }
+      }
+      console.log(`   ✅ ${repo} — ${count} multi-agent workflows added`);
+    }
+  }
+
+  console.log("");
+  console.log("═══ UPGRADE COMPLETE ═══");
+  console.log("");
+  console.log("  New secrets needed:");
+  console.log("    gh secret set OPENAI_API_KEY    # Codex agent");
+  console.log("    gh secret set TELEGRAM_BOT_TOKEN  # optional");
+  console.log("    gh secret set TELEGRAM_CHAT_ID    # optional");
+  console.log("");
+  console.log("  Commit and push:");
+  console.log(`    cd ${orchestratorRepo} && git add -A && git commit -m 'feat: upgrade to CTO tier' && git push`);
+}
+
 // ─── Main ───────────────────────────────────────────────────
 
 async function main() {
@@ -914,6 +992,17 @@ async function main() {
     const orchIndex = args.indexOf("--orchestrator-name");
     const orchName = orchIndex >= 0 ? args[orchIndex + 1] : null;
     setupRepoCommand(repoPath, tier, org, orchName);
+    return;
+  }
+
+  if (cmd === "upgrade") {
+    const orgIndex = args.indexOf("--org");
+    const org = orgIndex >= 0 ? args[orgIndex + 1] : null;
+    const reposIndex = args.indexOf("--repos");
+    const repos = reposIndex >= 0 ? args[reposIndex + 1] : null;
+    const orchIndex = args.indexOf("--orchestrator-name");
+    const orchName = orchIndex >= 0 ? args[orchIndex + 1] : null;
+    upgradeCommand(org, repos, orchName);
     return;
   }
 
