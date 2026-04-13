@@ -91,6 +91,78 @@ solo-cto-agent/
     └── context.md
 ```
 
+## Tiers
+
+Two tiers, one CLI. Pick what fits your workflow.
+
+### Builder (Lv4) — Single-Agent, Default
+
+For solo devs who want Claude reviewing every PR automatically. One agent, no extra infrastructure.
+
+| What you get | Details |
+|---|---|
+| Agent | Claude (single) |
+| Product repo workflows | 3 core + 1 optional (telegram) |
+| Orchestrator workflows | 13 |
+| Skills | spark, review, memory, craft, build, ship |
+| Required secrets | `ORCHESTRATOR_PAT`, `ANTHROPIC_API_KEY` |
+| Optional secrets | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
+
+Product repo automation: PR opened → Claude auto-review → preview summary → rework cycle on review feedback.
+
+### CTO (Lv5+6) — Multi-Agent
+
+For teams or power users who want agents competing and cross-checking each other. Claude + Codex by default, with routing-engine architecture designed for adding more agents (Cursor, Copilot, custom).
+
+| What you get | Details |
+|---|---|
+| Agents | Claude + Codex (extensible to Cursor, Copilot, etc.) |
+| Product repo workflows | 7 core + 1 optional (telegram) |
+| Orchestrator workflows | 24 (13 base + 11 pro) |
+| Skills | all Builder skills + orchestrate |
+| Required secrets | `ORCHESTRATOR_PAT`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` |
+| Optional secrets | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
+| Extra features | UI/UX 4-stage quality gate, daily briefings, decision tracking, agent scoring, comparison reports |
+
+Product repo automation: PR opened → Claude + Codex both review → cross-review each other → comparison report → rework dispatch on issues → optional Telegram notifications.
+
+### What CTO adds over Builder
+
+| Capability | Builder (Lv4) | CTO (Lv5+6) |
+|---|---|---|
+| Claude auto-review | Yes | Yes |
+| Codex auto-review | — | Yes |
+| Cross-review (agents review each other) | — | Yes |
+| Comparison reports | — | Yes |
+| Agent score tracking | — | Yes |
+| UI/UX quality gate (4-stage) | — | Yes |
+| Visual regression (Claude Vision) | — | Yes |
+| Daily briefings | — | Yes |
+| Decision queue + insights | — | Yes |
+| Telegram notifications | Optional | Optional |
+| Rework dispatch | Yes | Yes |
+| Preview summary | Yes | Yes |
+| Circuit breaker (3-fail stop) | Yes | Yes |
+
+### Multi-Agent Extensibility (CTO tier)
+
+The routing engine (`ops/orchestrator/routing-engine.js`) and agent scoring system (`agent-scores.json`) are designed for N agents, not just two. Current implementation ships with Claude + Codex. To add a third agent (e.g., Cursor Agent, Copilot), you would extend `agent-scores.json` with the new agent's metrics and add a corresponding workflow. The routing policy (`routing-policy.json`) supports label-based and score-based assignment across any number of agents.
+
+### Secrets Summary
+
+| Secret | Builder | CTO | Where to get |
+|---|---|---|---|
+| `ORCHESTRATOR_PAT` | Required | Required | github.com/settings/tokens (scope: repo + workflow) |
+| `ANTHROPIC_API_KEY` | Required | Required | console.anthropic.com |
+| `OPENAI_API_KEY` | — | Required | platform.openai.com/api-keys |
+| `TELEGRAM_BOT_TOKEN` | Optional | Optional | t.me/BotFather |
+| `TELEGRAM_CHAT_ID` | Optional | Optional | Telegram API |
+| `GITHUB_TOKEN` | Auto | Auto | Provided by GitHub Actions |
+
+Not CI/CD secrets (app-level only, set in your hosting dashboard separately): `VERCEL_TOKEN`, `SUPABASE_*`, Cursor OpenAI key, `gh` CLI.
+
+---
+
 ## 5-Minute Quick Start
 
 Three steps, under two minutes:
@@ -123,6 +195,23 @@ Presets:
 - `maker` = spark + review + memory + craft
 - `builder` (default) = maker + build + ship
 - `cto` = builder + orchestrate
+
+### Pipeline Setup (CI/CD Automation)
+
+After installing skills, deploy the full CI/CD pipeline:
+
+```bash
+# Builder tier (single-agent: Claude)
+npx solo-cto-agent setup-pipeline --org myorg --repos myapp1,myapp2
+
+# CTO tier (multi-agent: Claude + Codex + cross-review)
+npx solo-cto-agent setup-pipeline --org myorg --tier cto --repos myapp1,myapp2,myapp3
+```
+
+Or use the bash script:
+```bash
+bash setup.sh --org myorg --tier cto --repos myapp1,myapp2
+```
 
 ## Demo
 

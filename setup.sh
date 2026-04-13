@@ -266,6 +266,30 @@ echo "  ✅ Orchestrator: $WF_COUNT workflows deployed"
 
 echo "[6/7] Installing product repo workflows..."
 
+# Build workflow list based on tier
+# Builder (Lv4) = single-agent (Claude only)
+# CTO (Lv5+6) = multi-agent (Claude + Codex + cross-review)
+BUILDER_PRODUCT_WFS=$(python3 -c "
+import json
+d = json.load(open('$TIERS_JSON'))
+for w in d['product_repo_templates']['builder']['workflows']:
+    print(w)
+")
+
+CTO_ADDITIONAL_WFS=$(python3 -c "
+import json
+d = json.load(open('$TIERS_JSON'))
+for w in d['product_repo_templates']['cto']['additional_workflows']:
+    print(w)
+")
+
+OPTIONAL_WFS=$(python3 -c "
+import json
+d = json.load(open('$TIERS_JSON'))
+for w in d['product_repo_templates']['optional']['workflows']:
+    print(w)
+")
+
 if [ -z "$REPOS" ]; then
   echo "  No --repos specified. Run later:"
   echo "  npx solo-cto-agent setup-repo ./my-app --org $ORG"
@@ -283,8 +307,32 @@ else
     fi
 
     mkdir -p "$repo_dir/.github/workflows"
-    for wf in "$SRC/templates/product-repo/.github/workflows/"*.yml; do
-      cp "$wf" "$repo_dir/.github/workflows/"
+    WF_INSTALLED=0
+
+    # Install builder (single-agent) workflows
+    for wf in $BUILDER_PRODUCT_WFS; do
+      if [ -f "$SRC/templates/product-repo/.github/workflows/$wf" ]; then
+        cp "$SRC/templates/product-repo/.github/workflows/$wf" "$repo_dir/.github/workflows/"
+        WF_INSTALLED=$((WF_INSTALLED + 1))
+      fi
+    done
+
+    # CTO tier: add multi-agent workflows
+    if [ "$TIER" = "cto" ]; then
+      for wf in $CTO_ADDITIONAL_WFS; do
+        if [ -f "$SRC/templates/product-repo/.github/workflows/$wf" ]; then
+          cp "$SRC/templates/product-repo/.github/workflows/$wf" "$repo_dir/.github/workflows/"
+          WF_INSTALLED=$((WF_INSTALLED + 1))
+        fi
+      done
+    fi
+
+    # Optional workflows (both tiers)
+    for wf in $OPTIONAL_WFS; do
+      if [ -f "$SRC/templates/product-repo/.github/workflows/$wf" ]; then
+        cp "$SRC/templates/product-repo/.github/workflows/$wf" "$repo_dir/.github/workflows/"
+        WF_INSTALLED=$((WF_INSTALLED + 1))
+      fi
     done
 
     # Replace placeholders in product repo workflows
@@ -292,7 +340,8 @@ else
       replace_placeholders "$file"
     done
 
-    echo "  ✅ $repo — workflows installed"
+    AGENT_LABEL=$([ "$TIER" = "cto" ] && echo "multi-agent" || echo "single-agent")
+    echo "  ✅ $repo — $WF_INSTALLED workflows ($AGENT_LABEL)"
   done
 fi
 
@@ -327,21 +376,23 @@ echo ""
 echo "  # 2. Anthropic API key (for Claude code review + visual analysis)"
 echo "  gh secret set ANTHROPIC_API_KEY"
 echo ""
-echo "  # 3. OpenAI API key (for Codex agent + AI-powered analysis)"
+if [ "$TIER" = "cto" ]; then
+echo "  # 3. OpenAI API key (for Codex agent + AI-powered analysis — CTO tier)"
 echo "  gh secret set OPENAI_API_KEY"
 echo ""
-if [ "$TIER" = "cto" ]; then
-echo "  # 4. Telegram (optional, for real-time notifications)"
+fi
+echo "  # Telegram notifications (optional, both tiers)"
 echo "  gh secret set TELEGRAM_BOT_TOKEN"
 echo "  gh secret set TELEGRAM_CHAT_ID"
 echo ""
-fi
 echo "Also set secrets on EACH product repo:"
 echo ""
 echo "  cd ../your-product-repo"
-echo "  gh secret set ORCHESTRATOR_PAT   # same PAT as orchestrator"
-echo "  gh secret set ANTHROPIC_API_KEY  # same key"
-echo "  gh secret set OPENAI_API_KEY     # same key"
+if [ "$TIER" = "cto" ]; then
+echo "  gh secret set ORCHESTRATOR_PAT && gh secret set ANTHROPIC_API_KEY && gh secret set OPENAI_API_KEY"
+else
+echo "  gh secret set ORCHESTRATOR_PAT && gh secret set ANTHROPIC_API_KEY"
+fi
 echo ""
 echo "═══ Why each secret is needed ═══"
 echo ""
@@ -353,8 +404,13 @@ echo "  ANTHROPIC_API_KEY Claude-powered code review, visual analysis,"
 echo "                    UI/UX quality gate, auto-fix suggestions"
 echo "                    Get at: https://console.anthropic.com"
 echo ""
-echo "  OPENAI_API_KEY    Codex agent, AI-powered code analysis"
+if [ "$TIER" = "cto" ]; then
+echo "  OPENAI_API_KEY    Codex agent, AI-powered code analysis (CTO tier)"
 echo "                    Get at: https://platform.openai.com/api-keys"
+echo ""
+fi
+echo "  TELEGRAM_*        Real-time PR/review notifications (optional, both tiers)"
+echo "                    Get at: https://t.me/BotFather"
 echo ""
 echo "  GITHUB_TOKEN      Auto-provided by GitHub Actions (no action needed)"
 echo ""
