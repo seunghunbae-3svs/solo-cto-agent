@@ -24,6 +24,8 @@ const PRESETS = {
   cto: ["spark", "review", "memory", "craft", "build", "ship", "orchestrate"],
 };
 const DEFAULT_PRESET = "builder";
+const MODES = ["codex-main", "cowork-main"];
+const DEFAULT_MODE = "codex-main";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -31,7 +33,7 @@ function printHelp() {
   console.log(`solo-cto-agent — Dual-Agent CI/CD Orchestrator
 
 Usage:
-  solo-cto-agent init [--force] [--preset maker|builder|cto] [--wizard]
+  solo-cto-agent init [--force] [--preset maker|builder|cto] [--wizard] [--mode codex-main|cowork-main]
   solo-cto-agent setup-pipeline --org <github-org> [--tier builder|cto] [--repos <repo1,repo2,...>]
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent upgrade --org <github-org> [--repos <repo1,repo2,...>]
@@ -60,6 +62,8 @@ Presets / Tiers:
 
 Examples:
   npx solo-cto-agent init --wizard                 # interactive setup (recommended)
+  npx solo-cto-agent init --wizard --mode codex-main # full automation (Codex-main)
+  npx solo-cto-agent init --wizard --mode cowork-main # manual sync (Cowork-main)
   npx solo-cto-agent init --preset builder         # install skills (default)
   npx solo-cto-agent init --preset cto             # install all skills
   npx solo-cto-agent setup-pipeline --org myorg    # deploy Lv4 pipeline
@@ -144,8 +148,9 @@ function ghAvailable() {
 
 // ─── init: Install Skills ───────────────────────────────────
 
-function initCommand(force, preset) {
+function initCommand(force, preset, mode) {
   const resolvedPreset = PRESETS[preset] ? preset : DEFAULT_PRESET;
+  const resolvedMode = MODES.includes(mode) ? mode : DEFAULT_MODE;
   const targetDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
   ensureDir(targetDir);
 
@@ -163,6 +168,7 @@ user-invocable: true
 ---
 
 # Project Stack
+Mode: ${resolvedMode}
 OS: {{YOUR_OS}}
 Editor: {{YOUR_EDITOR}}
 Deploy: {{YOUR_DEPLOY}}
@@ -184,6 +190,7 @@ Style: {{YOUR_STYLE}}
   }
 
   console.log("✅ solo-cto-agent initialized");
+  console.log(`   mode: ${resolvedMode}`);
   console.log(`   preset: ${resolvedPreset}`);
   console.log(`   skills installed: ${installed.length ? installed.join(", ") : "none (already exist)"}`);
   if (skipped.length) console.log(`   skills skipped: ${skipped.join(", ")}`);
@@ -826,10 +833,17 @@ function statusCommand() {
 
   // Check if wizard was used (configured SKILL.md has table format)
   let wizardConfigured = false;
+  let modeValue = null;
   if (skillOk) {
     try {
       const content = fs.readFileSync(skillPath, "utf8");
       wizardConfigured = content.includes("| Item | Value |") || !content.includes("{{YOUR_");
+      const tableMatch = content.match(/\|\s*Mode\s*\|\s*([^|]+)\|/i);
+      if (tableMatch) modeValue = tableMatch[1].trim();
+      if (!modeValue) {
+        const lineMatch = content.match(/^Mode:\s*(.+)$/m);
+        if (lineMatch) modeValue = lineMatch[1].trim();
+      }
     } catch {}
   }
 
@@ -868,6 +882,15 @@ function statusCommand() {
   console.log(`  Error catalog: ${catalogOk ? `✅ ${count} patterns` : "❌ not found"}`);
   console.log(`  Orchestrator:  ${orchExists ? `✅ ${orchWorkflows} workflows` : "❌ not found"}`);
   console.log(`  Tier:          ${orchExists ? (hasUiux ? "CTO (Lv5+6)" : "Builder (Lv4)") : "N/A"}`);
+  if (modeValue) {
+    const normalized = modeValue.toLowerCase();
+    const label = normalized === "codex-main"
+      ? "codex-main (full automation)"
+      : normalized === "cowork-main"
+        ? "cowork-main (manual sync)"
+        : `custom (${modeValue})`;
+    console.log(`  Mode:          ${label}`);
+  }
 
   // Sync info
   if (syncStatus) {
@@ -1105,14 +1128,16 @@ async function main() {
   if (cmd === "init") {
     const presetIndex = args.indexOf("--preset");
     const preset = presetIndex >= 0 ? args[presetIndex + 1] : DEFAULT_PRESET;
+    const modeIndex = args.indexOf("--mode");
+    const mode = modeIndex >= 0 ? args[modeIndex + 1] : DEFAULT_MODE;
     // Run wizard if --wizard or -w flag
     if (hasWizardFlag(args)) {
       const targetDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
-      initCommand(force, preset);
-      await runWizard(process.cwd(), force);
+      initCommand(force, preset, mode);
+      await runWizard(process.cwd(), force, mode);
       return;
     }
-    initCommand(force, preset);
+    initCommand(force, preset, mode);
     return;
   }
 

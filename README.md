@@ -64,6 +64,33 @@ It is probably not a good fit if you:
 * want every action manually approved
 * prefer a neutral framework-agnostic starter pack with very conservative defaults
 
+## Operating modes
+
+Choose a mode at init. The same package supports both.
+
+| Mode | Default behavior | Best for |
+|---|---|---|
+| **codex-main** | Full automation (CI/CD pipelines, auto-review, auto-rework, merge conditions, visual checks) | Stable GitHub Actions + webhook/dispatch environments |
+| **cowork-main** | Local-first + manual sync (wizard + sync/learn/local-review) | Flaky networks, offline work, minimal external dependencies |
+
+**codex-main flow (full automation)**
+- PR opened → Claude review → Codex cross-review → rework loop → merge conditions
+- agent scores auto-updated in orchestrator repo
+- visual checks (Playwright) on preview + baseline comparison
+
+**cowork-main flow (manual sync)**
+- local review/learn commands work without GitHub Actions
+- `sync --apply` pulls latest scores/patterns when you choose
+
+You pick the mode during `init --wizard`, or set it explicitly:
+
+```bash
+npx solo-cto-agent init --wizard --mode codex-main
+npx solo-cto-agent init --wizard --mode cowork-main
+```
+
+The selected mode is saved in `~/.claude/skills/solo-cto-agent/SKILL.md` so the agent knows which operating model to follow.
+
 ## What's inside
 
 ```text
@@ -234,7 +261,7 @@ Three steps, under two minutes:
 ```bash
 npx solo-cto-agent init --wizard
 ```
-The wizard asks about your stack (framework, deploy target, database, etc.) and generates a configured `SKILL.md` automatically. No manual placeholder editing needed.
+The wizard asks about your stack (framework, deploy target, database, etc.) and your operating mode (codex-main vs cowork-main), then generates a configured `SKILL.md` automatically. No manual placeholder editing needed.
 
 Or install without wizard and edit manually:
 ```bash

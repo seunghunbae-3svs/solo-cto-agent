@@ -85,6 +85,7 @@ user-invocable: true
 
 | Item | Value |
 |---|---|
+| Mode | ${config.mode} |
 | OS | ${config.os} |
 | Editor | ${config.editor} |
 | Framework | ${config.framework} |
@@ -143,7 +144,7 @@ For CI/CD pipeline setup, run: \`solo-cto-agent setup-pipeline\`
 /**
  * Main wizard function
  */
-async function runWizard(targetDir, force = false) {
+async function runWizard(targetDir, force = false, modeDefault = 'codex-main') {
   // TTY guard: wizard requires interactive terminal
   if (!isTTY()) {
     console.error("❌ --wizard requires an interactive terminal (TTY).");
@@ -162,11 +163,18 @@ async function runWizard(targetDir, force = false) {
     console.log('\n╔══════════════════════════════════════════════════╗');
     console.log('║  solo-cto-agent — Interactive Setup              ║');
     console.log('╚══════════════════════════════════════════════════╝\n');
-    console.log("Let's configure your project stack.");
+    console.log("Choose your operating mode and project stack.");
     console.log('Press Enter to accept defaults shown in [brackets].\n');
 
     // Collect configuration
+    console.log('Mode options:');
+    console.log('  codex-main  = full automation (CI/CD pipelines, auto-review, auto-rework)');
+    console.log('  cowork-main = local + manual sync (stable in flaky networks)\n');
+    const modeInput = await ask(rl, 'Mode', modeDefault || 'codex-main');
+    const mode = ['codex-main', 'cowork-main'].includes(modeInput) ? modeInput : 'codex-main';
+
     const config = {
+      mode,
       os: await ask(rl, 'OS', 'macOS'),
       editor: await ask(rl, 'Editor', 'Cursor'),
       framework: await ask(rl, 'Framework', 'Next.js'),
