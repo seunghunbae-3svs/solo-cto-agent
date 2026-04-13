@@ -152,12 +152,20 @@ async function main() {
   }
 
   if (cmd === "init") {
+    if (args.includes("--help") || args.includes("-h")) {
+      printHelp();
+      return;
+    }
     const force = args.includes("--force");
     initCommand(force);
     return;
   }
 
   if (cmd === "status") {
+    if (args.includes("--help") || args.includes("-h")) {
+      printHelp();
+      return;
+    }
     await statusCommand();
     return;
   }
