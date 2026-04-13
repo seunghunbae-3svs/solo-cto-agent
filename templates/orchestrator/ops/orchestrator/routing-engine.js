@@ -42,27 +42,30 @@ function normalizeMode(mode) {
 
 /**
  * Pick best agent based on score, with repo-specific override if available.
+ * Supports N agents: ranks all registered agents by metric, returns leader + per-agent stats.
  */
 function pickByScore(scores, repo, metric = "accuracy") {
   const repoScores = scores.by_repo[repo];
   const source = repoScores || scores.agents;
   const agents = Object.keys(scores.agents);
 
-  // Single-agent mode: only one agent registered → always return it
-  if (agents.length === 1) {
-    const name = agents[0];
-    const val = source[name]?.[metric] ?? 0.5;
-    const tasks = (repoScores?.[name]?.tasks_completed ?? scores.agents[name]?.tasks_completed) || 0;
-    return { leader: name, [name]: val, [`${name}Tasks`]: tasks, codex: 0, claude: val, codexTasks: 0, claudeTasks: tasks };
+  // Build ranked list of all agents
+  const ranked = agents.map(name => ({
+    name,
+    score: source[name]?.[metric] ?? 0.5,
+    tasks: (repoScores?.[name]?.tasks_completed ?? scores.agents[name]?.tasks_completed) || 0,
+  })).sort((a, b) => b.score - a.score);
+
+  const leader = ranked[0]?.name || "claude";
+  const result = { leader, ranked };
+
+  // Backward-compatible fields for existing code that references .codex / .claude
+  for (const r of ranked) {
+    result[r.name] = r.score;
+    result[`${r.name}Tasks`] = r.tasks;
   }
 
-  // Multi-agent mode: compare all registered agents (default: codex vs claude)
-  const codex = source.codex?.[metric] ?? 0.5;
-  const claude = source.claude?.[metric] ?? 0.5;
-  const codexTasks = (repoScores?.codex?.tasks_completed ?? scores.agents.codex?.tasks_completed) || 0;
-  const claudeTasks = (repoScores?.claude?.tasks_completed ?? scores.agents.claude?.tasks_completed) || 0;
-
-  return { leader: codex >= claude ? "codex" : "claude", codex, claude, codexTasks, claudeTasks };
+  return result;
 }
 
 /**
@@ -114,79 +117,86 @@ function route(labels, repo) {
     decision.reasoning.push("no label rule matched → using defaults");
   }
 
-  // Score-based lead selection
+  // Score-based lead selection (N-agent aware)
   const scoreInfo = pickByScore(scores, repo, "accuracy");
   const reviewScore = pickByScore(scores, repo, "review_hit_rate");
   const minSample = defaults.minimum_sample;
-  const hasSufficientData = scoreInfo.codexTasks >= minSample && scoreInfo.claudeTasks >= minSample;
-  const accuracyGap = Math.abs(scoreInfo.codex - scoreInfo.claude);
-  const reviewGap = Math.abs(reviewScore.codex - reviewScore.claude);
+  const ranked = scoreInfo.ranked;
+  const topAgent = ranked[0];
+  const secondAgent = ranked[1]; // undefined in single-agent mode
+
+  // hasSufficientData: all registered agents meet minimum sample
+  const hasSufficientData = ranked.every(r => r.tasks >= minSample);
+  // accuracyGap: difference between #1 and #2 (0 if single-agent)
+  const accuracyGap = secondAgent ? Math.abs(topAgent.score - secondAgent.score) : 0;
+  const reviewRanked = reviewScore.ranked;
+  const reviewGap = reviewRanked[1] ? Math.abs(reviewRanked[0].score - reviewRanked[1].score) : 0;
   const leadEligible =
     hasSufficientData &&
-    Math.max(scoreInfo.codex, scoreInfo.claude) >= thresholds.lead_eligible_accuracy &&
-    accuracyGap >= thresholds.lead_min_gap;
+    topAgent.score >= thresholds.lead_eligible_accuracy &&
+    (ranked.length === 1 || accuracyGap >= thresholds.lead_min_gap);
 
   if (decision.lead === "score-based") {
     if (leadEligible) {
       decision.lead = scoreInfo.leader;
       decision.implementer = scoreInfo.leader;
-      if (decision.mode === "lead-reviewer") {
+      if (decision.mode === "lead-reviewer" && secondAgent) {
         if (reviewGap >= thresholds.review_min_gap && reviewScore.leader !== scoreInfo.leader) {
           decision.reviewer = reviewScore.leader;
           decision.reasoning.push(
             `reviewer prefers ${reviewScore.leader} (review_hit_rate gap ${reviewGap.toFixed(2)})`
           );
         } else {
-          decision.reviewer = scoreInfo.leader === "codex" ? "claude" : "codex";
+          decision.reviewer = secondAgent.name;
         }
       }
+      const scoreDetail = ranked.map(r => `${r.name}=${r.score.toFixed(2)}`).join(", ");
       decision.reasoning.push(
-        `score-based: ${scoreInfo.leader} leads (accuracy: codex=${scoreInfo.codex.toFixed(2)}, claude=${scoreInfo.claude.toFixed(2)}, gap=${accuracyGap.toFixed(2)})`
+        `score-based: ${scoreInfo.leader} leads (${scoreDetail}, gap=${accuracyGap.toFixed(2)})`
       );
     } else {
       if (decision.mode === "single-agent" || decision.mode === "lead-reviewer") {
         decision.lead = null;
-        decision.implementer = defaults.fallback_implementer || "codex";
-        if (decision.mode === "lead-reviewer") {
-          decision.reviewer = decision.implementer === "codex" ? "claude" : "codex";
+        decision.implementer = defaults.fallback_implementer || defaults.lead || ranked[0]?.name || "claude";
+        if (decision.mode === "lead-reviewer" && secondAgent) {
+          decision.reviewer = ranked.find(r => r.name !== decision.implementer)?.name || null;
         }
+        const taskDetail = ranked.map(r => `${r.name}=${r.tasks}`).join(", ");
         decision.reasoning.push(
-          `insufficient data or low gap (codex=${scoreInfo.codexTasks}, claude=${scoreInfo.claudeTasks}, gap=${accuracyGap.toFixed(2)} < min=${thresholds.lead_min_gap}) → fallback implementer ${decision.implementer}`
+          `insufficient data or low gap (${taskDetail}, gap=${accuracyGap.toFixed(2)} < min=${thresholds.lead_min_gap}) → fallback implementer ${decision.implementer}`
         );
       } else {
-        // Insufficient data → fallback to dual
-        decision.mode = "dual-agent";
-        decision.lead = null;
-        decision.implementer = null;
+        // Insufficient data → fallback to dual (only when multiple agents)
+        decision.mode = ranked.length > 1 ? "dual-agent" : "single-agent";
+        decision.lead = ranked.length === 1 ? ranked[0].name : null;
+        decision.implementer = ranked.length === 1 ? ranked[0].name : null;
         decision.reviewer = null;
+        const taskDetail2 = ranked.map(r => `${r.name}=${r.tasks}`).join(", ");
         decision.reasoning.push(
-          `insufficient data or low gap (codex=${scoreInfo.codexTasks}, claude=${scoreInfo.claudeTasks}, gap=${accuracyGap.toFixed(2)} < min=${thresholds.lead_min_gap}) → fallback to dual`
+          `insufficient data or low gap (${taskDetail2}, gap=${accuracyGap.toFixed(2)} < min=${thresholds.lead_min_gap}) → fallback to ${decision.mode}`
         );
       }
     }
   }
 
-  // Score-based override: force dual if both agents below threshold (only when multiple agents exist)
-  const registeredAgents = Object.keys(scores.agents);
-  if (hasSufficientData && registeredAgents.length > 1) {
-    if (
-      scoreInfo.codex < thresholds.dual_required_below &&
-      scoreInfo.claude < thresholds.dual_required_below
-    ) {
+  // Score-based override: force dual if all agents below threshold (only when multiple agents exist)
+  if (hasSufficientData && ranked.length > 1) {
+    const allBelowThreshold = ranked.every(r => r.score < thresholds.dual_required_below);
+    if (allBelowThreshold) {
       decision.mode = "dual-agent";
       decision.lead = null;
       decision.reasoning.push(
-        `both agents below ${thresholds.dual_required_below} accuracy → forced dual mode`
+        `all agents below ${thresholds.dual_required_below} accuracy → forced dual mode`
       );
     }
   }
 
   // Rework alert for all registered agents
   if (hasSufficientData) {
-    for (const agentName of registeredAgents) {
-      const rework = scores.agents[agentName]?.rework_rate ?? 0;
+    for (const r of ranked) {
+      const rework = scores.agents[r.name]?.rework_rate ?? 0;
       if (rework > thresholds.rework_alert_above) {
-        decision.reasoning.push(`⚠️ ${agentName} rework_rate ${rework.toFixed(2)} > ${thresholds.rework_alert_above}`);
+        decision.reasoning.push(`⚠️ ${r.name} rework_rate ${rework.toFixed(2)} > ${thresholds.rework_alert_above}`);
       }
     }
   }
@@ -197,7 +207,7 @@ function route(labels, repo) {
       decision.implementer = scoreInfo.leader;
       decision.reasoning.push(`single-agent implementer set by score (${scoreInfo.leader})`);
     } else {
-      decision.implementer = defaults.fallback_implementer || defaults.lead || registeredAgents[0] || "claude";
+      decision.implementer = defaults.fallback_implementer || defaults.lead || ranked[0]?.name || "claude";
       decision.reasoning.push(`single-agent implementer fallback: ${decision.implementer}`);
     }
   }
@@ -208,9 +218,9 @@ function route(labels, repo) {
       decision.implementer = scoreInfo.leader;
       decision.reasoning.push(`lead-reviewer implementer set by score (${scoreInfo.leader})`);
     }
-    if (!decision.reviewer && decision.implementer && registeredAgents.length > 1) {
-      const other = registeredAgents.find(a => a !== decision.implementer) || registeredAgents[0];
-      decision.reviewer = other;
+    if (!decision.reviewer && decision.implementer && ranked.length > 1) {
+      const other = ranked.find(r => r.name !== decision.implementer);
+      decision.reviewer = other?.name || null;
     }
   }
 
