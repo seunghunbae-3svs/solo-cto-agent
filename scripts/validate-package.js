@@ -3,6 +3,7 @@ const path = require('path');
 
 const root = process.cwd();
 const required = [
+  'package.json',
   'setup.sh',
   '.cursorrules',
   '.windsurfrules',
@@ -10,6 +11,8 @@ const required = [
   'README.md',
   'CONTRIBUTING',
   'Examples',
+  'failure-catalog.json',
+  'failure-catalog.schema.json',
 ];
 
 const errors = [];

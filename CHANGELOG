@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+* added CLI init/status commands for npm distribution
+* added demo asset, architecture diagram, and updated Quick Start
+* expanded CONTRIBUTING and templates
+
 ## 0.4.0
 
 * added package.json and basic test tooling

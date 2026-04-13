@@ -1,7 +1,10 @@
 # solo-cto-agent
 
+[![npm](https://img.shields.io/npm/v/solo-cto-agent)](https://www.npmjs.com/package/solo-cto-agent)
 [![Package Validate](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/package-validate.yml/badge.svg)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/package-validate.yml)
+[![Test](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/test.yml/badge.svg)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/test.yml)
 [![Changelog](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/changelog.yml/badge.svg)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/changelog.yml)
+[![License](https://img.shields.io/github/license/seunghunbae-3svs/solo-cto-agent)](LICENSE)
 
 
 I made this because I got tired of using AI coding tools that were good at writing code, but still left me doing all the messy CTO work around it.
@@ -89,47 +92,54 @@ solo-cto-agent/
 
 ## 5-Minute Quick Start
 
-If you only want one thing, start here:
+Three steps, under two minutes:
 
-1) Install the pack
+1) Install the CLI
 ```bash
-curl -sSL https://raw.githubusercontent.com/seunghunbae-3svs/solo-cto-agent/main/setup.sh | bash
+npx solo-cto-agent init
 ```
 
-2) Copy one skill (build is the safest default)
-```bash
-cp -r ~/.claude/skills/build ./skills-build
-```
-
-3) Replace placeholders in `skills-build/SKILL.md`
+2) Configure your stack
 ```text
-{{YOUR_OS}}, {{YOUR_EDITOR}}, {{YOUR_DEPLOY}}, {{YOUR_DB}}, {{YOUR_FRAMEWORK}}
+Open ~/.claude/skills/solo-cto-agent/SKILL.md
+Replace the {{YOUR_*}} placeholders
 ```
 
-4) Validate the pack
+3) Verify
 ```bash
-bash scripts/validate.sh
-```
-
-5) Run a real prompt
-```text
-Use build to fix the TypeScript error in my API route.
+solo-cto-agent status
 ```
 
 Expected output looks like:
 ```text
-[build] pre-scan: missing env vars: STRIPE_SECRET_KEY
-[build] request: please provide the key
-[build] applied: fixed prisma client mismatch
-[build] build: npm run build -> OK
+solo-cto-agent status
+- SKILL.md: OK
+- failure-catalog.json: OK
+- error patterns: 8
 ```
 
-If it fails, check:
-- your shell can run `bash`
-- the repo was cloned correctly
-- the skill file placeholders were replaced
+## Demo
+
+![CLI demo](docs/demo.svg)
+
+## Architecture
+
+```mermaid
+graph LR
+  A[Error Detected] --> B[failure-catalog.json]
+  B --> C[Pattern Match]
+  C --> D[Auto-Fix Applied]
+  D --> E[Build Verified]
+```
 
 ## Install
+
+### npm (recommended)
+
+```bash
+npm install -g solo-cto-agent
+solo-cto-agent init
+```
 
 ### Quick install (Claude Code)
 

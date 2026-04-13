@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420">
+  <rect width="900" height="420" fill="#0b0f16"/>
+  <rect x="20" y="20" width="860" height="380" rx="10" fill="#111827" stroke="#1f2937"/>
+  <text x="40" y="60" fill="#93c5fd" font-family="monospace" font-size="16">npx solo-cto-agent init</text>
+  <text x="40" y="90" fill="#10b981" font-family="monospace" font-size="14">✔ initialized ~/.claude/skills/solo-cto-agent</text>
+  <text x="40" y="120" fill="#10b981" font-family="monospace" font-size="14">✔ failure-catalog.json created</text>
+  <text x="40" y="150" fill="#10b981" font-family="monospace" font-size="14">✔ SKILL.md created</text>
+
+  <text x="40" y="200" fill="#93c5fd" font-family="monospace" font-size="16">solo-cto-agent status</text>
+  <text x="40" y="230" fill="#e5e7eb" font-family="monospace" font-size="14">- SKILL.md: OK</text>
+  <text x="40" y="255" fill="#e5e7eb" font-family="monospace" font-size="14">- failure-catalog.json: OK</text>
+  <text x="40" y="280" fill="#e5e7eb" font-family="monospace" font-size="14">- error patterns: 8</text>
+  <text x="40" y="305" fill="#e5e7eb" font-family="monospace" font-size="14">- last CI: unavailable (missing token or repo)</text>
+</svg>
