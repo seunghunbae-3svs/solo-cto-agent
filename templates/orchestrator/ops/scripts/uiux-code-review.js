@@ -26,7 +26,7 @@ const octokit = new Octokit({
 
 async function performCodeReview(owner, repo, prNumber) {
   console.log(
-    `\n📋 [Stage 1] Code-Level UI/UX Review for ${owner}/${repo}#${prNumber}\n`
+    `\n[Stage 1] Code-Level UI/UX Review for ${owner}/${repo}#${prNumber}\n`
   );
 
   try {
@@ -144,7 +144,7 @@ ${diffContent}`;
 }
 
 function displayCodeReviewResults(review) {
-  console.log("📊 Review Results:\n");
+  console.log("Review Results:\n");
   console.log(`Summary: ${review.summary || "N/A"}\n`);
 
   if (review.issues && review.issues.length > 0) {
@@ -158,13 +158,7 @@ function displayCodeReviewResults(review) {
 
     Object.entries(bySeverity).forEach(([severity, issues]) => {
       if (issues.length > 0) {
-        const badge =
-          severity === "critical"
-            ? "🔴"
-            : severity === "warning"
-              ? "🟡"
-              : "🔵";
-        console.log(`${badge} ${severity.toUpperCase()} (${issues.length})`);
+        console.log(`${severity.toUpperCase()} (${issues.length})`);
         issues.forEach((issue) => {
           console.log(
             `  • [${issue.category}] ${issue.title} (${issue.file}:${issue.location})`
