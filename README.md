@@ -142,6 +142,12 @@ npm install -g solo-cto-agent
 solo-cto-agent init
 ```
 
+### Maintainer note (publish)
+
+Publishing requires either:
+- an Automation token with Bypass 2FA enabled, or
+- a 6-digit OTP from an Authenticator app
+
 ### Quick install (Claude Code)
 
 ```bash
