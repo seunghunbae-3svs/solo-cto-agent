@@ -7,12 +7,19 @@ const https = require("https");
 
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CATALOG = path.join(ROOT, "failure-catalog.json");
+const SKILLS_ROOT = path.join(ROOT, "skills");
+const PRESETS = {
+  maker: ["spark", "review", "memory", "craft"],
+  builder: ["spark", "review", "memory", "craft", "build", "ship"],
+  cto: ["spark", "review", "memory", "craft", "build", "ship", "orchestrate"],
+};
+const DEFAULT_PRESET = "builder";
 
 function printHelp() {
   console.log(`solo-cto-agent
 
 Usage:
-  solo-cto-agent init [--force]
+  solo-cto-agent init [--force] [--preset maker|builder|cto]
   solo-cto-agent status
   solo-cto-agent lint [path]
   solo-cto-agent --help
@@ -36,7 +43,15 @@ function writeFileIfMissing(filePath, content, force) {
   return true;
 }
 
-function initCommand(force) {
+function copyDirSafe(src, dest, force) {
+  if (!fs.existsSync(src)) return false;
+  if (fs.existsSync(dest) && !force) return false;
+  fs.cpSync(src, dest, { recursive: true, force: true });
+  return true;
+}
+
+function initCommand(force, preset) {
+  const resolvedPreset = PRESETS[preset] ? preset : DEFAULT_PRESET;
   const targetDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
   ensureDir(targetDir);
 
@@ -68,10 +83,24 @@ Style: {{YOUR_STYLE}}
 `;
   const skillWritten = writeFileIfMissing(targetSkill, starter, force);
 
+  const skillTargets = PRESETS[resolvedPreset] || [];
+  const installed = [];
+  const skipped = [];
+  for (const name of skillTargets) {
+    const src = path.join(SKILLS_ROOT, name);
+    const dest = path.join(os.homedir(), ".claude", "skills", name);
+    const copied = copyDirSafe(src, dest, force);
+    if (copied) installed.push(name);
+    else skipped.push(name);
+  }
+
   console.log("✅ solo-cto-agent initialized");
   console.log(`- target: ${targetDir}`);
   console.log(`- failure-catalog: ${catalogWritten ? "created" : "exists"}`);
   console.log(`- SKILL.md: ${skillWritten ? "created" : "exists"}`);
+  console.log(`- preset: ${resolvedPreset}`);
+  console.log(`- skills installed: ${installed.length ? installed.join(", ") : "none"}`);
+  if (skipped.length) console.log(`- skills skipped (already exist): ${skipped.join(", ")}`);
   console.log("\nNext:");
   console.log("1) Open SKILL.md and replace placeholders");
   console.log("2) Add this skill path to your agent config if needed");
@@ -242,7 +271,9 @@ async function main() {
       return;
     }
     const force = args.includes("--force");
-    initCommand(force);
+    const presetIndex = args.indexOf("--preset");
+    const preset = presetIndex >= 0 ? args[presetIndex + 1] : DEFAULT_PRESET;
+    initCommand(force, preset);
     return;
   }
 

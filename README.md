@@ -95,9 +95,9 @@ solo-cto-agent/
 
 Three steps, under two minutes:
 
-1) Install the CLI
+1) Install the CLI (default preset: builder)
 ```bash
-npx solo-cto-agent init
+npx solo-cto-agent init --preset builder
 ```
 
 2) Configure your stack
@@ -118,6 +118,11 @@ solo-cto-agent status
 - failure-catalog.json: OK
 - error patterns: 8
 ```
+
+Presets:
+- `maker` = spark + review + memory + craft
+- `builder` (default) = maker + build + ship
+- `cto` = builder + orchestrate
 
 ## Demo
 
