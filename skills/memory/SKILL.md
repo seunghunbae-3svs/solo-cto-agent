@@ -1,7 +1,7 @@
 ---
 
 name: memory
-description: "Context and pattern memory skill for long-running work. Stores useful decisions, repeated failure patterns, and project context so sessions do not restart from zero. Activates on: remember, context, history, decision log, what did we decide, recurring issue, lesson learned."
+description: “Context and pattern memory skill for long-running work. Stores useful decisions, repeated failure patterns, and project context so sessions do not restart from zero. Activates on: remember, context, history, decision log, what did we decide, recurring issue, lesson learned.”
 user-invocable: true
 ---
 
@@ -49,128 +49,41 @@ Bad candidates:
 
 ## What to remember
 
-### 1) Decisions
+Four types of memories that matter:
 
-Examples:
+1. **Decisions** — framework, deploy platform, auth provider, migration policy, etc. Should capture: what was decided, why, what tradeoff was accepted, when to revisit.
 
-* framework choice
-* ORM choice
-* deploy platform
-* auth provider
-* UI library
-* migration policy
-* branch/release policy
+2. **Repeated failure patterns** — build breaks, deploy failures, package conflicts, framework incompatibilities. High-value because they reduce wasted loops.
 
-A useful memory entry says:
+3. **User preferences** — UI style, communication tone, approval requirements, fact-marking. These shape future agent behavior.
 
-* what was decided
-* why it was decided
-* what tradeoff was accepted
-* when to revisit it
-
----
-
-### 2) Repeated failure patterns
-
-Examples:
-
-* build breaks when `prisma generate` is skipped
-* deploy fails if callback URLs still point to localhost
-* package X and version Y conflict
-* a specific route pattern breaks under framework version Z
-
-These are high-value memories because they reduce wasted loops later.
-
----
-
-### 3) User preferences
-
-Examples:
-
-* prefers minimal UI over decorative UI
-* wants blunt critique, not reassurance
-* prefers production changes to require approval
-* wants grouped setup requests instead of repeated questions
-* wants facts clearly marked when uncertain
-
-These matter because they shape how the agent should behave next time.
-
----
-
-### 4) Open threads
-
-Not everything should be resolved immediately.
-
-Useful open-thread memory:
-
-* known gap not yet prioritized
-* risk acknowledged but deferred
-* infrastructure cleanup to revisit later
-* feature intentionally postponed
-
-This prevents “forgotten debt” from turning into repeated rediscovery.
+4. **Open threads** — known gaps not yet prioritized, deferred risks, intentional postponements. Prevents forgotten debt from turning into repeated rediscovery.
 
 ---
 
 ## Memory layers
 
-### Layer 1 — session notes
+**Layer 1 — session notes** (short-lived): what changed today, what broke, assumptions made, what needs attention next.
 
-Short-lived and practical.
+**Layer 2 — durable project memory** (longer-lived): stable decisions, repeated patterns, working conventions, high-value lessons.
 
-Use for:
-
-* what changed today
-* what broke today
-* what assumption was made
-* what still needs attention
-
-### Layer 2 — durable project memory
-
-Longer-lived.
-
-Use for:
-
-* stable decisions
-* repeated patterns
-* working conventions
-* high-value lessons
-
-### Layer 3 — compressed knowledge
-
-If something keeps repeating over time, condense it into a short reusable rule.
-
-Example:
-
-> “In this project, deploy failures after auth changes usually come from callback mismatch before code bugs.”
-
-That is more useful than keeping five noisy logs forever.
+**Layer 3 — compressed knowledge** (permanent): if something repeats 3+ times, condense it into a short reusable rule instead of keeping noisy logs.
 
 ---
 
-## Suggested structure
+## Memory record format
 
-A useful memory record should usually contain:
+Fields: topic, type (decision / pattern / preference / open-thread), summary, why it matters, trigger, when to revisit.
 
-```text id="aq56ax"
-- topic
-- type: decision / pattern / preference / open-thread
-- summary
-- why it matters
-- evidence or trigger
-- when to revisit
-```
+> Full examples → [references/record-format.md](references/record-format.md)
 
-Example:
+---
 
-```text id="ef5cnb"
-Topic: deploy auth callback mismatch
-Type: pattern
-Summary: auth-related preview failures are often callback URL mismatches, not code issues
-Why it matters: saves debug time
-Trigger: appears after domain or auth provider changes
-Revisit: if auth provider or deploy platform changes
-```
+## Storage and retrieval
+
+Organized across three layers: CONTEXT_LOG.md (session decisions), LOGS/ (daily snapshots), and memory/knowledge/ (durable rules).
+
+> Full details → [references/storage-structure.md](references/storage-structure.md)
 
 ---
 
@@ -205,7 +118,7 @@ The point is to reduce repeated questioning and repeated mistakes.
 
 ## Anti-patterns
 
-```text id="arhlji"
+```text id=”arhlji”
 ❌ storing everything
 ❌ storing vague summaries with no future use
 ❌ keeping raw noise instead of compressing lessons
@@ -227,8 +140,15 @@ When this skill is applied, the result should help answer:
 
 This skill should make the next session lighter, not just longer.
 
-## Execution Examples
+---
 
-- "Use memory to capture today\'s key decisions and update the context log."
-- "Use memory to record a repeated error pattern and the fix."
-- "Use memory to summarize what changed in this repo this week."
+## Execution patterns
+
+> Detailed usage workflows → [references/execution-guide.md](references/execution-guide.md)
+
+Covers scenarios like:
+- Capturing session decisions
+- Recording error patterns
+- Summarizing weekly changes
+- Best practices for storing vs. discarding
+- Memory hygiene and cleanup
