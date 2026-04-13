@@ -37,7 +37,11 @@ const skillsDir = path.join(root, 'skills');
 if (!fs.existsSync(skillsDir)) {
   errors.push('skills directory missing');
 } else {
-  const dirs = fs.readdirSync(skillsDir).filter((d) => fs.statSync(path.join(skillsDir, d)).isDirectory());
+  const dirs = fs.readdirSync(skillsDir).filter((d) => {
+    // Skip _shared (cross-mode reference docs) and hidden dirs
+    if (d.startsWith('_') || d.startsWith('.')) return false;
+    return fs.statSync(path.join(skillsDir, d)).isDirectory();
+  });
   for (const dir of dirs) {
     const skillPath = path.join(skillsDir, dir, 'SKILL.md');
     if (!fs.existsSync(skillPath)) {

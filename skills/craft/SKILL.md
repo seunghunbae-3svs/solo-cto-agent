@@ -1,15 +1,16 @@
 ---
-
 name: craft
-description: "Design orchestrator that pushes back against generic AI-looking UI. Focuses on typography, OKLCH color systems, purposeful shadows, spacing, and motion. Activates on: UI, design, component, page, layout, CSS, Tailwind, shadcn, responsive, dark mode, dashboard, landing page, beautiful, sleek, modern."
+description: "Design orchestrator that pushes back against generic AI-looking UI. CTO-level taste discipline — typography, OKLCH color, purposeful shadows, spacing, motion. Activates on: UI, design, component, page, layout, CSS, Tailwind, shadcn, responsive, dark mode, dashboard, landing page, beautiful, sleek, modern."
 user-invocable: true
 ---
 
 # Craft — Anti-Slop Design Orchestrator
 
-AI-generated UI has a recognizable look: too many gradients, too many rounded defaults, too much visual sameness.
+> AI 가 만든 UI 는 알아본다.
+> 둥근 모서리 어디에나, 파란 그라데이션, 기본 그림자, SaaS 스타터 키트 분위기.
+> 이 스킬은 그 흐름에 거스른다.
 
-This skill is intentionally opinionated. It reduces generic AI-looking UI, not define universal design truth.
+의도적으로 강한 의견을 가진 스킬이다. 보편적 디자인 진리를 정의하는 게 아니라, 생성된 UI 가 generic 해 보이지 않도록 만든다.
 
 ---
 
@@ -126,15 +127,54 @@ Content width: ~1280px
 
 ---
 
-## How to Use This Skill
+## Output Discipline
 
-1. Run **Anti-AI-Slop Checklist** on all UI work
-2. Reference **Key Systems** for decision guidance
-3. Check **Component Principles** for structure rules
-4. Verify against **Pre-Output Checklist** before shipping
-5. Link to **references/** for detailed tokens and examples when building code
+UI 작업 보고도 나머지 스킬과 같은 톤이다.
 
-> Execution examples and invocation patterns → references/execution-examples.md
+```
+[CHANGED FILES]
+- components/Card.tsx
+- styles/tokens.css
 
-This skill makes output feel deliberate, not just decorated.
+[DESIGN INTENT]
+2~3문장. 어떤 결정을 왜 했는지.
+
+[ANTI-SLOP CHECK]
+□ 통과한 항목 / ⛔ 위반한 항목
+
+[NEXT ACTION]
+- 다크 모드 surface level 검증
+- 모바일 1-column 점검
+```
+
+수치 (예: 컴포넌트 크기, 색상 lightness, 페이지 무게) 는 `[확정]` / `[추정]` / `[미검증]` 태그.
+
+---
+
+## How to Use
+
+1. **Anti-AI-Slop Checklist** 를 모든 UI 작업에 적용
+2. **Key Systems** 로 결정 근거 확보
+3. **Component Principles** 로 구조 규칙 확인
+4. **Pre-Output Checklist** 로 출하 전 검증
+5. 디테일은 `references/` 토큰·예시 참조
+
+---
+
+## Anti-Patterns
+
+❌ "예쁘게 만들었습니다" — 디자인 의도를 명시한다.
+❌ 그라데이션 + 둥근 모서리 + 그림자 동시 사용 (justification 없이)
+❌ 모바일/다크 모드 미검증 상태로 완료 선언
+❌ 칭찬 / "감각적이죠" / "트렌디합니다" 같은 표현
+
+---
+
+## 공통 스펙 참조
+
+- 출력 포맷·판정·팩트 태깅: `skills/_shared/agent-spec.md`
+
+> 실행 예시 → references/execution-examples.md
+
+이 스킬의 결과물은 장식이 아니라 의도가 보이게 한다.
 

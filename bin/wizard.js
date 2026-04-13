@@ -257,10 +257,14 @@ async function runWizard(targetDir, force = false) {
       }
     } else {
       console.log('\ncowork-main mode: No CI/CD setup needed.');
+      console.log('Automation runs inside your Claude Cowork session.');
       console.log('Use these commands as needed:\n');
-      console.log('  solo-cto-agent sync --org <org> --apply   # pull remote data');
-      console.log('  solo-cto-agent knowledge <project-dir>    # generate knowledge articles');
-      console.log('  solo-cto-agent local-review <pr-url>      # review a PR locally\n');
+      console.log('  solo-cto-agent review                     # local review (solo or dual auto-detected)');
+      console.log('  solo-cto-agent knowledge                  # capture decisions / error patterns');
+      console.log('  solo-cto-agent sync --org <org>           # dry-run fetch from orchestrator');
+      console.log('  solo-cto-agent sync --org <org> --apply   # merge remote cache');
+      console.log('  solo-cto-agent session save|restore|list  # persist context across sessions');
+      console.log('\nSee: docs/cowork-main-install.md\n');
     }
 
     const wantsPipeline = mode === 'codex-main';

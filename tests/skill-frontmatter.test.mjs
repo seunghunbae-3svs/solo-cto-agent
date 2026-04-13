@@ -21,9 +21,11 @@ function parseFrontmatter(filePath) {
 describe("SKILL frontmatter", () => {
   it("all skills have name and description", () => {
     const skillsDir = path.join(process.cwd(), "skills");
-    const dirs = fs.readdirSync(skillsDir).filter((d) =>
-      fs.statSync(path.join(skillsDir, d)).isDirectory()
-    );
+    const dirs = fs.readdirSync(skillsDir).filter((d) => {
+      // Skip _shared, references, and other non-skill directories (no SKILL.md inside)
+      if (d.startsWith("_") || d.startsWith(".")) return false;
+      return fs.statSync(path.join(skillsDir, d)).isDirectory();
+    });
 
     const failures = [];
     for (const dir of dirs) {

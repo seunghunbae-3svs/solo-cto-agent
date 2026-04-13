@@ -1,26 +1,22 @@
 ---
-
 name: memory
-description: “Context and pattern memory skill for long-running work. Stores useful decisions, repeated failure patterns, and project context so sessions do not restart from zero. Activates on: remember, context, history, decision log, what did we decide, recurring issue, lesson learned.”
+description: "Context & pattern retention for long-running work. Stores decisions, repeated failure patterns, conventions, open threads. Sharper over time, not larger. Activates on: remember, context, history, decision log, what did we decide, recurring issue, lesson learned, knowledge."
 user-invocable: true
 ---
 
-# Memory — Context and Pattern Retention
+# Memory — Context & Pattern Retention
 
-This skill is for one of the most annoying parts of working with agents:
+> 에이전트와 일할 때 가장 짜증나는 부분 — 같은 대화를 두 번 하는 것.
+> 이 스킬은 그 비용을 줄인다.
 
-having the same conversation twice.
+보존 대상:
+- 중요한 프로젝트 결정
+- 반복되는 실패 패턴
+- 유용한 가정
+- 미해결 리스크
+- 다음 세션으로 가져갈 가치 있는 컨텍스트
 
-Its job is to preserve:
-
-* important project decisions
-* repeated failure patterns
-* useful assumptions
-* unresolved risks
-* context worth carrying into the next session
-
-It is not there to remember everything.
-It is there to remember what is expensive to rediscover.
+모든 것을 기억하는 게 아니라, **재발견 비용이 큰 것** 만 기억한다.
 
 ---
 
@@ -142,13 +138,29 @@ This skill should make the next session lighter, not just longer.
 
 ---
 
-## Execution patterns
+## Execution Patterns
 
-> Detailed usage workflows → [references/execution-guide.md](references/execution-guide.md)
+> 상세 워크플로우 → [references/execution-guide.md](references/execution-guide.md)
 
-Covers scenarios like:
-- Capturing session decisions
-- Recording error patterns
-- Summarizing weekly changes
-- Best practices for storing vs. discarding
-- Memory hygiene and cleanup
+다루는 시나리오:
+- 세션 결정사항 캡처
+- 에러 패턴 기록
+- 주간 변경 요약
+- 보존 vs 폐기 기준
+- Memory hygiene + cleanup
+
+---
+
+## cowork-engine 와의 연동
+
+`solo-cto-agent knowledge <project-dir>` 명령은 이 스킬의 포맷을 그대로 사용한다.
+저장 위치: `~/.claude/skills/solo-cto-agent/knowledge/`
+
+추출된 ERROR_PATTERNS 는 `failure-catalog.json` 으로 자동 머지되어 다음 review 호출에서 즉시 활용된다.
+
+---
+
+## 공통 스펙 참조
+
+- 출력 포맷·팩트 태깅: `skills/_shared/agent-spec.md`
+- 임베드 컨텍스트: `skills/_shared/skill-context.md`
