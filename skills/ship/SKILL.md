@@ -274,3 +274,9 @@ When this skill is used, the final result should make it obvious:
 - whether rollback is the safer move
 
 This skill should reduce deployment anxiety, not automate recklessness.
+
+## Execution Examples
+
+- "Use ship to diagnose a Vercel build failure and propose fixes."
+- "Use ship to handle a failed deploy with a bounded retry plan."
+- "Use ship to summarize deployment risk and required approvals."

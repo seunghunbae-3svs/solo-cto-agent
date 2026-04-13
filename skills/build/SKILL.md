@@ -369,3 +369,9 @@ When this skill is applied to a real task, the final report should usually inclu
 ```
 
 This skill should make the user feel like the setup burden got lighter, not heavier.
+
+## Execution Examples
+
+- "Use build to fix a Prisma generate failure before deploy."
+- "Use build to add a missing env var and re-run the build."
+- "Use build to debug a TypeScript error in an API route."

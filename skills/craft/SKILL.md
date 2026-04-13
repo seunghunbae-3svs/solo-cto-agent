@@ -250,3 +250,9 @@ Before presenting UI work:
 ```
 
 This skill should make the output feel more deliberate, not just more decorated.
+
+## Execution Examples
+
+- "Use craft to redesign this dashboard so it looks less AI-generated."
+- "Use craft to fix spacing, typography, and visual hierarchy on the landing page."
+- "Use craft to propose a cleaner color system for the UI."
