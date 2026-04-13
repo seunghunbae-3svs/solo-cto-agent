@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/07/schema#",
+  "title": "Meta Validation Policy",
+  "type": "object",
+  "required": ["version", "tiers", "recursion"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "integer", "minimum": 1 },
+    "tiers": {
+      "type": "object",
+      "required": ["T1", "T2", "T3"],
+      "patternProperties": {
+        "^T[1-3]$": {
+          "type": "object",
+          "required": ["name", "validation", "review", "telegram_tier"],
+          "properties": {
+            "name": { "type": "string" },
+            "validation": { "enum": ["ci-only", "cross-review", "meta-validation"] },
+            "review": { "type": "string" },
+            "telegram_tier": { "enum": ["decision", "notify", "silent"] },
+            "max_rounds": { "type": "integer", "minimum": 1, "maximum": 3 },
+            "examples": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "recursion": {
+      "type": "object",
+      "required": ["max_depth", "block_label"],
+      "properties": {
+        "max_depth": { "type": "integer", "minimum": 1, "maximum": 2 },
+        "block_label": { "type": "string" }
+      }
+    },
+    "exemption": {
+      "type": "object",
+      "properties": {
+        "label": { "type": "string" },
+        "requires_reason": { "type": "boolean" }
+      }
+    },
+    "stale_policy": {
+      "type": "object",
+      "properties": {
+        "warn_after_days": { "type": "integer", "minimum": 1 },
+        "close_after_days": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "followup_rules": {
+      "type": "object",
+      "properties": {
+        "unresolved_blocker": {
+          "type": "object",
+          "properties": {
+            "label": { "type": "string" },
+            "tier": { "type": "string" }
+          }
+        },
+        "p1_suggestions_threshold": { "type": "integer", "minimum": 1 },
+        "regression_window_days": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

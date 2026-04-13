@@ -1,0 +1,63 @@
+{
+  "$schema": "./schemas/meta-validation-policy.schema.json",
+  "version": 1,
+  "tiers": {
+    "T1": {
+      "name": "routine",
+      "validation": "ci-only",
+      "review": "none",
+      "telegram_tier": "silent",
+      "examples": [
+        "threshold ±0.05",
+        "typo fix",
+        "comment update",
+        "auto score update",
+        "round-logs structure"
+      ]
+    },
+    "T2": {
+      "name": "operational",
+      "validation": "cross-review",
+      "review": "peer-agent",
+      "telegram_tier": "notify",
+      "examples": [
+        "new label rule",
+        "score logic tweak",
+        "telegram format change",
+        "workflow trigger change",
+        "template section change"
+      ]
+    },
+    "T3": {
+      "name": "structural",
+      "validation": "meta-validation",
+      "review": "dual-agent + user",
+      "telegram_tier": "decision",
+      "max_rounds": 2,
+      "examples": [
+        "new routing mode",
+        "scoring model replacement",
+        "CI gate policy change",
+        "meta-validation rule change",
+        "decision loop structure change"
+      ]
+    }
+  },
+  "recursion": {
+    "max_depth": 1,
+    "block_label": "no-meta-recurse"
+  },
+  "exemption": {
+    "label": "meta-validation-exempt",
+    "requires_reason": true
+  },
+  "stale_policy": {
+    "warn_after_days": 14,
+    "close_after_days": 28
+  },
+  "followup_rules": {
+    "unresolved_blocker": { "label": "hotfix", "tier": "T2" },
+    "p1_suggestions_threshold": 3,
+    "regression_window_days": 7
+  }
+}

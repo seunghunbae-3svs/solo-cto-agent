@@ -1,0 +1,117 @@
+{
+  "tribo-store": {
+    "name": "Tribo Store",
+    "theme": "K-beauty premium",
+    "primaryColor": "pink/coral tones",
+    "framework": "Next.js + Tailwind",
+    "repo": "tribo-store",
+    "priorities": [
+      "mobile-first",
+      "product imagery",
+      "clean checkout flow",
+      "payment integration UX"
+    ],
+    "accessibilityRequirements": [
+      "WCAG AA color contrast",
+      "Touch-friendly buttons (48px minimum)",
+      "Product alt text"
+    ],
+    "designTokens": {
+      "spacing": "8px base unit (8, 16, 24, 32, 48, 64)",
+      "typography": "sans-serif, 16px base, 1.5 line-height mobile"
+    },
+    "viewports": [375, 768, 1440]
+  },
+  "golf-now": {
+    "name": "Golf Now",
+    "theme": "sporty, clean",
+    "primaryColor": "green tones",
+    "framework": "Next.js + Tailwind",
+    "repo": "golf-now",
+    "priorities": [
+      "data visualization",
+      "map integration",
+      "weather display",
+      "booking calendar UX"
+    ],
+    "accessibilityRequirements": [
+      "WCAG AA color contrast",
+      "Map keyboard navigation",
+      "Data table semantic HTML"
+    ],
+    "designTokens": {
+      "spacing": "8px base unit",
+      "typography": "sans-serif, 16px base"
+    },
+    "viewports": [375, 768, 1440]
+  },
+  "eventbadge": {
+    "name": "EventBadge",
+    "theme": "professional, event management",
+    "primaryColor": "blue/purple tones",
+    "framework": "Vite + React",
+    "repo": "eventbadge",
+    "priorities": [
+      "badge design preview",
+      "attendee management",
+      "QR code display",
+      "real-time updates"
+    ],
+    "accessibilityRequirements": [
+      "WCAG AA color contrast",
+      "QR code fallback text",
+      "Form labels semantic"
+    ],
+    "designTokens": {
+      "spacing": "4px base unit (4, 8, 12, 16, 24, 32, 48, 64)",
+      "typography": "sans-serif, 14px base"
+    },
+    "viewports": [375, 768, 1440]
+  },
+  "palate-pilot": {
+    "name": "Palate Pilot",
+    "theme": "food/restaurant",
+    "primaryColor": "warm orange/red tones",
+    "framework": "Next.js + Tailwind",
+    "repo": "palate-pilot",
+    "priorities": [
+      "menu display",
+      "restaurant imagery",
+      "booking flow",
+      "reviews display"
+    ],
+    "accessibilityRequirements": [
+      "WCAG AA color contrast",
+      "Menu semantic structure",
+      "Image lazy loading"
+    ],
+    "designTokens": {
+      "spacing": "8px base unit",
+      "typography": "sans-serif, 16px base"
+    },
+    "viewports": [375, 768, 1440]
+  },
+  "3stripe-event": {
+    "name": "3Stripe Event",
+    "theme": "government/official",
+    "primaryColor": "navy/formal tones",
+    "framework": "Next.js + Tailwind",
+    "repo": "3stripe-event",
+    "priorities": [
+      "form accessibility",
+      "document display",
+      "official branding",
+      "compliance requirements"
+    ],
+    "accessibilityRequirements": [
+      "WCAG AAA form accessibility",
+      "Document reader compatibility",
+      "High contrast mode support"
+    ],
+    "designTokens": {
+      "spacing": "8px base unit",
+      "typography": "serif for documents, sans-serif for UI"
+    },
+    "viewports": [375, 768, 1440]
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/07/schema#",
+  "title": "Round Log",
+  "type": "object",
+  "required": ["issue", "repo", "rounds", "final_status"],
+  "properties": {
+    "issue": { "type": ["string", "integer"] },
+    "repo": { "type": "string" },
+    "routing_mode": { "type": "string", "enum": ["dual-agent", "single-agent", "lead-reviewer"] },
+    "routing_rule": { "type": "string" },
+    "rounds": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["round", "codex_status", "claude_status"],
+        "properties": {
+          "round": { "type": "integer", "minimum": 1, "maximum": 3 },
+          "codex_status": {
+            "type": "object",
+            "properties": {
+              "ci": { "type": "string", "enum": ["pass", "fail", "skip"] },
+              "tests_total": { "type": "integer" },
+              "tests_passed": { "type": "integer" },
+              "self_review": { "type": "boolean" },
+              "cross_review_given": { "type": "boolean" }
+            }
+          },
+          "claude_status": {
+            "type": "object",
+            "properties": {
+              "ci": { "type": "string", "enum": ["pass", "fail", "skip"] },
+              "tests_total": { "type": "integer" },
+              "tests_passed": { "type": "integer" },
+              "self_review": { "type": "boolean" },
+              "cross_review_given": { "type": "boolean" }
+            }
+          },
+          "blockers": { "type": "array", "items": { "type": "string" } },
+          "ts": { "type": "string" }
+        }
+      }
+    },
+    "final_status": {
+      "type": "object",
+      "properties": {
+        "recommendation": { "type": "string" },
+        "user_choice": { "type": "string" },
+        "recommendation_matched": { "type": "boolean" },
+        "dual_was_necessary": { "type": "boolean" },
+        "telegram_tier": { "type": "string", "enum": ["silent", "notify", "decision"] },
+        "closed_at": { "type": "string" }
+      }
+    }
+  }
+}

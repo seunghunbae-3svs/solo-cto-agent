@@ -1,0 +1,12 @@
+{
+  "framework": null,
+  "buildCommand": "npm run build",
+  "ignoreCommand": "git diff HEAD~1 HEAD --quiet -- agent-scores.json",
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1",
+      "methods": ["GET", "POST", "PUT", "DELETE"]
+    }
+  ]
+}

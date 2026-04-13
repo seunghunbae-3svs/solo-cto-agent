@@ -1,0 +1,28 @@
+﻿name: Comparison Report
+
+on:
+  repository_dispatch:
+    types: [comparison-baseline, comparison-ready]
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run comparison report
+        env:
+          ORCHESTRATOR_PAT: ${{ secrets.ORCHESTRATOR_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EVENT_TYPE: ${{ github.event.action }}
+          PR_REPO: ${{ github.event.client_payload.repo }}
+          PR_NUMBER: ${{ github.event.client_payload.pr }}
+          PR_TITLE: ${{ github.event.client_payload.title }}
+          PR_URL: ${{ github.event.client_payload.url }}
+        run: node ops/scripts/comparison-report.js

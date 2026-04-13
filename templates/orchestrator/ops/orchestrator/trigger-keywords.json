@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "dev_keywords": [
+    "api",
+    "backend",
+    "bug",
+    "build",
+    "ci",
+    "database",
+    "deploy",
+    "error",
+    "migration",
+    "nextjs",
+    "prisma",
+    "performance",
+    "react",
+    "refactor",
+    "supabase",
+    "tailwind",
+    "test",
+    "typescript"
+  ],
+  "design_keywords": [
+    "accessibility",
+    "animation",
+    "brand",
+    "color",
+    "copy",
+    "layout",
+    "mockup",
+    "responsive",
+    "spacing",
+    "styleguide",
+    "typography",
+    "ui",
+    "ux",
+    "visual",
+    "wireframe"
+  ],
+  "notes": {
+    "no_overlap": true,
+    "removed_from_design": [
+      "react",
+      "tailwind"
+    ]
+  }
+}

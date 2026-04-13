@@ -1,0 +1,28 @@
+name: Cross Review Dispatch
+
+on:
+  repository_dispatch:
+    types: [cross-review]
+
+jobs:
+  cross-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cross Review
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PR_NUMBER: ${{ github.event.client_payload.pr }}
+          PR_REPO: ${{ github.event.client_payload.repo }}
+          PR_TITLE: ${{ github.event.client_payload.title }}
+        run: node ops/agents/cross-reviewer.js

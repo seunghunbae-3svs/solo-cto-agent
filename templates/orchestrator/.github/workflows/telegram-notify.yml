@@ -1,0 +1,43 @@
+name: Telegram Notify
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      message:
+        description: 'Custom message to send'
+        required: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build decision message
+        id: decision
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
+        run: node ops/orchestrator/decision-message.js
+
+      - name: Send to Telegram
+        if: steps.decision.outputs.tier != 'silent'
+        run: |
+          TEXT=$(echo '${{ steps.decision.outputs.message }}' | jq -Rs .)
+          MARKUP='${{ steps.decision.outputs.reply_markup }}'
+          if [ -n "$MARKUP" ]; then
+            PAYLOAD=$(jq -n --arg chat "${{ secrets.TELEGRAM_CHAT_ID }}" --arg text "${{ steps.decision.outputs.message }}" --argjson markup "$MARKUP" '{chat_id:$chat,text:$text,parse_mode:"HTML",reply_markup:$markup}')
+          else
+            PAYLOAD=$(jq -n --arg chat "${{ secrets.TELEGRAM_CHAT_ID }}" --arg text "${{ steps.decision.outputs.message }}" '{chat_id:$chat,text:$text,parse_mode:"HTML"}')
+          fi
+          curl -sS -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -H 'Content-Type: application/json' \
+            -d "$PAYLOAD"

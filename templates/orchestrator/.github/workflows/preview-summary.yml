@@ -1,0 +1,209 @@
+name: Preview Summary
+
+on:
+  deployment_status:
+  check_suite:
+    types: [completed]
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  summarize:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'deployment_status' ||
+      (github.event_name == 'check_suite' && github.event.check_suite.conclusion != '') ||
+      github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Resolve PR and deployment info
+        id: info
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "deployment_status" ]; then
+            # Extract from deployment_status event
+            STATE="${{ github.event.deployment_status.state }}"
+            ENV_URL="${{ github.event.deployment_status.environment_url }}"
+            if [ -z "$ENV_URL" ]; then
+              ENV_URL="${{ github.event.deployment_status.target_url }}"
+            fi
+            PR_NUM=""
+            # Try to find PR from deployment ref
+            REF="${{ github.event.deployment.ref }}"
+            if [ -n "$REF" ]; then
+              PR_NUM=$(gh pr list --head "$REF" --json number --jq '.[0].number' 2>/dev/null || echo "")
+            fi
+            echo "state=$STATE" >> $GITHUB_OUTPUT
+            echo "preview_url=$ENV_URL" >> $GITHUB_OUTPUT
+            echo "pr_number=$PR_NUM" >> $GITHUB_OUTPUT
+            echo "source=deployment" >> $GITHUB_OUTPUT
+
+          elif [ "${{ github.event_name }}" = "check_suite" ]; then
+            CONCLUSION="${{ github.event.check_suite.conclusion }}"
+            # Get associated PRs
+            PR_NUM=$(gh api repos/${{ github.repository }}/commits/${{ github.event.check_suite.head_sha }}/pulls --jq '.[0].number' 2>/dev/null || echo "")
+            echo "state=$CONCLUSION" >> $GITHUB_OUTPUT
+            echo "preview_url=" >> $GITHUB_OUTPUT
+            echo "pr_number=$PR_NUM" >> $GITHUB_OUTPUT
+            echo "source=check_suite" >> $GITHUB_OUTPUT
+
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "state=pending" >> $GITHUB_OUTPUT
+            echo "preview_url=" >> $GITHUB_OUTPUT
+            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "source=pull_request" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Detect agent from branch
+        id: agent
+        if: steps.info.outputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH=$(gh pr view ${{ steps.info.outputs.pr_number }} --json headRefName --jq '.headRefName' 2>/dev/null || echo "")
+          if echo "$BRANCH" | grep -qi "codex"; then
+            echo "name=codex" >> $GITHUB_OUTPUT
+          elif echo "$BRANCH" | grep -qi "claude"; then
+            echo "name=claude" >> $GITHUB_OUTPUT
+          else
+            echo "name=unknown" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine CI status
+        id: ci
+        if: steps.info.outputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUM="${{ steps.info.outputs.pr_number }}"
+          SHA=$(gh pr view "$PR_NUM" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
+          if [ -n "$SHA" ]; then
+            STATUS=$(gh api repos/${{ github.repository }}/commits/$SHA/status --jq '.state' 2>/dev/null || echo "pending")
+          else
+            STATUS="pending"
+          fi
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+
+      - name: Check for blockers in reviews
+        id: blocker
+        if: steps.info.outputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COMMENTS=$(gh api repos/${{ github.repository }}/issues/${{ steps.info.outputs.pr_number }}/comments --jq '.[].body' 2>/dev/null || echo "")
+          if echo "$COMMENTS" | grep -qi "blocker\|BLOCKER\|🔴"; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send decision message
+        if: steps.info.outputs.pr_number != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUM="${{ steps.info.outputs.pr_number }}"
+          PR_DATA=$(gh pr view "$PR_NUM" --json title,url 2>/dev/null || echo '{"title":"","url":""}')
+          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
+          PR_URL=$(echo "$PR_DATA" | jq -r '.url')
+
+          TIER="notify"
+          HAS_BLOCKER="${{ steps.blocker.outputs.found }}"
+          CI_STATUS="${{ steps.ci.outputs.status }}"
+
+          # Escalate to decision tier if blocker found or CI failed
+          if [ "$HAS_BLOCKER" = "true" ] || [ "$CI_STATUS" = "failure" ]; then
+            TIER="decision"
+          fi
+
+          # Downgrade to silent if deployment pending
+          if [ "${{ steps.info.outputs.state }}" = "pending" ] && [ "${{ steps.info.outputs.source }}" = "pull_request" ]; then
+            TIER="silent"
+          fi
+
+          node ops/orchestrator/decision-message.js \
+            --tier "$TIER" \
+            --pr-number "$PR_NUM" \
+            --pr-title "$PR_TITLE" \
+            --pr-url "$PR_URL" \
+            --repo "${{ github.repository }}" \
+            --agent "${{ steps.agent.outputs.name }}" \
+            --ci-status "$CI_STATUS" \
+            --has-blocker "$HAS_BLOCKER" \
+            --preview-url "${{ steps.info.outputs.preview_url }}"
+
+      - name: Cache Playwright
+        if: steps.info.outputs.preview_url != '' && steps.info.outputs.source == 'deployment' && steps.info.outputs.pr_number != ''
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/.npm
+          key: ${{ runner.os }}-playwright-1.43.1
+
+      - name: Send preview screenshot
+        if: steps.info.outputs.preview_url != '' && steps.info.outputs.source == 'deployment' && steps.info.outputs.pr_number != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          URL="${{ steps.info.outputs.preview_url }}"
+          PR_NUM="${{ steps.info.outputs.pr_number }}"
+          if [[ "$URL" != http* ]]; then exit 0; fi
+          if [[ "$URL" != *"vercel.app"* && "$URL" != *"preview"* ]]; then exit 0; fi
+          if [ -z "$PR_NUM" ]; then exit 0; fi
+          sleep 15
+          CACHE_BUST="${{ github.run_id }}"
+          if [[ "$URL" == *"?"* ]]; then
+            URL="${URL}&t=$CACHE_BUST"
+          else
+            URL="${URL}?t=$CACHE_BUST"
+          fi
+
+          npm install playwright@1.43.1 --no-save
+          npx playwright install chromium --with-deps
+
+          node - <<'NODE'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+
+          (async () => {
+            const url = process.env.URL;
+            const browser = await chromium.launch({ args: ['--no-sandbox'] });
+            const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+            await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+            await page.waitForTimeout(3000);
+            await page.screenshot({ path: '/tmp/preview.png', fullPage: true });
+            await browser.close();
+          })().catch((err) => {
+            console.error(err);
+            process.exit(1);
+          });
+NODE
+
+          CAPTION="Preview screenshot: ${{ github.repository }} PR #${{ steps.info.outputs.pr_number }}\n${{ steps.info.outputs.preview_url }}"
+          if [ -f /tmp/preview.png ]; then
+            curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendPhoto" \
+              -F chat_id="$TELEGRAM_CHAT_ID" \
+              -F photo=@/tmp/preview.png \
+              -F caption="$CAPTION" || true
+          else
+            ENCODED=$(python - <<'PY'
+import urllib.parse, os
+print(urllib.parse.quote(os.environ.get("URL",""), safe=""))
+PY
+)
+            SHOT="https://image.thum.io/get/width/1200/${ENCODED}"
+            curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendPhoto" \
+              -d chat_id="$TELEGRAM_CHAT_ID" \
+              -d photo="$SHOT" \
+              -d caption="$CAPTION" || true
+          fi

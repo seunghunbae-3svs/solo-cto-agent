@@ -1,0 +1,125 @@
+name: Route Issue to Agent
+
+on:
+  issues:
+    types: [opened, labeled]
+  repository_dispatch:
+    types: [route-issue]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: route-${{ (github.event_name == 'repository_dispatch' && github.event.client_payload.repo || github.repository) }}-${{ github.event.issue.number || github.event.client_payload.issue }}
+  cancel-in-progress: true
+
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    if: >
+      (github.event_name == 'repository_dispatch') ||
+      (
+        github.event_name == 'issues' &&
+        !contains(github.event.issue.labels.*.name, 'no-meta-recurse') &&
+        (
+          github.event.action == 'opened' ||
+          contains(fromJSON('["agent-codex","agent-claude","dual-review","hotfix","urgent","low-risk","docs","chore","security","auth","payments","migration","regression","bug","lead-reviewer","meta-validation"]'), github.event.label.name)
+        )
+      )
+    outputs:
+      mode: ${{ steps.decide.outputs.mode }}
+      implementer: ${{ steps.decide.outputs.implementer }}
+      reviewer: ${{ steps.decide.outputs.reviewer }}
+      telegram_tier: ${{ steps.decide.outputs.telegram_tier }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Resolve issue metadata
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            ISSUE="${{ github.event.client_payload.issue }}"
+            LABELS="${{ github.event.client_payload.labels }}"
+            REPO="${{ github.event.client_payload.repo }}"
+          else
+            ISSUE="${{ github.event.issue.number }}"
+            LABELS=$(echo '${{ toJSON(github.event.issue.labels.*.name) }}' | jq -r 'join(",")')
+            REPO="${{ github.repository }}"
+          fi
+          echo "issue=$ISSUE" >> $GITHUB_OUTPUT
+          echo "labels=$LABELS" >> $GITHUB_OUTPUT
+          echo "repo=$REPO" >> $GITHUB_OUTPUT
+
+      - name: Run routing engine
+        id: decide
+        run: |
+          node ops/orchestrator/routing-engine.js \
+            --labels "${{ steps.meta.outputs.labels }}" \
+            --repo "${{ steps.meta.outputs.repo }}" \
+            --issue "${{ steps.meta.outputs.issue }}"
+
+      - name: Post routing decision as comment
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const decision = ${{ steps.decide.outputs.routing_json }};
+            const body = [
+              `🔀 **Routing Decision** for #${decision.issue}`,
+              '',
+              `| Field | Value |`,
+              `|-------|-------|`,
+              `| Mode | \`${decision.mode}\` |`,
+              `| Implementer | \`${decision.implementer || 'both'}\` |`,
+              `| Reviewer | \`${decision.reviewer || 'both'}\` |`,
+              `| Lead | \`${decision.lead || 'none'}\` |`,
+              `| Telegram | \`${decision.telegram_tier}\` |`,
+              `| Max Rounds | ${decision.max_rounds} |`,
+              '',
+              '**Reasoning:**',
+              ...decision.reasoning.map(r => `- ${r}`),
+              '',
+              '_Auto-routed by routing-engine.js_',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      - name: Apply routing labels
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const decision = ${{ steps.decide.outputs.routing_json }};
+            const existing = context.payload.issue.labels.map(l => l.name);
+            const labelsToAdd = new Set();
+
+            if (decision.mode === 'dual-agent') {
+              labelsToAdd.add('agent-codex');
+              labelsToAdd.add('agent-claude');
+              labelsToAdd.add('dual-review');
+            } else if (decision.mode === 'single-agent') {
+              if (decision.implementer) labelsToAdd.add(`agent-${decision.implementer}`);
+            } else if (decision.mode === 'lead-reviewer') {
+              if (decision.implementer) labelsToAdd.add(`agent-${decision.implementer}`);
+              labelsToAdd.add('lead-reviewer');
+            }
+
+            const final = [...labelsToAdd].filter(l => !existing.includes(l));
+            if (final.length) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels: final,
+              });
+            }

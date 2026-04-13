@@ -1,0 +1,23 @@
+name: Telegram Webhook Sync
+
+on:
+  deployment_status:
+
+jobs:
+  sync:
+    if: >
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment_status.environment_url != '' &&
+      github.event.deployment_status.environment == 'Production'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update Telegram webhook
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          URL="${{ github.event.deployment_status.environment_url }}"
+          HOOK="${URL%/}/api/telegram-webhook"
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+            -d url="$HOOK" \
+            -d allowed_updates='["message","callback_query"]' \
+            -d drop_pending_updates=true || true

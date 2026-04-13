@@ -1,0 +1,51 @@
+﻿name: Rework Dispatch
+
+on:
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch rework when review indicates issues
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ORCHESTRATOR_PAT }}
+          script: |
+            const body = (context.payload.review?.body || context.payload.comment?.body || '').toLowerCase();
+            const isReviewRevise = context.payload.review && context.payload.review.state === 'changes_requested';
+            const hasSignals = /blocker|블로커|조치|개선|improve|needs work|request[ _]?changes|ui|ux|layout|design|접근성|a11y|성능|performance|bug|error|fix/.test(body);
+            const isReworkRound = body.includes('[rework-round]') || body.includes('[telegram-decision]');
+
+            if (!isReviewRevise && !hasSignals) return;
+            if (isReworkRound) return;
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            let prNumber = null;
+            let branch = null;
+
+            if (context.payload.pull_request) {
+              prNumber = context.payload.pull_request.number;
+              branch = context.payload.pull_request.head.ref;
+            } else if (context.payload.issue && context.payload.issue.pull_request) {
+              prNumber = context.payload.issue.number;
+              const pr = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+              branch = pr.data.head.ref;
+            }
+
+            if (!prNumber || !branch) return;
+
+            await github.rest.repos.createDispatchEvent({
+              owner: 'seunghunbae-3svs',
+              repo: 'dual-agent-review-orchestrator',
+              event_type: 'rework-request',
+              client_payload: {
+                repo: `${owner}/${repo}`,
+                pr: prNumber,
+                branch
+              }
+            });

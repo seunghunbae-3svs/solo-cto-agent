@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/07/schema#",
+  "title": "Agent Scores",
+  "type": "object",
+  "required": ["meta", "agents"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["version", "window", "last_updated"],
+      "properties": {
+        "version": { "type": "integer", "minimum": 1 },
+        "window": { "type": "integer", "minimum": 1 },
+        "last_updated": { "type": "string" }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "patternProperties": {
+        "^(codex|claude)$": {
+          "type": "object",
+          "required": ["accuracy", "test_pass_rate", "review_hit_rate", "rework_rate", "tasks_completed"],
+          "properties": {
+            "accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
+            "test_pass_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+            "review_hit_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+            "rework_rate": { "type": "number", "minimum": 0 },
+            "tasks_completed": { "type": "integer", "minimum": 0 },
+            "ci_pass": { "type": "integer", "minimum": 0 },
+            "ci_total": { "type": "integer", "minimum": 0 },
+            "reviews_submitted": { "type": "integer", "minimum": 0 },
+            "merges": { "type": "integer", "minimum": 0 },
+            "hotfixes": { "type": "integer", "minimum": 0 }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "by_repo": {
+      "type": "object",
+      "description": "Per-repository score breakdown for multi-project routing",
+      "patternProperties": {
+        ".*": {
+          "type": "object",
+          "patternProperties": {
+            "^(codex|claude)$": {
+              "type": "object",
+              "properties": {
+                "accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
+                "test_pass_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+                "sample": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["event", "agent", "ts"],
+        "properties": {
+          "event": { "type": "string" },
+          "agent": { "type": "string", "enum": ["codex", "claude"] },
+          "repo": { "type": "string" },
+          "issue": { "type": ["string", "integer"] },
+          "ts": { "type": "string" }
+        }
+      }
+    }
+  }
+}

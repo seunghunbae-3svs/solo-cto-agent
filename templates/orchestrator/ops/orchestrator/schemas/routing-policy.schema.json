@@ -1,0 +1,62 @@
+{
+  "title": "Routing Policy",
+  "description": "Label-based + score-based agent routing configuration",
+  "type": "object",
+  "required": ["version", "defaults", "label_rules", "score_thresholds"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "integer", "minimum": 1 },
+    "defaults": {
+      "type": "object",
+      "required": ["mode", "max_rounds", "auto_merge_after_hours", "minimum_sample"],
+      "properties": {
+        "mode": { "enum": ["single", "dual", "single-agent", "dual-agent", "lead-reviewer"] },
+        "lead": { "type": ["string", "null"] },
+        "max_rounds": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "auto_merge_after_hours": { "type": "integer", "minimum": 1 },
+        "minimum_sample": { "type": "integer", "minimum": 1 },
+        "fallback_implementer": { "type": "string" }
+      }
+    },
+    "label_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["match", "assign"],
+        "properties": {
+          "match": {
+            "type": "object",
+            "required": ["labels"],
+            "properties": {
+              "labels": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+            }
+          },
+          "assign": {
+            "type": "object",
+            "properties": {
+              "implementer": { "type": "string" },
+              "reviewer": { "type": "string" },
+              "mode": { "enum": ["single", "dual", "single-agent", "dual-agent", "lead-reviewer"] },
+              "lead": { "type": ["string", "null"] }
+            }
+          },
+          "telegram_tier": { "enum": ["decision", "notify", "silent"] },
+          "max_rounds": { "type": "integer", "minimum": 1, "maximum": 3 },
+          "auto_merge_after_hours": { "type": "integer" }
+        }
+      }
+    },
+    "score_thresholds": {
+      "type": "object",
+      "required": ["lead_eligible_accuracy", "lead_min_gap", "review_min_gap", "dual_required_below", "rework_alert_above"],
+      "properties": {
+        "lead_eligible_accuracy": { "type": "number", "minimum": 0, "maximum": 1 },
+        "lead_min_gap": { "type": "number", "minimum": 0, "maximum": 1 },
+        "review_min_gap": { "type": "number", "minimum": 0, "maximum": 1 },
+        "dual_required_below": { "type": "number", "minimum": 0, "maximum": 1 },
+        "rework_alert_above": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "repo_overrides": { "type": "object" }
+  }
+}

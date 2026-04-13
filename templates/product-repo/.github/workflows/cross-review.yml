@@ -1,0 +1,36 @@
+name: Cross Review
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  notify-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Detect agent from branch
+        id: agent
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          AGENT="unknown"
+          if [[ "$BRANCH" == *codex* ]]; then AGENT="codex"; fi
+          if [[ "$BRANCH" == *claude* ]]; then AGENT="claude"; fi
+          echo "agent=$AGENT" >> "$GITHUB_OUTPUT"
+          echo "reviewer=$([ "$AGENT" = "codex" ] && echo "claude" || echo "codex")" >> "$GITHUB_OUTPUT"
+
+      - name: Forward review event to orchestrator
+        if: steps.agent.outputs.agent != 'unknown'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.ORCHESTRATOR_PAT }}
+          repository: seunghunbae-3svs/dual-agent-review-orchestrator
+          event-type: score-event
+          client-payload: |
+            {
+              "agent": "${{ steps.agent.outputs.agent }}",
+              "event": "pull_request_review",
+              "action": "submitted",
+              "repo": "${{ github.repository }}",
+              "issue": "${{ github.event.pull_request.number }}",
+              "conclusion": "${{ github.event.review.state }}"
+            }

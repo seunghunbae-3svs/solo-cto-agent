@@ -1,0 +1,40 @@
+# env
+.env
+.env.*
+!.env.example
+
+# dependencies / builds
+node_modules/
+.next/
+dist/
+build/
+out/
+
+# logs / temp
+logs/
+tmp/
+*.log
+artifacts/
+reports/raw/
+review-cache/
+orchestrator-cache/
+
+# local platform config
+.vercel/
+.supabase/
+
+# editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# secrets
+*.pem
+*.key
+*.p12
+*.p8
+service-account*.json
+secrets*.json
+telegram-bot-token.txt
+supabase-service-role*.txt

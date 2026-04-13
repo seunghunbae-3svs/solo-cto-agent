@@ -1,0 +1,88 @@
+name: Combined PR with UI/UX Gate
+
+on:
+  workflow_run:
+    workflows:
+      - "Code Build & Test"
+      - "UI/UX Quality Gate"
+    types:
+      - completed
+
+jobs:
+  check-gates:
+    runs-on: ubuntu-latest
+    outputs:
+      build-verified: ${{ steps.check.outputs.build-verified }}
+      uiux-verified: ${{ steps.check.outputs.uiux-verified }}
+      can-merge: ${{ steps.check.outputs.can-merge }}
+    steps:
+      - uses: actions/github-script@v7
+        id: check
+        with:
+          script: |
+            // Get PR context from trigger workflow
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'combined-pr.yml'
+            });
+
+            const latestRun = runs.data.workflow_runs[0];
+            if (!latestRun) {
+              console.log('No combined PR workflow found');
+              core.setOutput('can-merge', 'false');
+              return;
+            }
+
+            // Check for required labels
+            const prNumber = latestRun.pull_requests[0]?.number;
+            if (!prNumber) {
+              core.setOutput('can-merge', 'false');
+              return;
+            }
+
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+
+            const labels = pr.data.labels.map(l => l.name);
+
+            const buildVerified = labels.includes('build-verified');
+            const uiuxVerified = labels.includes('uiux-verified');
+
+            core.setOutput('build-verified', buildVerified ? 'true' : 'false');
+            core.setOutput('uiux-verified', uiuxVerified ? 'true' : 'false');
+
+            // Can merge only if BOTH gates pass
+            const canMerge = buildVerified && uiuxVerified;
+            core.setOutput('can-merge', canMerge ? 'true' : 'false');
+
+            console.log(`Build Verified: ${buildVerified}`);
+            console.log(`UI/UX Verified: ${uiuxVerified}`);
+            console.log(`Can Merge: ${canMerge}`);
+
+  gate-status:
+    runs-on: ubuntu-latest
+    needs: check-gates
+    steps:
+      - name: Print gate status
+        run: |
+          echo "# Quality Gate Status"
+          echo ""
+          echo "**Build Gate:** ${{ needs.check-gates.outputs.build-verified }}"
+          echo "**UI/UX Gate:** ${{ needs.check-gates.outputs.uiux-verified }}"
+          echo "**Mergeable:** ${{ needs.check-gates.outputs.can-merge }}"
+          echo ""
+
+      - name: Enforce gates
+        if: needs.check-gates.outputs.can-merge != 'true'
+        run: |
+          echo "❌ Cannot merge: Both build-verified and uiux-verified labels required"
+          exit 1
+
+      - name: Ready to merge
+        if: needs.check-gates.outputs.can-merge == 'true'
+        run: |
+          echo "✅ All quality gates passed! Ready to merge."

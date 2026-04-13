@@ -1,8 +1,8 @@
 {
   "name": "solo-cto-agent",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "private": false,
-  "description": "Opinionated skill pack for AI coding agents with CTO-grade operating rules.",
+  "description": "Dual-agent CI/CD orchestrator with CTO-grade operating rules. Claude + Codex automated cross-review pipeline.",
   "bin": {
     "solo-cto-agent": "bin/cli.js"
   },
@@ -16,11 +16,22 @@
     "templates",
     "skills",
     "docs",
+    "tiers.json",
     "failure-catalog.json",
     "failure-catalog.schema.json",
     "README.md",
     "LICENSE",
     "CHANGELOG"
+  ],
+  "keywords": [
+    "claude",
+    "codex",
+    "dual-agent",
+    "ci-cd",
+    "orchestrator",
+    "code-review",
+    "automation",
+    "cto"
   ],
   "devDependencies": {
     "ajv": "^8.12.0",

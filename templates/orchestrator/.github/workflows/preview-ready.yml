@@ -1,0 +1,15 @@
+name: Preview Ready Notification
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  notify:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          echo "PR #${{ github.event.pull_request.number }} is review-ready."
+          echo "Preview URL should be attached by your deploy system or posted in a comment."
