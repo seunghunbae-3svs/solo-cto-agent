@@ -291,6 +291,12 @@ This is for reducing repeat explanation and preserving useful context.
 
 Not everything needs to be remembered forever. But decisions, repeated failure patterns, and project context should not disappear every session.
 
+## Skill slimming
+
+When skills grow past 150 lines, most of that weight is reference data the agent doesn't need on every activation. The `references/` pattern splits hot-path logic from cold-path data, cutting token costs by 58-79% per skill without losing functionality.
+
+See [docs/skill-slimming.md](docs/skill-slimming.md) for the pattern, measured results, and how to apply it.
+
 ## Design principles
 
 ### Agent does the work, user makes decisions
@@ -344,69 +350,24 @@ That is the easiest way to tell whether this fits how you work.
 MIT - fork it, modify it, ship it.
 
 
-
 ---
 
-# Post-Install Verification
+## Post-install verification
 
-After installation, verify the pack is actually usable before you trust it.
+After installation, verify the pack works:
 
-## 1) Skill discovery
-- Verify skills exist in your agent directory (e.g. `~/.claude/skills`).
-- Confirm each skill has a valid frontmatter block (--- ... ---).
+1. Check skills exist in your agent directory (e.g. `~/.claude/skills`)
+2. Confirm each skill has valid frontmatter (`---` block)
+3. Run a simple prompt like "Use build to fix a TypeScript error"
+4. Run `bash scripts/validate.sh` to check file integrity
+5. Confirm no auto-merge or deploy happens without approval
 
-## 2) Trigger sanity check
-- Run a simple prompt that should activate each skill.
-- Example: ?Use build to fix a TypeScript error.?
-
-## 3) Template injection
-- Confirm `CLAUDE.md` (or equivalent) includes the autopilot block.
-- Check markers: `<!-- solo-cto-agent:start -->` to `<!-- solo-cto-agent:end -->`.
-
-## 4) Dry run
-- Run a small task and ensure it produces:
-  - decision log
-  - bounded loops (no infinite retries)
-  - explicit approvals
-
-## 5) Rollback safety
-- Ensure no auto-merge or deploy happens without approval.
-
-If any of the above fails, re-run `setup.sh --update` and re-verify.
-
-## Contributing checklist (minimum)
-- Run `setup.sh --update` to validate install flow
-- Ensure all SKILL.md files have valid frontmatter
-- Avoid breaking repo-level instructions (CLAUDE.md / templates)
-- Keep README claims aligned with actual files
+If something fails, re-run `setup.sh --update` and check again.
 
 
 ---
 
-## Validation
-
-Run this after install to confirm the pack is clean:
-
-```
-bash scripts/validate.sh
-```
-
-This checks frontmatter, setup.sh integrity, and required files.
-
-
----
-
-## Automation
-
-CI runs package validation and changelog updates on push.
-If CI fails, treat it as a release blocker.
-
-
----
-
-## Sample output logs
-
-These are real-style outputs you should expect when the skills run.
+## Sample output
 
 **Build (preflight + fix)**
 ```
@@ -417,7 +378,7 @@ These are real-style outputs you should expect when the skills run.
 [build] report: 3 files changed, 1 risk flagged, rollback path noted
 ```
 
-**Dual-agent review + rework**
+**Review + rework**
 ```
 [review] Codex: REQUEST_CHANGES (blocker: missing RLS policy)
 [review] Claude: APPROVE (nits: copy, spacing)
@@ -425,28 +386,19 @@ These are real-style outputs you should expect when the skills run.
 [decision] recommendation: HOLD until preview verified
 ```
 
-**Decision card (Telegram)**
-```
-?? ? ?: ?? ?? ?? ? ??????
-??: HOLD
-?? ??: blocker: missing RLS policy
-Preview: https://your-preview.vercel.app
-??: repo PR17 ?? | ?? | ??
-```
-
 
 ---
 
 ## FAQ
 
-**Q: ? ?? ?? ?? ?? ??? ????**
-A: ???? ??? ?????, ???? ??? ?? ????. ??? ?? ???????.
+**Q: Do I need all six skills?**
+A: No. Start with `build` and `review`. Add the others if you find yourself wanting them. Each skill is independent.
 
-**Q: ? bounded loop(?? ??)? ??????**
-A: ????? ?? ??? ???? ? ?? ??????. ?? ???? ?? ?????.
+**Q: Why does the agent stop retrying after 3 attempts?**
+A: Infinite loops waste more time than they save. If something fails 3 times, the agent summarizes what it knows and hands control back to you.
 
-**Q: ? UI/UX ??? ??????**
-A: ??? ??? ??? ? ??? ?????. ? ???? ?? ???? ?????.
+**Q: Why is the design skill so opinionated?**
+A: Because default AI output tends toward the same rounded-gradient look. The rules push for more intentional choices. Override whatever doesn't fit your taste.
 
-**Q: Cursor/Windsurf?? ??? ? ? ????**
-A: ??? ??? ???? ?????. ? ?? ?? ? ??? ???? ????.
+**Q: Does this work in Cursor/Windsurf?**
+A: Yes. The repo includes native config files for each. The core philosophy is the same across all tools.
