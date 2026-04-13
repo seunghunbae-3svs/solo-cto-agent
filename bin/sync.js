@@ -117,7 +117,7 @@ async function fetchRemoteAgentScores(org, orchRepo, token, dryRun) {
     }
 
     const agentCount = Object.keys(scores.agents || {}).length;
-    const repoCount = Object.keys(scores.repos || {}).length;
+    const repoCount = Object.keys(scores.by_repo || scores.repos || {}).length;
 
     return {
       success: true,
@@ -247,13 +247,25 @@ async function fetchVisualBaselines(org, orchRepo, token) {
 // Sync Error Patterns — dry-run by default, --apply to write
 // ============================================================================
 
+// failure-catalog uses "items" array (official schema).
+// Some older or remote copies may use "patterns". This helper normalizes both.
+function getCatalogItems(catalog) {
+  return catalog.items || catalog.patterns || [];
+}
+
+function setCatalogItems(catalog, items) {
+  if ("items" in catalog) { catalog.items = items; }
+  else if ("patterns" in catalog) { catalog.patterns = items; }
+  else { catalog.items = items; } // default to official schema
+}
+
 async function syncErrorPatterns(org, orchRepo, token, dryRun) {
   try {
     const localPath = path.join(SKILLS_DIR, "failure-catalog.json");
-    const localCatalog = readJsonFile(localPath, { patterns: [] });
+    const localCatalog = readJsonFile(localPath, { items: [] });
 
     // Try to fetch remote failure-catalog
-    let remoteCatalog = { patterns: [] };
+    let remoteCatalog = { items: [] };
     try {
       const response = await ghApi(
         `/repos/${org}/${orchRepo}/contents/ops/orchestrator/failure-catalog.json`,
@@ -267,24 +279,27 @@ async function syncErrorPatterns(org, orchRepo, token, dryRun) {
       // Remote file doesn't exist yet
     }
 
-    const localIds = new Set((localCatalog.patterns || []).map((p) => p.id));
-    const remoteIds = new Set((remoteCatalog.patterns || []).map((p) => p.id));
+    const localItems = getCatalogItems(localCatalog);
+    const remoteItems = getCatalogItems(remoteCatalog);
+
+    const localIds = new Set(localItems.map((p) => p.id));
+    const remoteIds = new Set(remoteItems.map((p) => p.id));
 
     // Find new patterns from remote
-    const newFromRemote = (remoteCatalog.patterns || []).filter((p) => !localIds.has(p.id));
+    const newFromRemote = remoteItems.filter((p) => !localIds.has(p.id));
 
     // Count local-only patterns
-    const newLocal = (localCatalog.patterns || []).filter((p) => !remoteIds.has(p.id)).length;
+    const newLocal = localItems.filter((p) => !remoteIds.has(p.id)).length;
 
     // Only write if --apply and there are new patterns
     if (!dryRun && newFromRemote.length > 0) {
-      localCatalog.patterns.push(...newFromRemote);
+      setCatalogItems(localCatalog, [...localItems, ...newFromRemote]);
       writeJsonFile(localPath, localCatalog);
     }
 
     return {
       success: true,
-      localPatternCount: localCatalog.patterns.length,
+      localPatternCount: localItems.length,
       newFromRemote: newFromRemote.length,
       newLocal,
       dryRun,

@@ -654,3 +654,6 @@ The review targets real issues (memory leaks, timezone bugs, floating-point mone
 
 **Q: What happens on Day 1 with no data?**
 A: Everything works — skills activate, build checks run, reviews trigger. The system starts empty and accumulates value over time. Agent scores begin tracking from the first PR. Error patterns grow as the failure catalog catches new issues. By session 10+ you will notice fewer repeated errors and more context-aware reviews.
+
+**Q: Does this make network calls automatically?**
+A: No. `status` reads only local files. `sync` is manual and opt-in — you run it explicitly when you want CI/CD data pulled from GitHub. Error pattern merging from `sync` is dry-run by default; use `sync --apply` to actually write changes. No background network activity, no telemetry.
