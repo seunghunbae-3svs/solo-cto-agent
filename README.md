@@ -152,6 +152,26 @@ Visual checks use Playwright for real browser screenshots (desktop 1280px + mobi
 
 When you run `setup-pipeline` or `setup-repo`, the CLI scans your project's `package.json` and file structure to detect required services (NextAuth, Supabase, Stripe, Prisma, Firebase, AWS, etc.). It then prints every secret needed and generates copy-paste `gh secret set` commands for one-shot setup. No more discovering missing secrets mid-deployment.
 
+### Local ↔ Remote Sync
+
+The `sync` command bridges the gap between your local skill files and remote CI/CD results:
+
+```bash
+GITHUB_TOKEN=ghp_xxx solo-cto-agent sync --org myorg --repos app1,app2
+```
+
+What it fetches and updates:
+
+| Data | Source | Local file |
+|---|---|---|
+| Agent scores | `ops/orchestrator/agent-scores.json` | `~/.claude/skills/solo-cto-agent/agent-scores-local.json` |
+| Workflow runs | GitHub Actions API | displayed in sync output |
+| PR reviews | Pull request review API | displayed in sync output |
+| Visual baselines | `ops/orchestrator/visual-baselines.json` | displayed in sync output |
+| Error patterns | Remote failure-catalog | merged into local `failure-catalog.json` |
+
+After syncing, `solo-cto-agent status` shows when data was last synced and how many agents are tracked locally.
+
 ### Agent Score Personalization (CTO tier)
 
 `agent-scores.json` auto-updates on every PR event, review, and CI run. Scores are tracked globally and per-repo (`by_repo`), so the routing engine learns which agent performs better on which project. History is kept for trend analysis, and feedback patterns from `repository_dispatch` events feed into personalization. Over time the system routes work to the best-performing agent for each repo.
@@ -179,28 +199,26 @@ Not CI/CD secrets (app-level only, set in your hosting dashboard separately): `V
 
 Three steps, under two minutes:
 
-1) Install the CLI (default preset: builder)
+1) Install with interactive wizard (recommended)
+```bash
+npx solo-cto-agent init --wizard
+```
+The wizard asks about your stack (framework, deploy target, database, etc.) and generates a configured `SKILL.md` automatically. No manual placeholder editing needed.
+
+Or install without wizard and edit manually:
 ```bash
 npx solo-cto-agent init --preset builder
+# Then open ~/.claude/skills/solo-cto-agent/SKILL.md and replace {{YOUR_*}} placeholders
 ```
 
-2) Configure your stack
-```text
-Open ~/.claude/skills/solo-cto-agent/SKILL.md
-Replace the {{YOUR_*}} placeholders
-```
-
-3) Verify
+2) Verify
 ```bash
 solo-cto-agent status
 ```
 
-Expected output looks like:
-```text
-solo-cto-agent status
-- SKILL.md: OK
-- failure-catalog.json: OK
-- error patterns: 8
+3) (Optional) Sync CI/CD data
+```bash
+GITHUB_TOKEN=ghp_xxx solo-cto-agent sync --org myorg
 ```
 
 Presets:
@@ -434,6 +452,10 @@ When skills grow past 150 lines, most of that weight is reference data the agent
 
 See [docs/skill-slimming.md](docs/skill-slimming.md) for the pattern, measured results, and how to apply it.
 
+## Feedback and personalization
+
+The system learns from CI/CD events automatically, but you can accelerate it with explicit feedback. See [docs/feedback-guide.md](docs/feedback-guide.md) for how to send feedback, what categories exist, and how the routing engine uses it.
+
 ## Design principles
 
 ### Agent does the work, user makes decisions
@@ -539,3 +561,33 @@ A: Because default AI output tends toward the same rounded-gradient look. The ru
 
 **Q: Does this work in Cursor/Windsurf?**
 A: Yes. The repo includes native config files for each. The core philosophy is the same across all tools.
+
+**Q: Why a separate orchestrator repo?**
+A: The orchestrator holds cross-repo logic (agent routing, score tracking, visual baselines, daily briefings) that doesn't belong in any single product repo. It dispatches workflows across your product repos and collects results centrally. If you only have one product repo, you can still use it — the separation keeps CI/CD config out of your application code.
+
+**Q: How much do the API calls cost?**
+A: Typical per-PR cost depends on your review depth. A Claude auto-review of a medium PR (under 500 lines changed) uses roughly 5K–15K input tokens and 1K–3K output tokens. At Anthropic's Sonnet pricing that is well under $0.10 per review. If you add Codex cross-review (CTO tier), add roughly $0.05–0.15 per review for the OpenAI side. A solo dev doing 2-3 PRs per day can stay comfortably under $5/month on Anthropic and $5/month on OpenAI. Visual checks (Playwright screenshots) use no API tokens — they run in GitHub Actions compute only.
+
+**Q: Can I use this without GitHub Actions?**
+A: The skills (init, build, review, craft, etc.) work independently of CI/CD. You can install them and use them in your editor without ever running setup-pipeline. The CI/CD automation is an optional layer on top.
+
+**Q: How do I keep local skill data in sync with CI/CD results?**
+A: Run `solo-cto-agent sync --org <your-org>`. This fetches agent scores, workflow results, PR reviews, and error patterns from your orchestrator repo via the GitHub API and updates your local skill files. Run it periodically or after significant CI activity.
+
+**Q: What does a real review look like?**
+A: Here is a trimmed example from a production PR review:
+
+```
+[claude-review] PR #42 — Add group-buying countdown timer
+  ⚠️ CHANGES_REQUESTED
+  - Missing error boundary around countdown component
+  - useEffect cleanup not handling unmount (memory leak risk)
+  - Hardcoded timezone offset — use Intl.DateTimeFormat instead
+  - Price calculation should use Decimal, not float
+  ✅ Good: proper loading states, accessible aria-labels
+```
+
+The review targets real issues (memory leaks, timezone bugs, floating-point money) rather than style nits.
+
+**Q: What happens on Day 1 with no data?**
+A: Everything works — skills activate, build checks run, reviews trigger. The system starts empty and accumulates value over time. Agent scores begin tracking from the first PR. Error patterns grow as the failure catalog catches new issues. By session 10+ you will notice fewer repeated errors and more context-aware reviews.

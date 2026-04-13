@@ -6,6 +6,9 @@ const os = require("os");
 const https = require("https");
 const { execSync } = require("child_process");
 
+const { syncCommand } = require("./sync");
+const { runWizard, hasWizardFlag } = require("./wizard");
+
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CATALOG = path.join(ROOT, "failure-catalog.json");
 const SKILLS_ROOT = path.join(ROOT, "skills");
@@ -26,20 +29,22 @@ function printHelp() {
   console.log(`solo-cto-agent — Dual-Agent CI/CD Orchestrator
 
 Usage:
-  solo-cto-agent init [--force] [--preset maker|builder|cto]
+  solo-cto-agent init [--force] [--preset maker|builder|cto] [--wizard]
   solo-cto-agent setup-pipeline --org <github-org> [--tier builder|cto] [--repos <repo1,repo2,...>]
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent upgrade --org <github-org> [--repos <repo1,repo2,...>]
-  solo-cto-agent status
+  solo-cto-agent sync --org <github-org> [--repos <repo1,repo2,...>]
+  solo-cto-agent status [--org <github-org>]
   solo-cto-agent lint [path]
   solo-cto-agent --help
 
 Commands:
-  init              Install skills to ~/.claude/skills/
+  init              Install skills to ~/.claude/skills/ (add --wizard for interactive setup)
   setup-pipeline    Full pipeline setup: create orchestrator repo + install workflows to product repos
   setup-repo        Install dual-agent workflows to a single product repo
   upgrade           Upgrade Builder (Lv4) → CTO (Lv5+6): add multi-agent workflows + config
-  status            Check skill health, error catalog, and pipeline status
+  sync              Fetch CI/CD results from GitHub and update local skill files
+  status            Check skill health, error catalog, pipeline status, and latest CI data
   lint              Check skill files for size and structure issues
 
 Presets / Tiers:
@@ -48,11 +53,13 @@ Presets / Tiers:
   cto         Lv5+6 — Builder + Orchestrate + UI/UX quality gate + analytics + Telegram
 
 Examples:
-  npx solo-cto-agent init --preset builder        # install skills (default)
+  npx solo-cto-agent init --wizard                 # interactive setup (recommended)
+  npx solo-cto-agent init --preset builder         # install skills (default)
   npx solo-cto-agent init --preset cto             # install all skills
   npx solo-cto-agent setup-pipeline --org myorg    # deploy Lv4 pipeline
   npx solo-cto-agent setup-pipeline --org myorg --tier cto --repos app1,app2,app3
   npx solo-cto-agent setup-repo ./my-project --org myorg
+  npx solo-cto-agent sync --org myorg --repos app1,app2   # fetch CI/CD data
 `);
 }
 
@@ -828,32 +835,73 @@ async function statusCommand() {
   const targetDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
   const skillPath = path.join(targetDir, "SKILL.md");
   const catalogPath = path.join(targetDir, "failure-catalog.json");
+  const syncStatusPath = path.join(targetDir, "sync-status.json");
+  const agentScoresPath = path.join(targetDir, "agent-scores-local.json");
 
   const skillOk = fs.existsSync(skillPath);
   const catalogOk = fs.existsSync(catalogPath);
   const count = catalogOk ? readCatalogCount(catalogPath) : 0;
 
+  // Check if wizard was used (configured SKILL.md has table format)
+  let wizardConfigured = false;
+  if (skillOk) {
+    try {
+      const content = fs.readFileSync(skillPath, "utf8");
+      wizardConfigured = content.includes("| Item | Value |") || !content.includes("{{YOUR_");
+    } catch {}
+  }
+
   // Check orchestrator
   const orchDir = path.resolve("{{ORCHESTRATOR_REPO}}");
   const orchExists = fs.existsSync(orchDir);
-  const orchWorkflows = orchExists
-    ? fs.readdirSync(path.join(orchDir, ".github", "workflows")).filter(f => f.endsWith(".yml")).length
-    : 0;
+  let orchWorkflows = 0;
+  try {
+    if (orchExists) orchWorkflows = fs.readdirSync(path.join(orchDir, ".github", "workflows")).filter(f => f.endsWith(".yml")).length;
+  } catch {}
 
   // Detect tier
   const hasUiux = orchExists && fs.existsSync(path.join(orchDir, ".github", "workflows", "uiux-quality-gate.yml"));
 
+  // Check sync status
+  let syncStatus = null;
+  try {
+    if (fs.existsSync(syncStatusPath)) {
+      syncStatus = JSON.parse(fs.readFileSync(syncStatusPath, "utf8"));
+    }
+  } catch {}
+
+  // Check local agent scores
+  let agentCount = 0;
+  try {
+    if (fs.existsSync(agentScoresPath)) {
+      const scores = JSON.parse(fs.readFileSync(agentScoresPath, "utf8"));
+      agentCount = Object.keys(scores.agents || {}).length;
+    }
+  } catch {}
+
+  console.log("");
   console.log("solo-cto-agent status");
   console.log("─────────────────────");
-  console.log(`  Skills:        ${skillOk ? "✅ installed" : "❌ not found"}`);
+  console.log(`  Skills:        ${skillOk ? (wizardConfigured ? "✅ configured" : "⚠️  installed (run init --wizard to configure)") : "❌ not found"}`);
   console.log(`  Error catalog: ${catalogOk ? `✅ ${count} patterns` : "❌ not found"}`);
   console.log(`  Orchestrator:  ${orchExists ? `✅ ${orchWorkflows} workflows` : "❌ not found"}`);
-  console.log(`  Tier:          ${orchExists ? (hasUiux ? "Pro (Lv5+6)" : "Base (Lv4)") : "N/A"}`);
+  console.log(`  Tier:          ${orchExists ? (hasUiux ? "CTO (Lv5+6)" : "Builder (Lv4)") : "N/A"}`);
+
+  // Sync info
+  if (syncStatus) {
+    const syncAge = Math.round((Date.now() - new Date(syncStatus.lastSync).getTime()) / 60000);
+    const syncLabel = syncAge < 60 ? `${syncAge}m ago` : syncAge < 1440 ? `${Math.round(syncAge / 60)}h ago` : `${Math.round(syncAge / 1440)}d ago`;
+    console.log(`  Last sync:     ${syncLabel} (${syncStatus.lastSync})`);
+    if (agentCount > 0) console.log(`  Agent scores:  ${agentCount} agents tracked locally`);
+  } else {
+    console.log(`  Last sync:     never (run: solo-cto-agent sync --org <org>)`);
+  }
 
   const repo = process.env.GITHUB_REPOSITORY;
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   const ci = await getLatestCiStatus(repo, token);
   console.log(`  Last CI:       ${ci.status} (${ci.conclusion})`);
+  console.log("");
 }
 
 // ─── lint ───────────────────────────────────────────────────
@@ -1071,6 +1119,13 @@ async function main() {
   if (cmd === "init") {
     const presetIndex = args.indexOf("--preset");
     const preset = presetIndex >= 0 ? args[presetIndex + 1] : DEFAULT_PRESET;
+    // Run wizard if --wizard or -w flag
+    if (hasWizardFlag(args)) {
+      const targetDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
+      initCommand(force, preset);
+      await runWizard(process.cwd(), force);
+      return;
+    }
     initCommand(force, preset);
     return;
   }
@@ -1112,6 +1167,24 @@ async function main() {
     const orchIndex = args.indexOf("--orchestrator-name");
     const orchName = orchIndex >= 0 ? args[orchIndex + 1] : null;
     upgradeCommand(org, repos, orchName);
+    return;
+  }
+
+  if (cmd === "sync") {
+    const orgIndex = args.indexOf("--org");
+    const org = orgIndex >= 0 ? args[orgIndex + 1] : null;
+    const reposIndex = args.indexOf("--repos");
+    const repos = reposIndex >= 0 ? args[reposIndex + 1] : null;
+    const orchIndex = args.indexOf("--orchestrator-name");
+    const orchName = orchIndex >= 0 ? args[orchIndex + 1] : "dual-agent-orchestrator";
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.ORCHESTRATOR_PAT;
+    if (!org) {
+      console.error("❌ --org is required.");
+      console.error("   Usage: solo-cto-agent sync --org <github-org> [--repos repo1,repo2]");
+      process.exit(1);
+    }
+    const repoList = repos ? repos.split(",").map(r => r.trim()) : [];
+    await syncCommand(org, orchName, token, repoList);
     return;
   }
 
