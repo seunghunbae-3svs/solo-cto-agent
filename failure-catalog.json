@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "updated_at": "2026-04-13",
+  "items": [
+    {
+      "id": "ERR-001",
+      "category": "build",
+      "pattern": "Module not found",
+      "description": "Import path missing or dependency not installed.",
+      "fix": "Verify file path or install missing dependency."
+    },
+    {
+      "id": "ERR-002",
+      "category": "build",
+      "pattern": "prisma generate did not create",
+      "description": "Prisma client not generated or output path mismatched.",
+      "fix": "Run prisma generate and confirm output path."
+    },
+    {
+      "id": "ERR-003",
+      "category": "build",
+      "pattern": "@apply unknown utility",
+      "description": "Tailwind config mismatch or wrong version syntax.",
+      "fix": "Verify Tailwind version and update @apply usage."
+    },
+    {
+      "id": "ERR-004",
+      "category": "deploy",
+      "pattern": "Build completed in 14ms",
+      "description": "Wrong root directory or build command skipped real build.",
+      "fix": "Check project root and build command configuration."
+    },
+    {
+      "id": "ERR-005",
+      "category": "deploy",
+      "pattern": "No output directory found",
+      "description": "Build output directory not produced or misconfigured.",
+      "fix": "Confirm framework preset and output directory."
+    },
+    {
+      "id": "ERR-006",
+      "category": "runtime",
+      "pattern": "NEXTAUTH_URL is not set",
+      "description": "Auth runtime missing required environment variable.",
+      "fix": "Set NEXTAUTH_URL and redeploy."
+    },
+    {
+      "id": "ERR-007",
+      "category": "runtime",
+      "pattern": "PrismaClientInitializationError",
+      "description": "DB connection or schema mismatch at runtime.",
+      "fix": "Verify DATABASE_URL and schema compatibility."
+    },
+    {
+      "id": "ERR-008",
+      "category": "runtime",
+      "pattern": "Cannot find module '/var/task'",
+      "description": "Serverless packaging missing build artifacts.",
+      "fix": "Ensure build output is included in deployment."
+    }
+  ]
+}

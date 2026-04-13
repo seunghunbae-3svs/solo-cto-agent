@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+* added package.json and basic test tooling
+* added failure-catalog.json and schema validation
+* added CI test workflow for PRs
+* added ROADMAP.md
+
 ## 0.3.0
 
 * added .cursorrules for Cursor IDE support
