@@ -128,11 +128,18 @@ npx solo-cto-agent init --wizard
 # Prompts: Choose mode → [1] codex-main  [2] cowork-main
 ```
 
-### cowork-main — Semi-Automatic Workflow
+### cowork-main — Desktop-Native AI CTO
 
-`cowork-main` is the local-first mode for solo devs who want CTO-grade tooling without depending on GitHub Actions, webhooks, or stable connectivity.
+`cowork-main` runs **inside Claude Cowork** as a self-contained AI CTO. The Claude agent loop itself is the automation engine — no CI, no webhooks required. Works in two patterns:
 
-**Default posture:** automation OFF. Every remote operation is opt-in.
+- **Solo** — Claude Cowork alone (only `ANTHROPIC_API_KEY`)
+- **Dual** — Claude Cowork + Codex cross-review (adds `OPENAI_API_KEY`, auto-detected)
+
+Three preset tiers (Maker / Builder / CTO) scale scope from guided workflows to full multi-agent judgment.
+
+> **Full guide:** [`docs/cowork-main-install.md`](docs/cowork-main-install.md) — install, daily workflow, personalization, env vars, troubleshooting.
+
+**Default posture:** remote side-effects OFF. In-session agent automation ON. Every remote operation (`sync --apply`, PR push) is opt-in.
 
 | Command | Behavior |
 |---|---|
