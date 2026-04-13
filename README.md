@@ -91,21 +91,37 @@ solo-cto-agent/
     └── context.md
 ```
 
-## Two Modes
+## Two Modes — Twin Offerings, One Agent
 
-The CLI supports two workflow modes. Pick during `init --wizard`:
+`codex-main` 과 `cowork-main` 은 같은 에이전트의 두 얼굴이다.
+판정 기준, 출력 포맷, 코드 리뷰 체크리스트, Circuit Breaker 정책은 **양쪽 모드에서 동일하다.**
+차이는 단 하나 — **언제 실행되느냐.**
 
-| | codex-main | cowork-main |
+| | **codex-main** (자동) | **cowork-main** (반자동) |
 |---|---|---|
-| **Primary tool** | GitHub Actions + Codex | Claude Code / Cowork Desktop |
-| **Automation** | Full — webhooks, auto-rework, auto-score | Manual — `sync`, `local-review`, `knowledge` |
-| **CI/CD pipeline** | Required (setup-pipeline) | Optional |
-| **Network dependency** | Needs stable GitHub API access | Works offline, sync when convenient |
-| **Best for** | Teams with CI/CD infra, power users | Solo devs, unstable connections, local-first |
-| **Error patterns** | Auto-collected from CI failures | Manual sync with `--apply` flag |
-| **Agent scores** | Auto-updated per PR event | Synced on demand |
+| **포지션** | 풀 자동 CI/CD 파이프라인 | 로컬 우선, 수동 sync |
+| **실행 위치** | GitHub Actions | Claude Code / Cowork Desktop / 로컬 CLI |
+| **트리거** | webhook, repository_dispatch | 사용자가 직접 호출 |
+| **네트워크 의존** | 안정적 GitHub API 필수 | 오프라인 동작 가능, 편할 때 sync |
+| **가장 적합** | CI/CD 인프라 있는 팀, 파워 유저 | 솔로 파운더, 불안정 연결, 로컬 우선 |
+| **에러 패턴** | CI 실패에서 자동 수집 | `sync --apply` 로 수동 머지 |
+| **Agent scores** | PR 이벤트마다 자동 업데이트 | 필요할 때 sync |
 
-Both modes use the same skills and tiers. The difference is whether automation runs automatically (codex-main) or on-demand (cowork-main).
+**공통 (twin parity):**
+
+| 항목 | 양쪽 동일 |
+|---|---|
+| 에이전트 정체성 | CTO 급 co-founder. 어시스턴트 아님. |
+| 판정 분류 | `APPROVE` / `REQUEST_CHANGES` / `COMMENT` (한글: 승인/수정요청/보류) |
+| 심각도 | `BLOCKER` ⛔ / `SUGGESTION` ⚠️ / `NIT` 💡 |
+| 팩트 태깅 | `[확정]` / `[추정]` / `[미검증]` |
+| 임베드 컨텍스트 | Ship-Zero Protocol + Project Dev Guide + 코딩 규칙 |
+| 리뷰 체크리스트 | 10항목 (import, Prisma, NextAuth, Supabase, TS, 에러, 보안, 배포, Next 버전, Tailwind 버전) |
+| Circuit Breaker | 3회 재시도, rate-limit 30s/60s/90s 백오프 |
+| 출력 포맷 | `[VERDICT]` / `[ISSUES]` / `[SUMMARY]` / `[NEXT ACTION]` |
+
+> 표준 명세: `skills/_shared/agent-spec.md`
+> 임베드 컨텍스트: `skills/_shared/skill-context.md`
 
 ```bash
 npx solo-cto-agent init --wizard
