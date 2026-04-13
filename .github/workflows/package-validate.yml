@@ -21,4 +21,5 @@ jobs:
         run: |
           chmod +x setup.sh
           export CLAUDE_DIR="$RUNNER_TEMP/claude"
-          bash setup.sh --install
+          # setup.sh requires --org (see setup.sh:46-52). Pass placeholder for CI.
+          bash setup.sh --org ci-validate --tier builder
