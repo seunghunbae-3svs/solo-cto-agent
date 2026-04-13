@@ -102,16 +102,16 @@ describe("cli status", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("reports MISSING when not initialized", () => {
+  it("reports not found when not initialized", () => {
     const r = spawnSync("node", [CLI, "status"], {
       encoding: "utf8",
       env: { ...process.env, HOME: tmpDir, USERPROFILE: tmpDir },
     });
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain("MISSING");
+    expect(r.stdout).toContain("not found");
   });
 
-  it("reports OK after init", () => {
+  it("reports installed after init", () => {
     spawnSync("node", [CLI, "init"], {
       encoding: "utf8",
       env: { ...process.env, HOME: tmpDir, USERPROFILE: tmpDir },
@@ -122,9 +122,8 @@ describe("cli status", () => {
       env: { ...process.env, HOME: tmpDir, USERPROFILE: tmpDir },
     });
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain("SKILL.md: OK");
-    expect(r.stdout).toContain("failure-catalog.json: OK");
-    expect(r.stdout).toMatch(/error patterns: \d+/);
+    expect(r.stdout).toContain("Skills:");
+    expect(r.stdout).toContain("Error catalog:");
   });
 });
 

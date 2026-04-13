@@ -32,26 +32,26 @@ export async function sendMessage(text: string, parseMode: 'HTML' | 'Markdown' =
 }
 
 export function formatBuildSuccess(repo: string, branch: string, url?: string): string {
-  return `✅ <b>Build Success</b>\n📦 ${repo} / ${branch}${url ? `\n🔗 ${url}` : ''}`
+  return `Build Success\n${repo} / ${branch}${url ? `\nLink: ${url}` : ''}`
 }
 
 export function formatBuildFailure(repo: string, branch: string, error?: string): string {
-  return `❌ <b>Build Failed</b>\n📦 ${repo} / ${branch}${error ? `\n⚠️ ${error}` : ''}`
+  return `Build Failed\n${repo} / ${branch}${error ? `\nError: ${error}` : ''}`
 }
 
 export function formatCircuitOpen(agent: string, repo: string, failures: number): string {
-  return `🔴 <b>Circuit Breaker OPEN</b>\n🤖 ${agent} blocked on ${repo}\n💥 ${failures} consecutive failures\n⏳ Cooldown: 30 min`
+  return `Circuit Breaker OPEN\n${agent} blocked on ${repo}\n${failures} consecutive failures\nCooldown: 30 min`
 }
 
 export function formatCrossReview(fromAgent: string, toAgent: string, repo: string, prNumber: number): string {
-  return `🔄 <b>Cross-Review Assigned</b>\n📦 ${repo} PR #${prNumber}\n🤖 ${fromAgent} → ${toAgent} review`
+  return `Cross-Review Assigned\n${repo} PR #${prNumber}\n${fromAgent} to ${toAgent} review`
 }
 
 export function formatDailySummary(stats: { claude: { total: number; rate: number; circuit: boolean }; codex: { total: number; rate: number; circuit: boolean } }): string {
   return [
-    `📊 <b>Daily Agent Summary</b>`,
+    `Daily Agent Summary`,
     ``,
-    `🟣 Claude: ${stats.claude.total} tasks, ${(stats.claude.rate * 100).toFixed(0)}% success${stats.claude.circuit ? ' 🔴 BLOCKED' : ' 🟢'}`,
-    `🟠 Codex: ${stats.codex.total} tasks, ${(stats.codex.rate * 100).toFixed(0)}% success${stats.codex.circuit ? ' 🔴 BLOCKED' : ' 🟢'}`,
+    `Claude: ${stats.claude.total} tasks, ${(stats.claude.rate * 100).toFixed(0)}% success${stats.claude.circuit ? ' [BLOCKED]' : ' [OK]'}`,
+    `Codex: ${stats.codex.total} tasks, ${(stats.codex.rate * 100).toFixed(0)}% success${stats.codex.circuit ? ' [BLOCKED]' : ' [OK]'}`,
   ].join('\n')
-        }
+}

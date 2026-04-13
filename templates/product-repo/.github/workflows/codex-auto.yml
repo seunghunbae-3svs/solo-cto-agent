@@ -38,7 +38,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: '🤖 **Codex** assigned to this issue.\n\nOrchestrator notified. Codex will create a branch and submit a PR.',
+              body: '**Codex** assigned to this issue.\n\nOrchestrator notified. Codex will create a branch and submit a PR.',
             });
 
       - name: Send Telegram notification
@@ -52,8 +52,8 @@ jobs:
           URL="${{ github.event.issue.html_url }}"
 
           MSG="[${REPO}] agent-codex assigned
-          Issue: #${ISSUE} — ${TITLE}
-          ${URL}"
+Issue #${ISSUE}: ${TITLE}
+${URL}"
 
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \

@@ -33,7 +33,7 @@ async function telegram(text) {
 }
 
 async function main() {
-  let msg = `📊 6시간 정기 리포트\n${'━'.repeat(20)}\n\n`;
+  let msg = `6-hour status report\n${'━'.repeat(20)}\n\n`;
   
   let totalPRs = 0;
   let blockers = 0;
@@ -41,42 +41,42 @@ async function main() {
 
   for (const [key, repoName] of Object.entries(PROJECTS)) {
     const prs = await gh(`/repos/${OWNER}/${repoName}/pulls?state=open&per_page=10`);
-    if (!prs) { msg += `⚪ ${repoName}: 접근 불가\n\n`; continue; }
+    if (!prs) { msg += `${repoName}: unavailable\n\n`; continue; }
 
     const claudePRs = prs.filter(p => p.head.ref.includes('claude'));
     const codexPRs = prs.filter(p => p.head.ref.includes('codex'));
     totalPRs += prs.length;
 
-    msg += `${prs.length > 0 ? '🟢' : '⚪'} ${repoName}\n`;
-    msg += `   Claude PR: ${claudePRs.length}개 | Codex PR: ${codexPRs.length}개\n`;
+    msg += `${repoName}\n`;
+    msg += `   Claude PR: ${claudePRs.length} | Codex PR: ${codexPRs.length}\n`;
 
     for (const pr of prs) {
       const comments = await gh(`/repos/${OWNER}/${repoName}/issues/${pr.number}/comments`);
-      const hasReview = comments?.some(c => c.body.includes('교차 리뷰'));
+      const hasReview = comments?.some(c => c.body.includes('cross-review'));
       const hasBlocker = comments?.some(c => c.body.toLowerCase().includes('blocker'));
       const hasFeedback = comments?.some(c => c.body.includes('human-feedback'));
 
       if (hasBlocker) { blockers++; needsAction.push(`${repoName} PR #${pr.number}: blocker`); }
-      
-      msg += `   └ #${pr.number} ${hasReview ? '✅리뷰됨' : '⏳리뷰대기'}`;
-      msg += `${hasBlocker ? ' 🔴blocker' : ''}`;
-      msg += `${hasFeedback ? ' 💬피드백' : ''}\n`;
+
+      msg += `   # ${pr.number} ${hasReview ? '[REVIEWED]' : '[PENDING]'}`;
+      msg += `${hasBlocker ? ' [BLOCKER]' : ''}`;
+      msg += `${hasFeedback ? ' [FEEDBACK]' : ''}\n`;
     }
     msg += '\n';
   }
 
   // Issues
   const issues = await gh(`/repos/${OWNER}/${ORCH_REPO}/issues?state=open&per_page=20`);
-  msg += `📋 관제 이슈: ${issues?.length || 0}개 open\n`;
-  msg += `📊 전체 PR: ${totalPRs}개 | Blocker: ${blockers}개\n`;
+  msg += `Orchestrator issues: ${issues?.length || 0} open\n`;
+  msg += `Total PR: ${totalPRs} | Blockers: ${blockers}\n`;
 
   if (needsAction.length > 0) {
-    msg += `\n⚠️ 조치 필요:\n`;
+    msg += `\nAction Required:\n`;
     for (const item of needsAction) msg += `• ${item}\n`;
   }
 
   if (totalPRs === 0) {
-    msg += `\n💤 활성 작업 없음`;
+    msg += `\nNo active work`;
   }
 
   await telegram(msg);
@@ -85,6 +85,6 @@ async function main() {
 
 main().catch(async (err) => {
   console.error(err);
-  await telegram(`❌ 상태 체크 실패: ${err.message}`).catch(() => {});
+  await telegram(`Status check failed: ${err.message}`).catch(() => {});
   process.exit(1);
 });

@@ -90,7 +90,7 @@ async function main() {
 
   const pr = await gh(`/repos/${PR_REPO}/pulls/${PR_NUMBER}`);
 
-  await telegram(`🔍 Claude 교차 리뷰 시작\n${PR_REPO} PR #${PR_NUMBER}\nCodex → Claude 리뷰`);
+  await telegram(`Claude cross-review starting\n${PR_REPO} PR #${PR_NUMBER}\nCodex to Claude review`);
 
   const review = await claude(`당신은 Claude, the team's senior 개발자입니다. Codex가 만든 PR을 리뷰합니다.
 
@@ -102,37 +102,37 @@ PR BODY: ${(pr.body || '').substring(0, 2000)}
 DIFF:
 ${diff}
 
-리뷰를 한국어로 작성하세요:
-1. 각 이슈를 🔴 BLOCKER / 🟡 SUGGESTION / ⚪ NIT 으로 분류
+Please review in Korean:
+1. Categorize each issue as BLOCKER / SUGGESTION / NIT
 2. 파일별로 구체적 라인과 수정 제안
 3. 위 스킬 체크리스트 기준 통과 여부
 4. 전체 판정: APPROVE / REQUEST_CHANGES / COMMENT
 5. 배포 가능 여부 한 줄 판단`);
 
   await gh(`/repos/${PR_REPO}/issues/${PR_NUMBER}/comments`, 'POST', {
-    body: `## 🟣 Claude 교차 리뷰 (Automated + Skill-based)\n\n${review}\n\n---\n적용 기준: bae-ship-zero, tribo-dev-guide, coding-rules`,
+    body: `## Claude Cross-Review (Automated + Skill-based)\n\n${review}\n\n---\nApplied criteria: bae-ship-zero, tribo-dev-guide, coding-rules`,
   });
 
   const hasBlocker = review.includes('BLOCKER') || review.includes('blocker');
   const verdict = review.includes('APPROVE') && !hasBlocker ? 'APPROVE' : 'REQUEST_CHANGES';
 
   // Visual Telegram report
-  const report = `${hasBlocker ? '🔴' : '✅'} <b>Claude 교차 리뷰 완료</b>
+  const report = `${hasBlocker ? 'BLOCKED' : 'APPROVED'} Claude cross-review completed
 
-📦 ${PR_REPO}
-🔗 PR #${PR_NUMBER}: ${PR_TITLE}
+Package: ${PR_REPO}
+PR #${PR_NUMBER}: ${PR_TITLE}
 
-━━━ 판정 ━━━
-${verdict === 'APPROVE' ? '✅ 승인 가능' : '⚠️ 수정 필요'}
-Blocker: ${hasBlocker ? '있음' : '없음'}
+Verdict:
+${verdict === 'APPROVE' ? 'Ready to merge' : 'Needs revision'}
+Blocker: ${hasBlocker ? 'yes' : 'no'}
 
-━━━ 리뷰 요약 ━━━
+Review summary:
 ${review.substring(0, 500)}...
 
-━━━ 액션 ━━━
-${verdict === 'APPROVE' 
-  ? `"${PR_REPO.split('/')[1].split('-')[0]} 승인" → merge 진행`
-  : `Codex에 수정 지시 자동 전달됨\n또는 "${PR_REPO.split('/')[1].split('-')[0]} 피드백 [내용]"`}
+Next action:
+${verdict === 'APPROVE'
+  ? `Proceed with merge`
+  : `Codex notified for revision\nor provide feedback`}
 
 ${pr.html_url}`;
 
@@ -148,6 +148,6 @@ ${pr.html_url}`;
 
 main().catch(async (err) => {
   console.error(err);
-  await telegram(`❌ Claude 리뷰 실패: ${err.message}`).catch(() => {});
+  await telegram(`Claude review failed: ${err.message}`).catch(() => {});
   process.exit(1);
 });

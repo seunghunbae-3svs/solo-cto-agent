@@ -78,12 +78,12 @@ function getRecipients(settings) {
 async function getDecisionStatus(owner, repo, prNumber) {
   try {
     const reviews = await gh(`/repos/${owner}/${repo}/pulls/${prNumber}/reviews?per_page=20`);
-    if (reviews.some(r => r.state === 'CHANGES_REQUESTED')) return '🔴';
+    if (reviews.some(r => r.state === 'CHANGES_REQUESTED')) return '[CHANGES_REQUESTED]';
     if (reviews.some(r => r.state === 'APPROVED')) return '✅';
   } catch {
     // ignore review fetch issues
   }
-  return '🕒';
+  return '[PENDING]';
 }
 
 async function gh(endpoint) {
@@ -115,7 +115,7 @@ async function sendTelegram(chatId, text) {
 
 async function buildBriefing(locale, perProjectLimit = 2) {
   const today = new Date().toISOString().slice(0, 10);
-  let msg = L(locale, `📌 Daily briefing (${today})\n\n`, `📌 데일리 브리핑 (${today})\n\n`);
+  let msg = L(locale, `Daily briefing (${today})\n\n`, `데일리 브리핑 (${today})\n\n`);
 
   const agentStats = {
     codex: { open: 0, openAgeSum: 0, merged: 0, mergeTimeSum: 0 },
@@ -132,10 +132,9 @@ async function buildBriefing(locale, perProjectLimit = 2) {
     const proj = PROJECTS[i];
     try {
       const prs = await gh(`/repos/${GITHUB_OWNER}/${proj.repo}/pulls?state=open&per_page=10`);
-      const icon = prs.length > 0 ? '🟡' : '🟢';
       msg += L(locale,
-        `${i + 1}) ${icon} <b>${proj.repo}</b> PRs ${prs.length}\n`,
-        `${i + 1}) ${icon} <b>${proj.repo}</b> PR ${prs.length}\n`
+        `${i + 1}) <b>${proj.repo}</b> PRs ${prs.length}\n`,
+        `${i + 1}) <b>${proj.repo}</b> PR ${prs.length}\n`
       );
 
     for (const pr of prs.slice(0, perProjectLimit)) {
@@ -143,7 +142,7 @@ async function buildBriefing(locale, perProjectLimit = 2) {
         const ageMs = now - new Date(pr.created_at).getTime();
         const age = formatAge(ageMs);
         const decision = await getDecisionStatus(GITHUB_OWNER, proj.repo, pr.number);
-        if (decision === '🔴' || decision === '🕒') decisionPending += 1;
+        if (decision === '[CHANGES_REQUESTED]' || decision === '[PENDING]') decisionPending += 1;
         agentStats[agent].open += 1;
         agentStats[agent].openAgeSum += ageMs;
         msg += `   - #${pr.number} (${agent}, ${age}, ${decision}) ${pr.title.slice(0, 48)}\n`;
@@ -172,15 +171,15 @@ async function buildBriefing(locale, perProjectLimit = 2) {
       }
     } catch {
       msg += L(locale,
-        `${i + 1}) 🔴 <b>${proj.repo}</b> fetch failed\n`,
-        `${i + 1}) 🔴 <b>${proj.repo}</b> 조회 실패\n`
+        `${i + 1}) <b>${proj.repo}</b> fetch failed\n`,
+        `${i + 1}) <b>${proj.repo}</b> 조회 실패\n`
       );
     }
   }
 
   msg += L(locale,
-    `\n🤖 Agent summary (open/avg age | merged 24h/avg lead time)\n`,
-    `\n🤖 에이전트 요약 (open/avg age | merged 24h/avg lead time)\n`
+    `\nAgent summary (open/avg age | merged 24h/avg lead time)\n`,
+    `\n에이전트 요약 (open/avg age | merged 24h/avg lead time)\n`
   );
   for (const agent of AGENTS) {
     const stat = agentStats[agent];
@@ -205,20 +204,20 @@ async function buildBriefing(locale, perProjectLimit = 2) {
   }
   if (compareSection) {
     msg += L(locale,
-      `\n📈 Comparison reports (last 24h)\n${compareSection}`,
-      `\n📈 비교 리포트 (최근 24h)\n${compareSection}`
+      `\nComparison reports (last 24h)\n${compareSection}`,
+      `\n비교 리포트 (최근 24h)\n${compareSection}`
     );
   }
 
   msg += L(locale,
-    `\n🧭 Decisions pending: ${decisionPending} (🔴 blocker/🕒 pending)`,
-    `\n🧭 결정 대기: ${decisionPending}건 (🔴 blocker/🕒 pending 기준)`
+    `\nDecisions pending: ${decisionPending}`,
+    `\n결정 대기: ${decisionPending}건`
   );
   if (decisionItems.length) {
     const urgent = decisionItems
       .map(item => ({
         ...item,
-        urgent: item.decision === '🔴' || (item.decision === '🕒' && item.ageMs >= 24 * 60 * 60 * 1000),
+        urgent: item.decision === '[CHANGES_REQUESTED]' || (item.decision === '[PENDING]' && item.ageMs >= 24 * 60 * 60 * 1000),
       }))
       .filter(item => item.decision !== '✅')
       .sort((a, b) => {
@@ -229,8 +228,8 @@ async function buildBriefing(locale, perProjectLimit = 2) {
 
     if (urgent.length) {
       msg += L(locale,
-        `\n🚨 Decision priority (Top 3)\n`,
-        `\n🚨 결정 우선순위 (Top 3)\n`
+        `\nDecision priority (Top 3)\n`,
+        `\n결정 우선순위 (Top 3)\n`
       );
       for (const item of urgent) {
         const age = formatAge(item.ageMs);
@@ -242,8 +241,8 @@ async function buildBriefing(locale, perProjectLimit = 2) {
 
   const issues = await gh(`/repos/${GITHUB_OWNER}/${ORCH_REPO}/issues?state=open&per_page=20`);
   msg += L(locale,
-    `\n🧩 Orchestrator issues: ${issues.length} open`,
-    `\n🧩 오케스트레이터 이슈: ${issues.length} open`
+    `\nOrchestrator issues: ${issues.length} open`,
+    `\n오케스트레이터 이슈: ${issues.length} open`
   );
   msg += L(locale,
     `\nCommand: "project 1 status" or /review tribo`,

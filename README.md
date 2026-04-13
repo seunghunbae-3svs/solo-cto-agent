@@ -91,6 +91,27 @@ solo-cto-agent/
     └── context.md
 ```
 
+## Two Modes
+
+The CLI supports two workflow modes. Pick during `init --wizard`:
+
+| | codex-main | cowork-main |
+|---|---|---|
+| **Primary tool** | GitHub Actions + Codex | Claude Code / Cowork Desktop |
+| **Automation** | Full — webhooks, auto-rework, auto-score | Manual — `sync`, `local-review`, `knowledge` |
+| **CI/CD pipeline** | Required (setup-pipeline) | Optional |
+| **Network dependency** | Needs stable GitHub API access | Works offline, sync when convenient |
+| **Best for** | Teams with CI/CD infra, power users | Solo devs, unstable connections, local-first |
+| **Error patterns** | Auto-collected from CI failures | Manual sync with `--apply` flag |
+| **Agent scores** | Auto-updated per PR event | Synced on demand |
+
+Both modes use the same skills and tiers. The difference is whether automation runs automatically (codex-main) or on-demand (cowork-main).
+
+```bash
+npx solo-cto-agent init --wizard
+# Prompts: Choose mode → [1] codex-main  [2] cowork-main
+```
+
 ## Tiers
 
 Two tiers, one CLI. Pick what fits your workflow.
@@ -152,6 +173,88 @@ Visual checks use Playwright for real browser screenshots (desktop 1280px + mobi
 
 When you run `setup-pipeline` or `setup-repo`, the CLI scans your project's `package.json` and file structure to detect required services (NextAuth, Supabase, Stripe, Prisma, Firebase, AWS, etc.). It then prints every secret needed and generates copy-paste `gh secret set` commands for one-shot setup. No more discovering missing secrets mid-deployment.
 
+### Local Code Review (No CI/CD Required)
+
+Run a Claude-powered code review directly from your terminal, no GitHub Actions needed:
+
+```bash
+# Review last commit
+ANTHROPIC_API_KEY=sk-xxx solo-cto-agent review
+
+# Review a branch diff (dry-run: see the prompt without calling API)
+solo-cto-agent review --diff main..feature --dry-run
+
+# Review specific directory
+solo-cto-agent review --path ./src --diff HEAD~3
+```
+
+The review checks your diff against the local failure catalog (known error patterns), then sends it to Claude for security, performance, correctness, and style analysis. Results are saved as markdown reports in `~/.claude/skills/solo-cto-agent/reviews/`. This is the same review quality as the CI/CD pipeline, but runs entirely locally — useful for private repos, offline work, or pre-push checks.
+
+### Knowledge Articles
+
+After CI/CD data accumulates (via `sync`), generate synthesized knowledge articles:
+
+```bash
+solo-cto-agent learn
+```
+
+This scans your failure catalog, agent scores, and sync history, then generates markdown articles grouped by category (deploy failures, database patterns, auth issues, etc.) at `~/.claude/skills/solo-cto-agent/knowledge/`. The articles include pattern frequencies, prevention checklists, and agent performance notes — making the accumulated data immediately useful to your AI agent.
+
+### Local Code Review (Both tiers)
+
+Run multi-agent code review locally without GitHub Actions:
+
+```bash
+# Claude review of staged changes
+ANTHROPIC_API_KEY=sk-xxx solo-cto-agent review --diff staged
+
+# Dual-agent review (Claude + GPT) of branch diff
+ANTHROPIC_API_KEY=sk-xxx OPENAI_API_KEY=sk-xxx solo-cto-agent review --diff branch
+
+# Output as markdown file
+solo-cto-agent review --diff staged --output markdown --file review.md
+```
+
+Works completely offline from CI/CD. Claude reviews the diff first. If an OpenAI key is also set, GPT provides a second opinion and the tool cross-compares both reviews — highlighting agreed issues (high confidence) vs. divergent findings. New error patterns found during review are automatically added to the local failure catalog.
+
+### Knowledge Article Generation (Both tiers)
+
+Auto-generates durable knowledge articles from accumulated session memory:
+
+```bash
+# Dry-run: show which articles would be generated
+solo-cto-agent knowledge
+
+# Generate articles
+solo-cto-agent knowledge --apply
+```
+
+Scans `memory/episodes/`, `CONTEXT_LOG.md`, and `error-patterns.md` for topics that appear 3+ times. When a recurring pattern is detected, it generates a structured knowledge article at `memory/knowledge/{topic}.md` and updates the index. This is the Layer 2 → Layer 3 compression that the memory skill describes but previously required manual effort.
+
+### Local ↔ Remote Sync
+
+The `sync` command bridges the gap between your local skill files and remote CI/CD results. It runs in dry-run mode by default — fetches and displays data without modifying local files. Add `--apply` to merge remote data into local:
+
+```bash
+# Dry-run: fetch + display only (safe, no local changes)
+GITHUB_TOKEN=ghp_xxx solo-cto-agent sync --org myorg --repos app1,app2
+
+# Apply: merge remote error patterns + update local agent scores
+GITHUB_TOKEN=ghp_xxx solo-cto-agent sync --org myorg --repos app1,app2 --apply
+```
+
+What it fetches and updates (with `--apply`):
+
+| Data | Source | Local file |
+|---|---|---|
+| Agent scores | `ops/orchestrator/agent-scores.json` | `~/.claude/skills/solo-cto-agent/agent-scores-local.json` |
+| Workflow runs | GitHub Actions API | displayed in sync output |
+| PR reviews | Pull request review API | displayed in sync output |
+| Visual baselines | `ops/orchestrator/visual-baselines.json` | displayed in sync output |
+| Error patterns | Remote failure-catalog | merged into local `failure-catalog.json` |
+
+After syncing, `solo-cto-agent status` shows when data was last synced and how many agents are tracked locally.
+
 ### Agent Score Personalization (CTO tier)
 
 `agent-scores.json` auto-updates on every PR event, review, and CI run. Scores are tracked globally and per-repo (`by_repo`), so the routing engine learns which agent performs better on which project. History is kept for trend analysis, and feedback patterns from `repository_dispatch` events feed into personalization. Over time the system routes work to the best-performing agent for each repo.
@@ -179,28 +282,27 @@ Not CI/CD secrets (app-level only, set in your hosting dashboard separately): `V
 
 Three steps, under two minutes:
 
-1) Install the CLI (default preset: builder)
+1) Install with interactive wizard (recommended)
+```bash
+npx solo-cto-agent init --wizard
+```
+The wizard asks about your stack (framework, deploy target, database, etc.) and generates a configured `SKILL.md` automatically. No manual placeholder editing needed.
+
+Or install without wizard and edit manually:
 ```bash
 npx solo-cto-agent init --preset builder
+# Then open ~/.claude/skills/solo-cto-agent/SKILL.md and replace {{YOUR_*}} placeholders
 ```
 
-2) Configure your stack
-```text
-Open ~/.claude/skills/solo-cto-agent/SKILL.md
-Replace the {{YOUR_*}} placeholders
-```
-
-3) Verify
+2) Verify
 ```bash
 solo-cto-agent status
 ```
 
-Expected output looks like:
-```text
-solo-cto-agent status
-- SKILL.md: OK
-- failure-catalog.json: OK
-- error patterns: 8
+3) (Optional) Sync CI/CD data
+```bash
+GITHUB_TOKEN=ghp_xxx solo-cto-agent sync --org myorg           # preview (dry-run)
+GITHUB_TOKEN=ghp_xxx solo-cto-agent sync --org myorg --apply   # merge remote → local
 ```
 
 Presets:
@@ -228,6 +330,57 @@ bash setup.sh --org myorg --tier cto --repos myapp1,myapp2
 ## Demo
 
 ![CLI demo](docs/demo.svg)
+
+## Cowork Working Model
+
+The system supports two working models depending on your API keys and workflow preference.
+
+### Mode A: Cowork Solo (Claude only)
+
+Everything runs locally via the Anthropic API. No GitHub Actions required.
+
+```text
+You write code
+  → solo-cto-agent review          # Claude reviews your staged changes
+  → solo-cto-agent knowledge       # extracts decisions into knowledge articles
+  → solo-cto-agent sync --org X    # fetches remote CI data (dry-run by default)
+  → git push                       # GitHub Actions (if set up) handles the rest
+```
+
+Requirements: `ANTHROPIC_API_KEY` only. This mode is ideal for Cowork Desktop users who want local review + memory without CI/CD infrastructure.
+
+What you get locally without CI/CD: code review, error pattern matching against failure catalog, session decision capture, knowledge article generation. What requires CI/CD: cross-repo dispatch, automated rework cycles, visual regression, agent score tracking.
+
+### Mode B: Cowork + Codex Dual
+
+Both Claude and OpenAI review your code independently, then the system cross-compares.
+
+```text
+You write code
+  → solo-cto-agent review          # auto-detects both keys, runs dual review
+  → Claude reviews                 # via Anthropic API
+  → OpenAI reviews                 # via OpenAI API
+  → Cross-comparison report        # agreements, disagreements, final verdict
+```
+
+Requirements: `ANTHROPIC_API_KEY` + `OPENAI_API_KEY`. Use `--solo` flag to force Claude-only mode even when both keys are set.
+
+The dual mode surfaces issues that one agent misses — Claude tends to catch architectural concerns while OpenAI tends to catch implementation bugs. Disagreements between agents are the most valuable signal.
+
+### Semi-Automatic Sync
+
+The `sync` command solves the local↔remote gap without requiring webhooks:
+
+```text
+Local (Cowork)                         Remote (GitHub Actions)
+─────────────────                      ──────────────────────
+failure-catalog.json  ← sync --apply → failure-catalog.json
+agent-scores-local.json  ← sync ────→ agent-scores.json
+reviews/ (local)         ← sync ────→ workflow runs, PR reviews
+knowledge/               (local only)  (no remote equivalent)
+```
+
+Sync is read-only by default (`dry-run`). Add `--apply` to merge remote error patterns into local. This is intentional — automatic merging without review is risky.
 
 ## Architecture
 
@@ -434,6 +587,10 @@ When skills grow past 150 lines, most of that weight is reference data the agent
 
 See [docs/skill-slimming.md](docs/skill-slimming.md) for the pattern, measured results, and how to apply it.
 
+## Feedback and personalization
+
+The system learns from CI/CD events automatically, but you can accelerate it with explicit feedback. See [docs/feedback-guide.md](docs/feedback-guide.md) for how to send feedback, what categories exist, and how the routing engine uses it.
+
 ## Design principles
 
 ### Agent does the work, user makes decisions
@@ -539,3 +696,36 @@ A: Because default AI output tends toward the same rounded-gradient look. The ru
 
 **Q: Does this work in Cursor/Windsurf?**
 A: Yes. The repo includes native config files for each. The core philosophy is the same across all tools.
+
+**Q: Why a separate orchestrator repo?**
+A: The orchestrator holds cross-repo logic (agent routing, score tracking, visual baselines, daily briefings) that doesn't belong in any single product repo. It dispatches workflows across your product repos and collects results centrally. If you only have one product repo, you can still use it — the separation keeps CI/CD config out of your application code.
+
+**Q: How much do the API calls cost?**
+A: Typical per-PR cost depends on your review depth. A Claude auto-review of a medium PR (under 500 lines changed) uses roughly 5K–15K input tokens and 1K–3K output tokens. At Anthropic's Sonnet pricing that is well under $0.10 per review. If you add Codex cross-review (CTO tier), add roughly $0.05–0.15 per review for the OpenAI side. A solo dev doing 2-3 PRs per day can stay comfortably under $5/month on Anthropic and $5/month on OpenAI. Visual checks (Playwright screenshots) use no API tokens — they run in GitHub Actions compute only.
+
+**Q: Can I use this without GitHub Actions?**
+A: The skills (init, build, review, craft, etc.) work independently of CI/CD. You can install them and use them in your editor without ever running setup-pipeline. The CI/CD automation is an optional layer on top.
+
+**Q: How do I keep local skill data in sync with CI/CD results?**
+A: Run `solo-cto-agent sync --org <your-org>`. This fetches agent scores, workflow results, PR reviews, and error patterns from your orchestrator repo via the GitHub API. By default it runs in dry-run mode (display only). Add `--apply` to merge remote data into local files. This way you always preview what will change before any local files are modified.
+
+**Q: What does a real review look like?**
+A: Here is a trimmed example from a production PR review:
+
+```
+[claude-review] PR #42 — Add group-buying countdown timer
+  ⚠️ CHANGES_REQUESTED
+  - Missing error boundary around countdown component
+  - useEffect cleanup not handling unmount (memory leak risk)
+  - Hardcoded timezone offset — use Intl.DateTimeFormat instead
+  - Price calculation should use Decimal, not float
+  ✅ Good: proper loading states, accessible aria-labels
+```
+
+The review targets real issues (memory leaks, timezone bugs, floating-point money) rather than style nits.
+
+**Q: What happens on Day 1 with no data?**
+A: Everything works — skills activate, build checks run, reviews trigger. The system starts empty and accumulates value over time. Agent scores begin tracking from the first PR. Error patterns grow as the failure catalog catches new issues. By session 10+ you will notice fewer repeated errors and more context-aware reviews.
+
+**Q: Does this make network calls automatically?**
+A: No. `status` reads only local files. `sync` is manual and opt-in — you run it explicitly when you want CI/CD data pulled from GitHub. Error pattern merging from `sync` is dry-run by default; use `sync --apply` to actually write changes. No background network activity, no telemetry.

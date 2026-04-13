@@ -192,7 +192,7 @@ async function main() {
     return;
   }
 
-  await telegram(`🤖 Codex Worker 시작\n\nIssue #${ISSUE_NUMBER}: ${ISSUE_TITLE}\nRepo: ${repoName}`);
+  await telegram(`Codex Worker started\n\nIssue #${ISSUE_NUMBER}: ${ISSUE_TITLE}\nRepo: ${repoName}`);
 
   // 1. Read repo files
   console.log(`Reading ${repoName}...`);
@@ -280,7 +280,7 @@ RULES:
   const changedCount = Object.keys(changes).length;
 
   if (changedCount === 0) {
-    await telegram(`✅ Codex Worker 완료: ${repoName}\n\n변경 필요 없음.\n분석: ${result.analysis}`);
+    await telegram(`Codex Worker completed: ${repoName}\n\nNo changes needed.\nAnalysis: ${result.analysis}`);
     return;
   }
 
@@ -301,7 +301,7 @@ RULES:
   const diffLines = Object.keys(changes).map(f => `• ${f}`).join('\n');
   const previewUrl = await findPreviewUrl(repoName, pr);
   const previewLine = previewUrl || 'Preview pending';
-  const report = `🟠 Codex 작업 완료\n\n📦 ${repoName}\n🔗 PR #${pr.number}: ${prTitle}\n\n━━━ 변경 내용 ━━━\n${diffLines}\n\n━━━ 분석 ━━━\n${result.analysis || '(없음)'}\n\n📊 위험도: ${result.risk_level} | 신뢰도: ${result.confidence}/100\n🔎 Preview: ${previewLine}\n\n━━━ 다음 단계 ━━━\nClaude 교차 리뷰 자동 진행\n\n${pr.html_url}`;
+  const report = `Codex completed\n\nPackage: ${repoName}\nPR #${pr.number}: ${prTitle}\n\nChanges:\n${diffLines}\n\nAnalysis:\n${result.analysis || '(none)'}\n\nRisk: ${result.risk_level} | Confidence: ${result.confidence}/100\nPreview: ${previewLine}\n\nNext step:\nClaude cross-review in progress\n\n${pr.html_url}`;
   await telegram(report);
   if (previewUrl) {
     try { await telegramPhoto(previewScreenshotUrl(previewUrl), `${repoName} preview`); } catch {}
@@ -314,6 +314,6 @@ RULES:
 
 main().catch(async (err) => {
   console.error(err);
-  await telegram(`❌ Codex Worker 실패: ${err.message}`).catch(() => {});
+  await telegram(`Codex Worker failed: ${err.message}`).catch(() => {});
   process.exit(1);
 });

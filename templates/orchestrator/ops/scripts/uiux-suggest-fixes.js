@@ -26,7 +26,7 @@ async function generateFixSuggestions(
   codeContext
 ) {
   console.log(
-    `\n💡 [Stage 4] Auto-Improvement Suggestions for ${owner}/${repo}#${prNumber}\n`
+    `\n[Stage 4] Auto-Improvement Suggestions for ${owner}/${repo}#${prNumber}\n`
   );
 
   try {
@@ -42,7 +42,7 @@ async function generateFixSuggestions(
 
     // Generate fixes for each file
     for (const [file, fileIssues] of Object.entries(issuesByFile)) {
-      console.log(`\n📝 Generating fixes for ${file}...`);
+      console.log(`\nGenerating fixes for ${file}...`);
 
       const fixPrompt = `You are a frontend expert. Generate specific fix suggestions for these UI/UX issues:
 
@@ -140,7 +140,7 @@ function groupIssuesByFile(issues) {
 }
 
 function displayFixSuggestions(suggestions) {
-  console.log("\n\n📋 FIX SUGGESTIONS SUMMARY\n");
+  console.log("\n\nFIX SUGGESTIONS SUMMARY\n");
 
   const autoFixable = suggestions.filter((s) => s.isAutoFixable).length;
   const manual = suggestions.length - autoFixable;
@@ -150,11 +150,11 @@ function displayFixSuggestions(suggestions) {
   console.log(`  Manual review needed: ${manual}\n`);
 
   suggestions.forEach((suggestion, idx) => {
-    const icon = suggestion.isAutoFixable ? "✅" : "📝";
-    const severity = suggestion.severity === "critical" ? "🔴" : "🟡";
+    const icon = suggestion.isAutoFixable ? "[AUTO]" : "[MANUAL]";
+    const severityLabel = suggestion.severity === "critical" ? "CRITICAL" : "WARNING";
 
     console.log(`\n${idx + 1}. ${icon} ${suggestion.issueTitle}`);
-    console.log(`   ${severity} ${suggestion.severity}`);
+    console.log(`   ${severityLabel} ${suggestion.severity}`);
     console.log(`   File: ${suggestion.file}`);
     console.log(`   Root Cause: ${suggestion.rootCause}`);
 
@@ -234,7 +234,7 @@ async function postFixSuggestionComments(
               commit_id: commitId,
               path: suggestion.file,
               line,
-              body: `🔴 **CRITICAL: ${suggestion.issueTitle}**\n\n${suggestion.fixCode || suggestion.explanation}`,
+              body: `CRITICAL: ${suggestion.issueTitle}\n\n${suggestion.fixCode || suggestion.explanation}`,
             });
           }
         }
@@ -255,10 +255,10 @@ async function postFixSuggestionComments(
 function generateFixSummaryComment(critical, warnings, allSuggestions) {
   const sections = [];
 
-  sections.push("## 💡 Suggested UI/UX Improvements\n");
+  sections.push("## Suggested UI/UX Improvements\n");
 
   if (critical.length > 0) {
-    sections.push(`### 🔴 Critical Fixes (${critical.length})\n`);
+    sections.push(`### Critical Fixes (${critical.length})\n`);
     critical.forEach((fix) => {
       sections.push(
         `**${fix.issueTitle}**\n\`\`\`\n${fix.fixCode}\n\`\`\`\n${fix.explanation}\n`
@@ -267,7 +267,7 @@ function generateFixSummaryComment(critical, warnings, allSuggestions) {
   }
 
   if (warnings.length > 0) {
-    sections.push(`\n### 🟡 Recommended Improvements (${warnings.length})\n`);
+    sections.push(`\n### Recommended Improvements (${warnings.length})\n`);
     warnings.forEach((fix) => {
       sections.push(`- **${fix.issueTitle}**: ${fix.explanation}`);
     });
@@ -276,7 +276,7 @@ function generateFixSummaryComment(critical, warnings, allSuggestions) {
   const autoFixable = allSuggestions.filter((s) => s.isAutoFixable).length;
   if (autoFixable > 0) {
     sections.push(
-      `\n> 💡 **Tip:** ${autoFixable} of these fixes can be auto-applied. Ask maintainer to run \`npm run fix-uiux\`.`
+      `\n> **Tip:** ${autoFixable} of these fixes can be auto-applied. Ask maintainer to run \`npm run fix-uiux\`.`
     );
   }
 

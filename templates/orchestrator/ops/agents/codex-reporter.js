@@ -4,23 +4,23 @@
 async function sendVisualReport(telegram, telegramPhoto, repoName, pr, result) {
   const diffLines = Object.keys(result.changes || {}).map(f => `• ${f}`).join('\n');
   
-  const report = `🟠 <b>Codex 작업 완료</b>
+  const report = `Codex completed
 
-📦 <b>${repoName}</b>
-🔗 PR #${pr.number}: ${pr.title}
+Package: <b>${repoName}</b>
+PR #${pr.number}: ${pr.title}
 
-━━━ 변경 내용 ━━━
+Changes:
 ${diffLines}
 
-━━━ 분석 ━━━
-${result.analysis || '(없음)'}
+Analysis:
+${result.analysis || '(none)'}
 
-📊 위험도: ${result.risk_level || '?'} | 신뢰도: ${result.confidence || '?'}/100
+Risk: ${result.risk_level || '?'} | Confidence: ${result.confidence || '?'}/100
 
-━━━ 다음 단계 ━━━
-Claude 교차 리뷰 자동 진행 중
-"${repoName.split('-')[0]} 승인" → merge
-"${repoName.split('-')[0]} 피드백 [내용]" → 수정 지시
+Next steps:
+Claude cross-review in progress
+Approval → merge
+Feedback → revision
 
 ${pr.html_url}`;
 

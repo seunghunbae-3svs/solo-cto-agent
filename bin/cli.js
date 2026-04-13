@@ -6,6 +6,10 @@ const os = require("os");
 const https = require("https");
 const { execSync } = require("child_process");
 
+const { syncCommand } = require("./sync");
+const { runWizard, hasWizardFlag } = require("./wizard");
+const { localReview, knowledgeCapture, dualReview, detectMode } = require("./cowork-engine");
+
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CATALOG = path.join(ROOT, "failure-catalog.json");
 const SKILLS_ROOT = path.join(ROOT, "skills");
@@ -26,20 +30,28 @@ function printHelp() {
   console.log(`solo-cto-agent — Dual-Agent CI/CD Orchestrator
 
 Usage:
-  solo-cto-agent init [--force] [--preset maker|builder|cto]
+  solo-cto-agent init [--force] [--preset maker|builder|cto] [--wizard]
   solo-cto-agent setup-pipeline --org <github-org> [--tier builder|cto] [--repos <repo1,repo2,...>]
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent upgrade --org <github-org> [--repos <repo1,repo2,...>]
+  solo-cto-agent sync --org <github-org> [--apply] [--repos <repo1,repo2,...>]
+  solo-cto-agent review [--staged|--branch|--file <path>] [--dry-run] [--solo]
+  solo-cto-agent dual-review [--staged|--branch]
+  solo-cto-agent knowledge [--session|--file <path>|--manual] [--project <tag>]
   solo-cto-agent status
   solo-cto-agent lint [path]
   solo-cto-agent --help
 
 Commands:
-  init              Install skills to ~/.claude/skills/
+  init              Install skills to ~/.claude/skills/ (add --wizard for interactive setup)
   setup-pipeline    Full pipeline setup: create orchestrator repo + install workflows to product repos
   setup-repo        Install dual-agent workflows to a single product repo
   upgrade           Upgrade Builder (Lv4) → CTO (Lv5+6): add multi-agent workflows + config
-  status            Check skill health, error catalog, and pipeline status
+  sync              Fetch CI/CD results from GitHub (dry-run by default, --apply to write)
+  review            Local code review via Claude API (auto-detects dual mode if both keys set)
+  dual-review       Explicit dual-agent cross-review (Claude + OpenAI)
+  knowledge         Extract session decisions into knowledge articles via Claude API
+  status            Check skill health, error catalog, sync status (local only, no network)
   lint              Check skill files for size and structure issues
 
 Presets / Tiers:
@@ -48,11 +60,19 @@ Presets / Tiers:
   cto         Lv5+6 — Builder + Orchestrate + UI/UX quality gate + analytics + Telegram
 
 Examples:
-  npx solo-cto-agent init --preset builder        # install skills (default)
+  npx solo-cto-agent init --wizard                 # interactive setup (recommended)
+  npx solo-cto-agent init --preset builder         # install skills (default)
   npx solo-cto-agent init --preset cto             # install all skills
   npx solo-cto-agent setup-pipeline --org myorg    # deploy Lv4 pipeline
   npx solo-cto-agent setup-pipeline --org myorg --tier cto --repos app1,app2,app3
   npx solo-cto-agent setup-repo ./my-project --org myorg
+  npx solo-cto-agent sync --org myorg --repos app1,app2   # dry-run: fetch + display
+  npx solo-cto-agent sync --org myorg --apply              # apply: merge remote data into local
+  npx solo-cto-agent review                                # Claude review of staged changes
+  npx solo-cto-agent review --branch                       # review branch diff vs main
+  npx solo-cto-agent dual-review                           # Claude + OpenAI cross-review
+  npx solo-cto-agent knowledge                             # extract decisions from recent commits
+  npx solo-cto-agent knowledge --project tribo             # tag with project name
 `);
 }
 
@@ -794,66 +814,83 @@ function countFiles(dir) {
   return count;
 }
 
-function getLatestCiStatus(repo, token) {
-  return new Promise((resolve) => {
-    if (!repo || !token) {
-      resolve({ status: "unavailable", conclusion: "missing token or repo" });
-      return;
-    }
-    const options = {
-      hostname: "api.github.com",
-      path: `/repos/${repo}/actions/runs?per_page=1`,
-      headers: {
-        "User-Agent": "solo-cto-agent",
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-      },
-    };
-    https.get(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          const json = JSON.parse(data);
-          const run = json.workflow_runs && json.workflow_runs[0];
-          if (!run) return resolve({ status: "unavailable", conclusion: "no runs" });
-          resolve({ status: run.status || "unknown", conclusion: run.conclusion || "unknown" });
-        } catch { resolve({ status: "unavailable", conclusion: "parse error" }); }
-      });
-    }).on("error", () => resolve({ status: "unavailable", conclusion: "request failed" }));
-  });
-}
+// status is now pure-local — no network calls. Use `sync` to fetch remote data.
 
-async function statusCommand() {
+function statusCommand() {
   const targetDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
   const skillPath = path.join(targetDir, "SKILL.md");
   const catalogPath = path.join(targetDir, "failure-catalog.json");
+  const syncStatusPath = path.join(targetDir, "sync-status.json");
+  const agentScoresPath = path.join(targetDir, "agent-scores-local.json");
 
   const skillOk = fs.existsSync(skillPath);
   const catalogOk = fs.existsSync(catalogPath);
   const count = catalogOk ? readCatalogCount(catalogPath) : 0;
 
+  // Check if wizard was used (configured SKILL.md has table format)
+  let wizardConfigured = false;
+  if (skillOk) {
+    try {
+      const content = fs.readFileSync(skillPath, "utf8");
+      wizardConfigured = content.includes("| Item | Value |") || !content.includes("{{YOUR_");
+    } catch {}
+  }
+
   // Check orchestrator
   const orchDir = path.resolve("{{ORCHESTRATOR_REPO}}");
   const orchExists = fs.existsSync(orchDir);
-  const orchWorkflows = orchExists
-    ? fs.readdirSync(path.join(orchDir, ".github", "workflows")).filter(f => f.endsWith(".yml")).length
-    : 0;
+  let orchWorkflows = 0;
+  try {
+    if (orchExists) orchWorkflows = fs.readdirSync(path.join(orchDir, ".github", "workflows")).filter(f => f.endsWith(".yml")).length;
+  } catch {}
 
   // Detect tier
   const hasUiux = orchExists && fs.existsSync(path.join(orchDir, ".github", "workflows", "uiux-quality-gate.yml"));
 
+  // Check sync status
+  let syncStatus = null;
+  try {
+    if (fs.existsSync(syncStatusPath)) {
+      syncStatus = JSON.parse(fs.readFileSync(syncStatusPath, "utf8"));
+    }
+  } catch {}
+
+  // Check local agent scores
+  let agentCount = 0;
+  try {
+    if (fs.existsSync(agentScoresPath)) {
+      const scores = JSON.parse(fs.readFileSync(agentScoresPath, "utf8"));
+      agentCount = Object.keys(scores.agents || {}).length;
+    }
+  } catch {}
+
+  console.log("");
   console.log("solo-cto-agent status");
   console.log("─────────────────────");
-  console.log(`  Skills:        ${skillOk ? "✅ installed" : "❌ not found"}`);
+  console.log(`  Skills:        ${skillOk ? (wizardConfigured ? "✅ configured" : "⚠️  installed (run init --wizard to configure)") : "❌ not found"}`);
   console.log(`  Error catalog: ${catalogOk ? `✅ ${count} patterns` : "❌ not found"}`);
   console.log(`  Orchestrator:  ${orchExists ? `✅ ${orchWorkflows} workflows` : "❌ not found"}`);
-  console.log(`  Tier:          ${orchExists ? (hasUiux ? "Pro (Lv5+6)" : "Base (Lv4)") : "N/A"}`);
+  console.log(`  Tier:          ${orchExists ? (hasUiux ? "CTO (Lv5+6)" : "Builder (Lv4)") : "N/A"}`);
 
-  const repo = process.env.GITHUB_REPOSITORY;
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  const ci = await getLatestCiStatus(repo, token);
-  console.log(`  Last CI:       ${ci.status} (${ci.conclusion})`);
+  // Sync info
+  if (syncStatus) {
+    const syncAge = Math.round((Date.now() - new Date(syncStatus.lastSync).getTime()) / 60000);
+    const syncLabel = syncAge < 60 ? `${syncAge}m ago` : syncAge < 1440 ? `${Math.round(syncAge / 60)}h ago` : `${Math.round(syncAge / 1440)}d ago`;
+    console.log(`  Last sync:     ${syncLabel} (${syncStatus.lastSync})`);
+    if (agentCount > 0) console.log(`  Agent scores:  ${agentCount} agents tracked locally`);
+  } else {
+    console.log(`  Last sync:     never (run: solo-cto-agent sync --org <org>)`);
+  }
+
+  // CI status from local sync cache only — no network calls
+  if (syncStatus && syncStatus.summary) {
+    const s = syncStatus.summary;
+    const ciLabel = s.workflowRuns === "ok" ? "✅ data available (from last sync)" : "⚠️  no data (run sync first)";
+    console.log(`  CI data:       ${ciLabel}`);
+  } else {
+    console.log(`  CI data:       no data (run: solo-cto-agent sync --org <org>)`);
+  }
+  console.log("");
 }
 
 // ─── lint ───────────────────────────────────────────────────
@@ -1071,6 +1108,13 @@ async function main() {
   if (cmd === "init") {
     const presetIndex = args.indexOf("--preset");
     const preset = presetIndex >= 0 ? args[presetIndex + 1] : DEFAULT_PRESET;
+    // Run wizard if --wizard or -w flag
+    if (hasWizardFlag(args)) {
+      const targetDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
+      initCommand(force, preset);
+      await runWizard(process.cwd(), force);
+      return;
+    }
     initCommand(force, preset);
     return;
   }
@@ -1115,8 +1159,75 @@ async function main() {
     return;
   }
 
+  if (cmd === "sync") {
+    const orgIndex = args.indexOf("--org");
+    const org = orgIndex >= 0 ? args[orgIndex + 1] : null;
+    const reposIndex = args.indexOf("--repos");
+    const repos = reposIndex >= 0 ? args[reposIndex + 1] : null;
+    const orchIndex = args.indexOf("--orchestrator-name");
+    const orchName = orchIndex >= 0 ? args[orchIndex + 1] : "dual-agent-orchestrator";
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.ORCHESTRATOR_PAT;
+    if (!org) {
+      console.error("❌ --org is required.");
+      console.error("   Usage: solo-cto-agent sync --org <github-org> [--repos repo1,repo2]");
+      process.exit(1);
+    }
+    const repoList = repos ? repos.split(",").map(r => r.trim()) : [];
+    const apply = args.includes("--apply");
+    await syncCommand(org, orchName, token, repoList, apply);
+    return;
+  }
+
+  if (cmd === "review") {
+    const mode = detectMode();
+    if (mode === "none") {
+      console.error("❌ ANTHROPIC_API_KEY required for local review.");
+      console.error("   export ANTHROPIC_API_KEY=sk-ant-...");
+      process.exit(1);
+    }
+    const diffSource = args.includes("--branch") ? "branch" : args.includes("--file") ? "file" : "staged";
+    const fileIndex = args.indexOf("--file");
+    const target = fileIndex >= 0 ? args[fileIndex + 1] : null;
+    const dryRun = args.includes("--dry-run");
+    const outputFormat = args.includes("--json") ? "json" : args.includes("--markdown") ? "markdown" : "terminal";
+
+    if (mode === "dual" && !args.includes("--solo")) {
+      console.log("  Both API keys detected. Running dual review (Claude + OpenAI).");
+      console.log("  Use --solo to force Claude-only mode.\n");
+      await dualReview({ diffSource, target });
+    } else {
+      await localReview({ diffSource, target, dryRun, outputFormat });
+    }
+    return;
+  }
+
+  if (cmd === "dual-review") {
+    if (!process.env.ANTHROPIC_API_KEY || !process.env.OPENAI_API_KEY) {
+      console.error("❌ Both ANTHROPIC_API_KEY and OPENAI_API_KEY required for dual review.");
+      process.exit(1);
+    }
+    const diffSource = args.includes("--branch") ? "branch" : "staged";
+    await dualReview({ diffSource });
+    return;
+  }
+
+  if (cmd === "knowledge") {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error("❌ ANTHROPIC_API_KEY required for knowledge generation.");
+      process.exit(1);
+    }
+    const source = args.includes("--file") ? "file" : args.includes("--manual") ? "manual" : "session";
+    const fileIndex = args.indexOf("--file");
+    const inputIndex = args.indexOf("--input");
+    const projectIndex = args.indexOf("--project");
+    const input = fileIndex >= 0 ? args[fileIndex + 1] : inputIndex >= 0 ? args[inputIndex + 1] : null;
+    const projectTag = projectIndex >= 0 ? args[projectIndex + 1] : null;
+    await knowledgeCapture({ source, input, projectTag });
+    return;
+  }
+
   if (cmd === "status") {
-    await statusCommand();
+    statusCommand();
     return;
   }
 
