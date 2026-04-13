@@ -1,0 +1,136 @@
+{
+  "tiers": {
+    "base": {
+      "name": "Core Dual-Agent CI/CD",
+      "level": 4,
+      "description": "Core dual-agent orchestration with Claude + Codex automated CI/CD routing, cross-review workflows, comparison reports, and circuit breaker error detection.",
+      "orchestrator_workflows": [
+        "ci.yml",
+        "claude-auto.yml",
+        "codex-auto.yml",
+        "combined-pr.yml",
+        "comparison-report.yml",
+        "cross-review-dispatch.yml",
+        "cross-review.yml",
+        "ops-validate.yml",
+        "orchestrator-check.yml",
+        "preview-ready.yml",
+        "preview-summary.yml",
+        "rework-auto.yml",
+        "route-issue.yml"
+      ],
+      "ops_agents": ["*"],
+      "ops_scripts": [
+        "combined-pr.js",
+        "comparison-report.js",
+        "auto-diagnose.js",
+        "sync-preview-workflow.js",
+        "visual-check.js"
+      ],
+      "ops_libs": [
+        "build-verifier.js",
+        "circuit-breaker.js",
+        "repo-health-checker.js"
+      ],
+      "ops_orchestrator": [
+        "routing-engine.js",
+        "routing-policy.json",
+        "agent-scores.json",
+        "validate-orchestrator.js",
+        "update-agent-scores.js",
+        "meta-validation-policy.json",
+        "error-patterns.md",
+        "quality-log.md",
+        "skill-changelog.md",
+        "CHANGELOG.md",
+        "README.md",
+        "schemas/"
+      ],
+      "root_config": [
+        "package.json",
+        "vercel.json",
+        "tsconfig.json",
+        ".env.example",
+        ".gitignore",
+        "CLAUDE.md"
+      ],
+      "other": [
+        "api/",
+        ".claude/agents/",
+        ".codex/prompts/",
+        "lib/",
+        "docs/"
+      ]
+    },
+    "pro": {
+      "name": "UI/UX Cross-Verification + Analytics + Telegram",
+      "level": "5+6",
+      "description": "Extends base with 4-stage UI/UX quality gate (code review → visual review → cross-verification → auto-fix), daily briefings, decision tracking, agent scoring, and Telegram real-time notifications.",
+      "includes_base": true,
+      "additional_orchestrator_workflows": [
+        "uiux-quality-gate.yml",
+        "combined-pr-with-uiux.yml",
+        "visual-check.yml",
+        "agent-score-update.yml",
+        "auto-diagnose.yml",
+        "daily-briefing.yml",
+        "decision-insights.yml",
+        "decision-queue.yml",
+        "meta-report.yml",
+        "telegram-notify.yml",
+        "telegram-webhook-sync.yml"
+      ],
+      "ops_scripts": [
+        "uiux-code-review.js",
+        "uiux-visual-review.js",
+        "uiux-cross-verify.js",
+        "uiux-suggest-fixes.js",
+        "daily-briefing.js",
+        "decision-insights.js",
+        "decision-queue.js",
+        "meta-report.js"
+      ],
+      "ops_libs": [
+        "uiux-utils.js"
+      ],
+      "ops_config": [
+        "design-guidelines.json"
+      ],
+      "ops_orchestrator_extras": [
+        "telegram-settings.json",
+        "visual-baselines.json",
+        "decision-message.js",
+        "trigger-keywords.json"
+      ],
+      "ops_integrations": [
+        "telegram-commands.json"
+      ],
+      "ops_codex_extras": [
+        "codex-prompts.md"
+      ]
+    }
+  },
+  "product_repo_templates": {
+    "description": "Standard dual-agent workflows applied to all product repositories. Shared by both base and pro tiers.",
+    "workflows": [
+      "claude-auto.yml",
+      "codex-auto.yml",
+      "comparison-dispatch.yml",
+      "cross-review-dispatch.yml",
+      "cross-review.yml",
+      "preview-summary.yml",
+      "rework-dispatch.yml",
+      "telegram-notify.yml"
+    ],
+    "other": [
+      ".env.example",
+      ".github/ISSUE_TEMPLATE/dual-agent-task.md",
+      ".github/pull_request_template.md",
+      "STATE.md"
+    ]
+  },
+  "file_locations": {
+    "orchestrator_root": "templates/orchestrator/",
+    "product_repo": "templates/product-repo/"
+  }
+}

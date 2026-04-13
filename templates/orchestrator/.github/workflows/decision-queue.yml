@@ -1,0 +1,25 @@
+name: Decision Queue
+
+on:
+  schedule:
+    - cron: "10 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  decision-queue:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Send decision queue
+        env:
+          ORCHESTRATOR_PAT: ${{ secrets.ORCHESTRATOR_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DECISION_QUEUE_LIMIT: "3"
+        run: node ops/scripts/decision-queue.js

@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "default_locale": "en",
+  "default_settings": {
+    "report_mode": "6h",
+    "report_format": "compact",
+    "approval_mode": "buttons"
+  },
+  "chats": {}
+}

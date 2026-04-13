@@ -1,0 +1,37 @@
+name: ops-validate
+
+# Validates operational artifacts on every push/PR that touches ops/ or references/
+
+on:
+  push:
+    paths:
+      - "ops/**"
+      - "references/**"
+      - "assets/**"
+      - ".github/workflows/**"
+      - "SKILL.md"
+  pull_request:
+    paths:
+      - "ops/**"
+      - "references/**"
+      - "assets/**"
+      - ".github/workflows/**"
+      - "SKILL.md"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: ops
+        run: npm ci
+
+      - name: Run orchestrator validation
+        working-directory: ops
+        run: node orchestrator/validate-orchestrator.js

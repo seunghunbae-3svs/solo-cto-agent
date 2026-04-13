@@ -1,0 +1,94 @@
+name: Telegram Notify
+
+on:
+  pull_request:
+    types: [opened, closed, labeled]
+  pull_request_review:
+    types: [submitted]
+  check_suite:
+    types: [completed]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Detect agent from branch
+        id: ctx
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref || github.event.check_suite.head_branch || '' }}"
+          AGENT="unknown"
+          if [[ "$BRANCH" == *codex* ]]; then AGENT="codex"; fi
+          if [[ "$BRANCH" == *claude* ]]; then AGENT="claude"; fi
+          echo "agent=$AGENT" >> "$GITHUB_OUTPUT"
+
+          # Determine tier
+          EVENT="${{ github.event_name }}"
+          ACTION="${{ github.event.action }}"
+          CONCLUSION="${{ github.event.check_suite.conclusion || github.event.review.state || '' }}"
+          TIER="silent"
+          if [ "$EVENT" = "pull_request" ] && [ "$ACTION" = "opened" ]; then TIER="notify"; fi
+          if [ "$EVENT" = "pull_request" ] && [ "$ACTION" = "closed" ]; then TIER="decision"; fi
+          if [ "$EVENT" = "pull_request_review" ]; then TIER="notify"; fi
+          if [ "$EVENT" = "pull_request_review" ] && [ "$CONCLUSION" = "changes_requested" ]; then TIER="decision"; fi
+          if [ "$EVENT" = "check_suite" ] && [ "$CONCLUSION" = "failure" ]; then TIER="decision"; fi
+          echo "tier=$TIER" >> "$GITHUB_OUTPUT"
+
+      - name: Send Telegram notification
+        if: steps.ctx.outputs.tier != 'silent'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          EVENT="${{ github.event_name }}"
+          ACTION="${{ github.event.action }}"
+          REPO_FULL="${{ github.repository }}"
+          REPO="${REPO_FULL##*/}"
+          PR="${{ github.event.pull_request.number || '' }}"
+          AGENT="${{ steps.ctx.outputs.agent }}"
+          TIER="${{ steps.ctx.outputs.tier }}"
+          TITLE="${{ github.event.pull_request.title || '' }}"
+          URL="${{ github.event.pull_request.html_url || '' }}"
+          MARKUP=""
+
+          MSG="[$REPO] $EVENT/$ACTION
+          PR: #$PR — $TITLE
+          Agent: $AGENT
+          Tier: $TIER
+          $URL"
+
+          if [ "$TIER" = "decision" ]; then
+            MSG="$MSG
+
+          Reply: <repo> PR$PR APPROVE/REVISE/HOLD"
+            MARKUP=$(jq -n --arg repo "$REPO" --arg pr "$PR" '{inline_keyboard:[[{"text":"승인","callback_data":("DECISION|"+$repo+"|"+$pr+"|APPROVE")},{"text":"보류","callback_data":("DECISION|"+$repo+"|"+$pr+"|HOLD")},{"text":"기타의견","callback_data":("DECISION|"+$repo+"|"+$pr+"|FEEDBACK")}]]}')
+          fi
+
+          if [ -n "$MARKUP" ]; then
+            curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+              -d chat_id="$TELEGRAM_CHAT_ID" \
+              -d text="$MSG" \
+              -d parse_mode="Markdown" \
+              -d reply_markup="$MARKUP" || true
+          else
+            curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+              -d chat_id="$TELEGRAM_CHAT_ID" \
+              -d text="$MSG" \
+              -d parse_mode="Markdown" || true
+          fi
+
+      - name: Forward score event to orchestrator
+        if: steps.ctx.outputs.agent != 'unknown'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.ORCHESTRATOR_PAT }}
+          repository: seunghunbae-3svs/dual-agent-review-orchestrator
+          event-type: score-event
+          client-payload: |
+            {
+              "agent": "${{ steps.ctx.outputs.agent }}",
+              "event": "${{ github.event_name }}",
+              "action": "${{ github.event.action }}",
+              "repo": "${{ github.repository }}",
+              "issue": "${{ github.event.pull_request.number || '' }}",
+              "conclusion": "${{ github.event.check_suite.conclusion || github.event.review.state || '' }}"
+            }

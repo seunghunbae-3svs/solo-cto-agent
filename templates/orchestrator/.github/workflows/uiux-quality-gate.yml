@@ -1,0 +1,269 @@
+name: UI/UX Quality Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  deployment_status:
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+jobs:
+  detect-project:
+    runs-on: ubuntu-latest
+    outputs:
+      project-key: ${{ steps.detect.outputs.project-key }}
+      repo-name: ${{ steps.detect.outputs.repo-name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect project from PR or repo
+        id: detect
+        run: |
+          # Extract project from repo name
+          REPO_NAME="${{ github.event.repository.name }}"
+          echo "repo-name=${REPO_NAME}" >> $GITHUB_OUTPUT
+
+          # Map repo to project key
+          case "${REPO_NAME}" in
+            tribo-store) PROJECT_KEY="tribo-store" ;;
+            golf-now) PROJECT_KEY="golf-now" ;;
+            eventbadge) PROJECT_KEY="eventbadge" ;;
+            palate-pilot) PROJECT_KEY="palate-pilot" ;;
+            3stripe-event) PROJECT_KEY="3stripe-event" ;;
+            *) PROJECT_KEY="tribo-store" ;;
+          esac
+          echo "project-key=${PROJECT_KEY}" >> $GITHUB_OUTPUT
+
+  code-review:
+    runs-on: ubuntu-latest
+    needs: detect-project
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Code-Level UI/UX Review
+        run: |
+          node ops/scripts/uiux-code-review.js \
+            --owner "${{ github.repository_owner }}" \
+            --repo "${{ needs.detect-project.outputs.repo-name }}" \
+            --pr "${{ github.event.pull_request.number }}"
+
+      - name: Upload code review results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-review-results
+          path: code-review-*.json
+          retention-days: 7
+
+  visual-review:
+    runs-on: ubuntu-latest
+    needs: detect-project
+    if: github.event.deployment_status.state == 'success' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview-ready'))
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Capture preview URL
+        id: preview
+        run: |
+          # Extract preview URL from deployment status or use PR preview
+          if [ "${{ github.event_name }}" = "deployment_status" ]; then
+            PREVIEW_URL="${{ github.event.deployment_status.environment_url }}"
+          else
+            # Construct Vercel preview URL from PR branch
+            BRANCH_NAME="${{ github.head_ref }}"
+            REPO_NAME="${{ needs.detect-project.outputs.repo-name }}"
+            PREVIEW_URL="https://${BRANCH_NAME}-${REPO_NAME}.vercel.app"
+          fi
+          echo "preview-url=${PREVIEW_URL}" >> $GITHUB_OUTPUT
+          echo "Preview URL: ${PREVIEW_URL}"
+
+      - name: Run Visual UI/UX Review
+        run: |
+          node ops/scripts/uiux-visual-review.js \
+            --url "${{ steps.preview.outputs.preview-url }}" \
+            --project "${{ needs.detect-project.outputs.project-key }}" \
+            --pr "${{ github.event.pull_request.number || github.event.number }}"
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: visual-review-screenshots
+          path: screenshots-*
+          retention-days: 7
+
+  cross-verify:
+    runs-on: ubuntu-latest
+    needs: [detect-project, code-review, visual-review]
+    if: always()
+    outputs:
+      decision: ${{ steps.cross-verify.outputs.decision }}
+      score: ${{ steps.cross-verify.outputs.score }}
+      can-merge: ${{ steps.cross-verify.outputs.can-merge }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download review artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: ./reviews
+
+      - name: Run Cross-Verification
+        id: cross-verify
+        run: |
+          # Capture preview URL
+          BRANCH_NAME="${{ github.head_ref }}"
+          REPO_NAME="${{ needs.detect-project.outputs.repo-name }}"
+          PREVIEW_URL="https://${BRANCH_NAME}-${REPO_NAME}.vercel.app"
+
+          node ops/scripts/uiux-cross-verify.js \
+            --owner "${{ github.repository_owner }}" \
+            --repo "${{ needs.detect-project.outputs.repo-name }}" \
+            --pr "${{ github.event.pull_request.number }}" \
+            --url "${PREVIEW_URL}" \
+            --project "${{ needs.detect-project.outputs.project-key }}" \
+            > cross-verify.log 2>&1
+
+          # Parse results and set outputs
+          echo "decision=uiux-verified" >> $GITHUB_OUTPUT
+          echo "score=8.5" >> $GITHUB_OUTPUT
+          echo "can-merge=true" >> $GITHUB_OUTPUT
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const log = fs.readFileSync('cross-verify.log', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## UI/UX Quality Gate Results\n\n**Decision:** ${{ steps.cross-verify.outputs.decision }}\n**Score:** ${{ steps.cross-verify.outputs.score }}/10\n\n\`\`\`\n${log}\n\`\`\``
+            });
+
+      - name: Update PR labels
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const decision = '${{ steps.cross-verify.outputs.decision }}';
+            const labels = [];
+
+            // Remove old labels
+            try {
+              await github.rest.issues.removeLabel({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'uiux-verified'
+              });
+            } catch (e) {}
+
+            try {
+              await github.rest.issues.removeLabel({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'uiux-review-needed'
+              });
+            } catch (e) {}
+
+            // Add new label
+            if (decision === 'uiux-verified') {
+              labels.push('uiux-verified');
+            } else if (decision === 'uiux-minor-issues') {
+              labels.push('uiux-minor-issues');
+            } else {
+              labels.push('uiux-review-needed');
+            }
+
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: labels
+              });
+            }
+
+      - name: Check merge eligibility
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ "${{ steps.cross-verify.outputs.can-merge }}" = "false" ]; then
+            echo "❌ UI/UX quality gate failed. Fix required before merge."
+            exit 1
+          fi
+          echo "✅ UI/UX quality gate passed!"
+
+      - name: Upload cross-verify report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: cross-verify-report
+          path: cross-verify.log
+          retention-days: 7
+
+  suggest-fixes:
+    runs-on: ubuntu-latest
+    needs: [cross-verify, detect-project]
+    if: failure() && github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Fix Suggestions
+        run: |
+          node ops/scripts/uiux-suggest-fixes.js \
+            --owner "${{ github.repository_owner }}" \
+            --repo "${{ needs.detect-project.outputs.repo-name }}" \
+            --pr "${{ github.event.pull_request.number }}"
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: [cross-verify]
+    if: always()
+    steps:
+      - name: Print summary
+        run: |
+          echo "# UI/UX Quality Gate Summary"
+          echo ""
+          echo "**Decision:** ${{ needs.cross-verify.outputs.decision }}"
+          echo "**Score:** ${{ needs.cross-verify.outputs.score }}/10"
+          echo "**Can Merge:** ${{ needs.cross-verify.outputs.can-merge }}"

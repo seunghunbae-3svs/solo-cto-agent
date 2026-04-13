@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install validation deps
+        run: |
+          python3 -m pip install --quiet pyyaml || { echo "❌ pyyaml install failed"; exit 1; }
+          cd ops && npm ci
+
+      - name: Validate YAML
+        run: |
+          echo "Checking YAML files..."
+          failed=0
+          while IFS= read -r f; do
+            if python3 -c "import yaml; yaml.safe_load(open('$f'))"; then
+              echo "✅ $f"
+            else
+              echo "❌ $f"
+              failed=1
+            fi
+          done < <(find . -not -path '*/node_modules/*' \( -name '*.yml' -o -name '*.yaml' \))
+          if [ "$failed" -ne 0 ]; then exit 1; fi
+
+      - name: Validate JSON
+        run: |
+          echo "Checking JSON files..."
+          failed=0
+          while IFS= read -r f; do
+            if python3 -c "import json; json.load(open('$f'))"; then
+              echo "✅ $f"
+            else
+              echo "❌ $f"
+              failed=1
+            fi
+          done < <(find . -not -path '*/node_modules/*' -name '*.json')
+          if [ "$failed" -ne 0 ]; then exit 1; fi
+
+      - name: Check required docs exist
+        run: |
+          for f in docs/coding_rules.md docs/test_policy.md docs/product_requirements.md; do
+            [ -f "$f" ] && echo "✅ $f" || (echo "❌ Missing: $f" && exit 1)
+          done
+
+      - name: Validate orchestrator artifacts
+        working-directory: ops
+        run: npm run validate

@@ -1,0 +1,46 @@
+name: Agent Score Update
+
+on:
+  pull_request:
+    types: [opened, closed, labeled]
+  pull_request_review:
+    types: [submitted]
+  check_suite:
+    types: [completed]
+  repository_dispatch:
+    types: [score-event]
+  workflow_dispatch:
+
+concurrency:
+  group: agent-scores-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Update agent scores
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
+        run: node ops/orchestrator/update-agent-scores.js
+
+      - name: Commit changes
+        run: |
+          git config user.name "score-bot"
+          git config user.email "score-bot@noreply"
+          git add ops/orchestrator/agent-scores.json
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: update agent scores"
+          git pull --rebase
+          git push

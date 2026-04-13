@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "version": 1,
+    "window": 20,
+    "last_updated": "2026-04-12T16:09:26.975Z"
+  },
+  "agents": {
+    "codex": {
+      "accuracy": 0,
+      "test_pass_rate": 1,
+      "review_hit_rate": 0,
+      "rework_rate": 0,
+      "tasks_completed": 0,
+      "ci_pass": 10,
+      "ci_total": 10,
+      "reviews_submitted": 0,
+      "merges": 5,
+      "hotfixes": 0
+    },
+    "claude": {
+      "accuracy": 0.5,
+      "test_pass_rate": 0.5,
+      "review_hit_rate": 0.5,
+      "rework_rate": 0,
+      "tasks_completed": 0,
+      "ci_pass": 0,
+      "ci_total": 0,
+      "reviews_submitted": 0,
+      "merges": 0,
+      "hotfixes": 0
+    }
+  },
+  "by_repo": {},
+  "history": []
+}

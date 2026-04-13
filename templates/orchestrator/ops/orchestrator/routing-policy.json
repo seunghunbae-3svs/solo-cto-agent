@@ -1,0 +1,59 @@
+{
+  "$schema": "./schemas/routing-policy.schema.json",
+  "version": 1,
+  "defaults": {
+    "mode": "dual-agent",
+    "lead": null,
+    "max_rounds": 2,
+    "auto_merge_after_hours": 24,
+    "minimum_sample": 5,
+    "fallback_implementer": "codex"
+  },
+  "label_rules": [
+    {
+      "match": { "labels": ["agent-codex"] },
+      "assign": { "implementer": "codex", "reviewer": "claude", "mode": "single-agent" },
+      "telegram_tier": "notify"
+    },
+    {
+      "match": { "labels": ["agent-claude"] },
+      "assign": { "implementer": "claude", "reviewer": "codex", "mode": "single-agent" },
+      "telegram_tier": "notify"
+    },
+    {
+      "match": { "labels": ["dual-review"] },
+      "assign": { "mode": "dual-agent", "lead": null },
+      "telegram_tier": "decision"
+    },
+    {
+      "match": { "labels": ["security", "auth", "payments", "migration", "regression", "bug"] },
+      "assign": { "mode": "dual-agent", "lead": null },
+      "telegram_tier": "decision"
+    },
+    {
+      "match": { "labels": ["hotfix", "urgent"] },
+      "assign": { "mode": "lead-reviewer", "lead": "score-based" },
+      "telegram_tier": "decision",
+      "max_rounds": 1
+    },
+    {
+      "match": { "labels": ["lead-reviewer"] },
+      "assign": { "mode": "lead-reviewer", "lead": "score-based" },
+      "telegram_tier": "notify"
+    },
+    {
+      "match": { "labels": ["low-risk", "docs", "chore"] },
+      "assign": { "mode": "single-agent", "lead": "score-based" },
+      "telegram_tier": "silent",
+      "auto_merge_after_hours": 12
+    }
+  ],
+  "score_thresholds": {
+    "lead_eligible_accuracy": 0.7,
+    "lead_min_gap": 0.1,
+    "review_min_gap": 0.1,
+    "dual_required_below": 0.5,
+    "rework_alert_above": 0.3
+  },
+  "repo_overrides": {}
+}

@@ -1,0 +1,30 @@
+name: Combined PR Builder
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  repository_dispatch:
+    types: [create-combined-pr]
+  schedule:
+    - cron: "15 * * * *"
+
+jobs:
+  combine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install git
+        run: apt-get update && apt-get install -y git
+
+      - name: Build combined PR with verification
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
+          COMBINED_REPOS: "seunghunbae-3svs/tribo-store,seunghunbae-3svs/golf-now,seunghunbae-3svs/palate-pilot,seunghunbae-3svs/eventbadge,seunghunbae-3svs/3stripe-event"
+        run: |
+          node ops/scripts/combined-pr.js 2>&1 || true
+          # Continue even if individual builds fail, so we can still report status on PRs

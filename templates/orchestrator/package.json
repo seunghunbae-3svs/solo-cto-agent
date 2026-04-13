@@ -1,0 +1,24 @@
+{
+  "name": "dual-agent-review-orchestrator",
+  "version": "1.0.0",
+  "description": "Orchestrates Claude and Codex agents for collaborative code review on dual repositories",
+  "main": "api/health.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "dev": "vercel dev",
+    "deploy": "vercel deploy --prod"
+  },
+  "dependencies": {
+    "@octokit/rest": "^19.0.13",
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@vercel/node": "^3.0.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

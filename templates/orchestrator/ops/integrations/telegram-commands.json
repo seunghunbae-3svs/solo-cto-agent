@@ -1,0 +1,34 @@
+{
+  "commands": {
+    "/newissue orchestrator-hardening-v1": {
+      "issue_title": "orchestrator-hardening-v1",
+      "template_path": "docs/meta-issues/orchestrator-hardening-v1.md",
+      "labels": ["meta", "orchestrator", "hardening", "dual-agent"]
+    },
+    "/newissue orchestrator-telegram-decision-loop-v1": {
+      "issue_title": "orchestrator-telegram-decision-loop-v1",
+      "template_path": "docs/meta-issues/orchestrator-telegram-decision-loop-v1.md",
+      "labels": ["meta", "orchestrator", "telegram"]
+    },
+    "/newissue orchestrator-agent-scoring-automation-v1": {
+      "issue_title": "orchestrator-agent-scoring-automation-v1",
+      "template_path": "docs/meta-issues/orchestrator-agent-scoring-automation-v1.md",
+      "labels": ["meta", "orchestrator", "scoring"]
+    },
+    "/newissue orchestrator-routing-engine-v1": {
+      "issue_title": "orchestrator-routing-engine-v1",
+      "template_path": "docs/meta-issues/orchestrator-routing-engine-v1.md",
+      "labels": ["meta", "orchestrator", "routing"]
+    },
+    "/newissue orchestrator-ci-hardening-v1": {
+      "issue_title": "orchestrator-ci-hardening-v1",
+      "template_path": "docs/meta-issues/orchestrator-ci-hardening-v1.md",
+      "labels": ["meta", "orchestrator", "ci"]
+    },
+    "/newissue orchestrator-meta-validation-v1": {
+      "issue_title": "orchestrator-meta-validation-v1",
+      "template_path": "docs/meta-issues/orchestrator-meta-validation-v1.md",
+      "labels": ["meta", "orchestrator", "validation"]
+    }
+  }
+}
