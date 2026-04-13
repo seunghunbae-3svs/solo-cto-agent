@@ -14,11 +14,13 @@ function printHelp() {
 Usage:
   solo-cto-agent init [--force]
   solo-cto-agent status
+  solo-cto-agent lint [path]
   solo-cto-agent --help
 
 Commands:
   init     scaffold ~/.claude/skills/solo-cto-agent
   status   check skill health and error catalog
+  lint     check skill files for size and structure issues
 `);
 }
 
@@ -142,6 +144,89 @@ async function statusCommand() {
   console.log(`- last CI: ${ci.status} (${ci.conclusion})`);
 }
 
+function lintCommand(targetPath) {
+  const dir = targetPath || path.join(process.cwd(), "skills");
+  if (!fs.existsSync(dir)) {
+    console.error(`Directory not found: ${dir}`);
+    process.exit(1);
+  }
+
+  const MAX_LINES = 150;
+  const issues = [];
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const skillPath = path.join(dir, entry.name, "SKILL.md");
+    if (!fs.existsSync(skillPath)) {
+      issues.push({ skill: entry.name, level: "warn", msg: "no SKILL.md found" });
+      continue;
+    }
+
+    const content = fs.readFileSync(skillPath, "utf8");
+    const lines = content.split("\n");
+    const lineCount = lines.length;
+
+    // Check frontmatter
+    if (lines[0].trim() !== "---") {
+      issues.push({ skill: entry.name, level: "error", msg: "missing frontmatter" });
+    }
+
+    // Check line count
+    if (lineCount > MAX_LINES) {
+      const hasRefs = fs.existsSync(path.join(dir, entry.name, "references"));
+      issues.push({
+        skill: entry.name,
+        level: "warn",
+        msg: `${lineCount} lines (max ${MAX_LINES})${hasRefs ? "" : " — consider using references/"}`,
+      });
+    }
+
+    // Check for large inline code blocks (>30 lines)
+    let inBlock = false;
+    let blockStart = 0;
+    let blockLines = 0;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim().startsWith("```")) {
+        if (inBlock) {
+          if (blockLines > 30) {
+            issues.push({
+              skill: entry.name,
+              level: "warn",
+              msg: `code block at line ${blockStart + 1} is ${blockLines} lines — move to references/`,
+            });
+          }
+          inBlock = false;
+          blockLines = 0;
+        } else {
+          inBlock = true;
+          blockStart = i;
+          blockLines = 0;
+        }
+      } else if (inBlock) {
+        blockLines++;
+      }
+    }
+  }
+
+  // Output
+  const checked = entries.filter((e) => e.isDirectory()).length;
+  const errors = issues.filter((i) => i.level === "error");
+  const warns = issues.filter((i) => i.level === "warn");
+
+  console.log(`solo-cto-agent lint — checked ${checked} skills`);
+  if (issues.length === 0) {
+    console.log("✅ all clean");
+  } else {
+    for (const issue of issues) {
+      const icon = issue.level === "error" ? "❌" : "⚠️";
+      console.log(`${icon} ${issue.skill}: ${issue.msg}`);
+    }
+  }
+  console.log(`\n${errors.length} errors, ${warns.length} warnings`);
+  process.exit(errors.length > 0 ? 1 : 0);
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
@@ -167,6 +252,15 @@ async function main() {
       return;
     }
     await statusCommand();
+    return;
+  }
+
+  if (cmd === "lint") {
+    if (args.includes("--help") || args.includes("-h")) {
+      printHelp();
+      return;
+    }
+    lintCommand(args[1]);
     return;
   }
 

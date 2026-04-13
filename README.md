@@ -126,11 +126,31 @@ solo-cto-agent status
 ## Architecture
 
 ```mermaid
-graph LR
-  A[Error Detected] --> B[failure-catalog.json]
-  B --> C[Pattern Match]
-  C --> D[Auto-Fix Applied]
-  D --> E[Build Verified]
+graph TD
+  subgraph "Session Start"
+    A[autopilot.md] --> B[Load context + templates]
+  end
+
+  subgraph "Skills"
+    C[build] --> D[ship]
+    E[spark] --> F[review]
+    G[craft]
+    H[memory]
+    I[orchestrate]
+  end
+
+  subgraph "Error Recovery"
+    J[failure-catalog.json] --> K[Pattern match]
+    K --> L{Fix found?}
+    L -->|yes| M[Apply + verify]
+    L -->|no, 3 tries| N[Stop + report]
+  end
+
+  B --> C
+  B --> E
+  D --> J
+  M --> D
+  H --> B
 ```
 
 ## Install
