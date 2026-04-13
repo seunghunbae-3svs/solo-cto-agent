@@ -25,8 +25,18 @@
 - CONTRIBUTING enhancements
 - README cleanup (FAQ, post-install, sample output)
 
-## v0.6.0 Plan
-- multi-agent orchestration docs
+## Completed (v0.6.0)
+- `solo-cto-agent lint` command
+- CLI test suite (8 cases)
+- npm pack validation test
+- failure-catalog expanded to 15 patterns
+- SECURITY.md
+- references/ applied to build and ship skills
+- README architecture diagram (full system)
+
+## v0.7.0 Plan
+- apply references/ to remaining skills (craft, memory, review, spark)
+- npm publish automation (release.yml + npm token)
+- terminal GIF demo (replace SVG)
+- `solo-cto-agent doctor` (lint + status + CI in one pass)
 - plugin marketplace listing
-- `solo-cto-agent lint` (flag SKILL.md > 150 lines)
-- references/ scaffolding in `init` command

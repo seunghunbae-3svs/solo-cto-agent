@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0
+
+* added `solo-cto-agent lint` command — flags skills over 150 lines, missing frontmatter, large code blocks
+* added CLI tests (init, status, lint, --force, MISSING state) — 8 new test cases
+* added npm pack dry-run test — verifies tarball includes required files and excludes tests/CI
+* expanded failure-catalog from 8 to 15 patterns (Next.js types, edge runtime, JWT, peer deps, DB migrations, deploy timeouts)
+* added SECURITY.md
+* applied references/ pattern to build skill (377→197 lines) and ship skill (283→124 lines)
+* improved README architecture diagram (full skill system, not just error flow)
+
 ## 0.5.1
 
 * added skill slimming docs (references/ pattern with measured results)
