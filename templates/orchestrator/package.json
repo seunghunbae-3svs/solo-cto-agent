@@ -1,5 +1,5 @@
 {
-  "name": "dual-agent-review-orchestrator",
+  "name": "{{ORCHESTRATOR_REPO}}",
   "version": "1.0.0",
   "description": "Orchestrates Claude and Codex agents for collaborative code review on dual repositories",
   "main": "api/health.ts",

@@ -286,8 +286,8 @@ function generateFixSummaryComment(critical, warnings, allSuggestions) {
 // CLI
 async function main() {
   const args = process.argv.slice(2);
-  let owner = "seunghunbae-3svs";
-  let repo = "tribo-store";
+  let owner = "{{GITHUB_OWNER}}";
+  let repo = "{{PRODUCT_REPO_1}}";
   let prNumber = 1;
 
   for (let i = 0; i < args.length; i++) {

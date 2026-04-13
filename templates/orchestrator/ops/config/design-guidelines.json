@@ -1,10 +1,10 @@
 {
-  "tribo-store": {
+  "{{PRODUCT_REPO_1}}": {
     "name": "Tribo Store",
     "theme": "K-beauty premium",
     "primaryColor": "pink/coral tones",
     "framework": "Next.js + Tailwind",
-    "repo": "tribo-store",
+    "repo": "{{PRODUCT_REPO_1}}",
     "priorities": [
       "mobile-first",
       "product imagery",
@@ -22,12 +22,12 @@
     },
     "viewports": [375, 768, 1440]
   },
-  "golf-now": {
+  "{{PRODUCT_REPO_2}}": {
     "name": "Golf Now",
     "theme": "sporty, clean",
     "primaryColor": "green tones",
     "framework": "Next.js + Tailwind",
-    "repo": "golf-now",
+    "repo": "{{PRODUCT_REPO_2}}",
     "priorities": [
       "data visualization",
       "map integration",
@@ -45,12 +45,12 @@
     },
     "viewports": [375, 768, 1440]
   },
-  "eventbadge": {
+  "{{PRODUCT_REPO_4}}": {
     "name": "EventBadge",
     "theme": "professional, event management",
     "primaryColor": "blue/purple tones",
     "framework": "Vite + React",
-    "repo": "eventbadge",
+    "repo": "{{PRODUCT_REPO_4}}",
     "priorities": [
       "badge design preview",
       "attendee management",
@@ -68,12 +68,12 @@
     },
     "viewports": [375, 768, 1440]
   },
-  "palate-pilot": {
+  "{{PRODUCT_REPO_3}}": {
     "name": "Palate Pilot",
     "theme": "food/restaurant",
     "primaryColor": "warm orange/red tones",
     "framework": "Next.js + Tailwind",
-    "repo": "palate-pilot",
+    "repo": "{{PRODUCT_REPO_3}}",
     "priorities": [
       "menu display",
       "restaurant imagery",
@@ -91,12 +91,12 @@
     },
     "viewports": [375, 768, 1440]
   },
-  "3stripe-event": {
+  "{{PRODUCT_REPO_5}}": {
     "name": "3Stripe Event",
     "theme": "government/official",
     "primaryColor": "navy/formal tones",
     "framework": "Next.js + Tailwind",
-    "repo": "3stripe-event",
+    "repo": "{{PRODUCT_REPO_5}}",
     "priorities": [
       "form accessibility",
       "document display",

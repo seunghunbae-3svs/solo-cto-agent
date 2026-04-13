@@ -3,13 +3,13 @@ const path = require('path');
 
 const { spawnSync } = require('child_process');
 const TOKEN = process.env.ORCHESTRATOR_PAT || process.env.GITHUB_TOKEN;
-const OWNER = process.env.GITHUB_OWNER || 'seunghunbae-3svs';
+const OWNER = process.env.GITHUB_OWNER || '{{GITHUB_OWNER}}';
 const TARGET_REPOS = [
-  'tribo-store',
-  'golf-now',
-  'palate-pilot',
-  'eventbadge',
-  '3stripe-event',
+  '{{PRODUCT_REPO_1}}',
+  '{{PRODUCT_REPO_2}}',
+  '{{PRODUCT_REPO_3}}',
+  '{{PRODUCT_REPO_4}}',
+  '{{PRODUCT_REPO_5}}',
 ];
 
 const templatePath = path.join(__dirname, '..', '..', 'templates', 'product-repo', '.github', 'workflows', 'preview-summary.yml');

@@ -28,7 +28,7 @@ ${pr.html_url}`;
   
   // PR OG image as visual
   try {
-    const OWNER = 'seunghunbae-3svs';
+    const OWNER = '{{GITHUB_OWNER}}';
     await telegramPhoto(
       `https://opengraph.githubassets.com/1/${OWNER}/${repoName}/pull/${pr.number}`,
       `${repoName} — Codex PR #${pr.number}`

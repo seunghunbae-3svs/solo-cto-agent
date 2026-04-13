@@ -9,18 +9,18 @@ const MODE = process.env.VISUAL_MODE || "check"; // check | baseline
 const AUTO_BASELINE = process.env.VISUAL_AUTO_BASELINE !== "false";
 const WIDTH = parseInt(process.env.VISUAL_WIDTH || "800", 10);
 
-const OWNER = "seunghunbae-3svs";
-const ORCH_REPO = "dual-agent-review-orchestrator";
+const OWNER = "{{GITHUB_OWNER}}";
+const ORCH_REPO = "{{ORCHESTRATOR_REPO}}";
 const BASELINE_PATH = path.join(process.cwd(), "ops/orchestrator/visual-baselines.json");
 const BASELINE_DIR = path.join(process.cwd(), "ops/orchestrator/visual-baselines");
 
 const CHECKS = [
-  { id: "tribo-login", repo: "tribo-store", url: "https://tribo-store.vercel.app/admin/login", title: "Tribo 로그인" },
-  { id: "tribo-seller", repo: "tribo-store", url: "https://tribo-store.vercel.app/s/beauty-by-kim", title: "Tribo 셀러" },
-  { id: "golf-home", repo: "golf-now", url: "https://golf-now.vercel.app", title: "Golf Now 홈" },
-  { id: "palate-home", repo: "palate-pilot", url: "https://palate-pilot.vercel.app", title: "Palate Pilot 홈" },
-  { id: "eventbadge-home", repo: "eventbadge", url: "https://eventbadge.vercel.app", title: "EventBadge 홈" },
-  { id: "3stripe-home", repo: "3stripe-event", url: "https://3stripe-event.vercel.app", title: "3stripe 홈" },
+  { id: "tribo-login", repo: "{{PRODUCT_REPO_1}}", url: "https://{{PRODUCT_REPO_1}}.vercel.app/admin/login", title: "Tribo 로그인" },
+  { id: "tribo-seller", repo: "{{PRODUCT_REPO_1}}", url: "https://{{PRODUCT_REPO_1}}.vercel.app/s/beauty-by-kim", title: "Tribo 셀러" },
+  { id: "golf-home", repo: "{{PRODUCT_REPO_2}}", url: "https://{{PRODUCT_REPO_2}}.vercel.app", title: "Golf Now 홈" },
+  { id: "palate-home", repo: "{{PRODUCT_REPO_3}}", url: "https://{{PRODUCT_REPO_3}}.vercel.app", title: "Palate Pilot 홈" },
+  { id: "{{PRODUCT_REPO_4}}-home", repo: "{{PRODUCT_REPO_4}}", url: "https://{{PRODUCT_REPO_4}}.vercel.app", title: "EventBadge 홈" },
+  { id: "3stripe-home", repo: "{{PRODUCT_REPO_5}}", url: "https://{{PRODUCT_REPO_5}}.vercel.app", title: "3stripe 홈" },
 ];
 
 function snapshotUrl(url) {

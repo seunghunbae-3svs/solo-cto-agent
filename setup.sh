@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO="https://github.com/seunghunbae-3svs/solo-cto-agent.git"
+REPO="https://github.com/{{GITHUB_OWNER}}/solo-cto-agent.git"
 CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
 SKILLS_DIR="$CLAUDE_DIR/skills"
 TEMP_DIR="$(mktemp -d)"
@@ -115,7 +115,7 @@ fi
 
 echo "[5/6] Setting up orchestrator repo..."
 
-ORCH_DIR="$(pwd)/dual-agent-review-orchestrator"
+ORCH_DIR="$(pwd)/{{ORCHESTRATOR_REPO}}"
 ORCH_TEMPLATE="$SRC/templates/orchestrator"
 
 if [ -d "$ORCH_DIR/.git" ]; then
@@ -206,7 +206,7 @@ echo "  TELEGRAM_CHAT_ID      — for Telegram channel (optional)"
 fi
 echo ""
 echo "Next steps:"
-echo "  1. cd dual-agent-review-orchestrator"
+echo "  1. cd {{ORCHESTRATOR_REPO}}"
 echo "  2. git add -A && git commit -m 'feat: init dual-agent orchestrator'"
 echo "  3. gh repo create <name> --push --source . --private"
 echo "  4. gh secret set ANTHROPIC_API_KEY"
@@ -214,4 +214,4 @@ echo ""
 echo "To add workflows to a product repo:"
 echo "  npx solo-cto-agent setup-repo ./my-product-repo"
 echo ""
-echo "Documentation: https://github.com/seunghunbae-3svs/solo-cto-agent"
+echo "Documentation: https://github.com/{{GITHUB_OWNER}}/solo-cto-agent"

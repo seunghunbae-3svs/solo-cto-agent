@@ -8,11 +8,11 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 const REPO_CONFIG = {
-  'tribo-store': { type: 'next', buildCmd: 'npm install && npm run build' },
-  'golf-now': { type: 'next', buildCmd: 'npm install && npm run build' },
-  'palate-pilot': { type: 'next', buildCmd: 'npm install && npm run build' },
-  'eventbadge': { type: 'vite', buildCmd: 'cd frontend && npm install && npx vite build' },
-  '3stripe-event': { type: 'plain', buildCmd: 'npm install' },
+  '{{PRODUCT_REPO_1}}': { type: 'next', buildCmd: 'npm install && npm run build' },
+  '{{PRODUCT_REPO_2}}': { type: 'next', buildCmd: 'npm install && npm run build' },
+  '{{PRODUCT_REPO_3}}': { type: 'next', buildCmd: 'npm install && npm run build' },
+  '{{PRODUCT_REPO_4}}': { type: 'vite', buildCmd: 'cd frontend && npm install && npx vite build' },
+  '{{PRODUCT_REPO_5}}': { type: 'plain', buildCmd: 'npm install' },
 };
 
 async function gh(endpoint, method = 'GET', body = null, token) {

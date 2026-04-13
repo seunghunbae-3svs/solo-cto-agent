@@ -28,12 +28,12 @@ jobs:
 
           # Map repo to project key
           case "${REPO_NAME}" in
-            tribo-store) PROJECT_KEY="tribo-store" ;;
-            golf-now) PROJECT_KEY="golf-now" ;;
-            eventbadge) PROJECT_KEY="eventbadge" ;;
-            palate-pilot) PROJECT_KEY="palate-pilot" ;;
-            3stripe-event) PROJECT_KEY="3stripe-event" ;;
-            *) PROJECT_KEY="tribo-store" ;;
+            {{PRODUCT_REPO_1}}) PROJECT_KEY="{{PRODUCT_REPO_1}}" ;;
+            {{PRODUCT_REPO_2}}) PROJECT_KEY="{{PRODUCT_REPO_2}}" ;;
+            {{PRODUCT_REPO_4}}) PROJECT_KEY="{{PRODUCT_REPO_4}}" ;;
+            {{PRODUCT_REPO_3}}) PROJECT_KEY="{{PRODUCT_REPO_3}}" ;;
+            {{PRODUCT_REPO_5}}) PROJECT_KEY="{{PRODUCT_REPO_5}}" ;;
+            *) PROJECT_KEY="{{PRODUCT_REPO_1}}" ;;
           esac
           echo "project-key=${PROJECT_KEY}" >> $GITHUB_OUTPUT
 

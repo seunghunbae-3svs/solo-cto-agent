@@ -3,21 +3,21 @@
 const GITHUB_TOKEN = process.env.ORCHESTRATOR_PAT || process.env.GITHUB_TOKEN;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const AUTHORIZED_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const GITHUB_OWNER = process.env.GITHUB_OWNER || 'seunghunbae-3svs';
-const ORCH_REPO = process.env.ORCH_REPO || 'dual-agent-review-orchestrator';
+const GITHUB_OWNER = process.env.GITHUB_OWNER || '{{GITHUB_OWNER}}';
+const ORCH_REPO = process.env.ORCH_REPO || '{{ORCHESTRATOR_REPO}}';
 const DECISION_LOG_PATH = 'ops/orchestrator/decision-log.json';
 const TELEGRAM_SETTINGS_PATH = 'ops/orchestrator/telegram-settings.json';
 
 const PROJECTS = {
-  eventbadge: { repo: 'eventbadge', aliases: ['이벤트배지', '이벤트뱃지', 'eventbadge', 'badge', 'eb'] },
-  '3stripe': { repo: '3stripe-event', aliases: ['3stripe', '3스트라이프', '방송', 'broadcast', '3s'] },
-  golf: { repo: 'golf-now', aliases: ['골프', '골프나우', 'golf', 'gn'] },
-  tribo: { repo: 'tribo-store', aliases: ['트리보', '트리보스토어', '셀러', 'tribo', 'ts'] },
-  palate: { repo: 'palate-pilot', aliases: ['팔레트', '팔레트파일럿', '맛집', 'pp'] },
-  orchestrator: { repo: 'dual-agent-review-orchestrator', aliases: ['오케스트레이터', 'orchestrator', 'dao'] },
+  {{PRODUCT_REPO_4}}: { repo: '{{PRODUCT_REPO_4}}', aliases: ['이벤트배지', '이벤트뱃지', '{{PRODUCT_REPO_4}}', 'badge', 'eb'] },
+  '3stripe': { repo: '{{PRODUCT_REPO_5}}', aliases: ['3stripe', '3스트라이프', '방송', 'broadcast', '3s'] },
+  golf: { repo: '{{PRODUCT_REPO_2}}', aliases: ['골프', '골프나우', 'golf', 'gn'] },
+  tribo: { repo: '{{PRODUCT_REPO_1}}', aliases: ['트리보', '트리보스토어', '셀러', 'tribo', 'ts'] },
+  palate: { repo: '{{PRODUCT_REPO_3}}', aliases: ['팔레트', '팔레트파일럿', '맛집', 'pp'] },
+  orchestrator: { repo: '{{ORCHESTRATOR_REPO}}', aliases: ['오케스트레이터', 'orchestrator', 'dao'] },
 };
 
-const PROJECT_ORDER = ['tribo', 'golf', 'palate', 'eventbadge', '3stripe', 'orchestrator'];
+const PROJECT_ORDER = ['tribo', 'golf', 'palate', '{{PRODUCT_REPO_4}}', '3stripe', 'orchestrator'];
 const ISSUE_KEYWORDS = [
   '안됨', '안돼', '오류', '에러', '버그', '문제', '로딩', '깨짐', '불가',
   '요청', '추가', '개선', '수정', '필요', '누락', '반영', '없음', '느림',
@@ -1009,8 +1009,8 @@ async function cmdIssue(chatId, projectKey, title, locale) {
 
 async function cmdHelp(chatId, locale) {
   return reply(chatId, L(locale,
-    `🧭 <b>BDA Commands</b>\n\n"status" or /status\n"decision queue" or /pending\n"project 1 status"\n"tribo review"\n"tribo approve" (auto-merge)\n"tribo merge"\n"PR17 approve"\n"PR17 detail" or "PR17 blocker check"\n"eventbadge PR1 rework"\n"eventbadge PR1 compare" (report)\n"tribo seller page not loading" -> create issue\n\nSetup: /setup report=6h format=compact approval=buttons\n\nAliases: tribo, golf, palate, eventbadge, 3stripe\n\nLanguage: /lang en | /lang ko`,
-    `🧭 <b>BDA 명령어</b>\n\n"현황" 또는 /현황\n"결정 대기" 또는 /pending\n"프로젝트 1 현황"\n"트리보 리뷰"\n"트리보 승인" (승인 시 자동 머지)\n"트리보 merge"\n"PR17 승인"\n"PR17 확인" 또는 "PR17 blocker 확인"\n"eventbadge PR1 재작업"\n"eventbadge PR1 비교" (비교 리포트)\n"트리보 셀러 페이지 로딩 안됨" → 이슈 자동 생성\n\n설정: /setup report=6h format=compact approval=buttons\n\n프로젝트 별칭: 트리보, 골프, 팔레트, 이벤트배지, 3스트라이프\n\n언어: /lang en | /lang ko`
+    `🧭 <b>BDA Commands</b>\n\n"status" or /status\n"decision queue" or /pending\n"project 1 status"\n"tribo review"\n"tribo approve" (auto-merge)\n"tribo merge"\n"PR17 approve"\n"PR17 detail" or "PR17 blocker check"\n"{{PRODUCT_REPO_4}} PR1 rework"\n"{{PRODUCT_REPO_4}} PR1 compare" (report)\n"tribo seller page not loading" -> create issue\n\nSetup: /setup report=6h format=compact approval=buttons\n\nAliases: tribo, golf, palate, {{PRODUCT_REPO_4}}, 3stripe\n\nLanguage: /lang en | /lang ko`,
+    `🧭 <b>BDA 명령어</b>\n\n"현황" 또는 /현황\n"결정 대기" 또는 /pending\n"프로젝트 1 현황"\n"트리보 리뷰"\n"트리보 승인" (승인 시 자동 머지)\n"트리보 merge"\n"PR17 승인"\n"PR17 확인" 또는 "PR17 blocker 확인"\n"{{PRODUCT_REPO_4}} PR1 재작업"\n"{{PRODUCT_REPO_4}} PR1 비교" (비교 리포트)\n"트리보 셀러 페이지 로딩 안됨" → 이슈 자동 생성\n\n설정: /setup report=6h format=compact approval=buttons\n\n프로젝트 별칭: 트리보, 골프, 팔레트, 이벤트배지, 3스트라이프\n\n언어: /lang en | /lang ko`
   ));
 }
 
@@ -1253,7 +1253,7 @@ module.exports = async (req, res) => {
         case '/블로커':
         case '/조치':
           if (!projectKey || !parts[2]) {
-            await reply(chatId, L(locale, 'Example: /blocker eventbadge 1', '예: /blocker eventbadge 1'));
+            await reply(chatId, L(locale, 'Example: /blocker {{PRODUCT_REPO_4}} 1', '예: /blocker {{PRODUCT_REPO_4}} 1'));
           } else {
             await cmdBlocker(chatId, projectKey, parseInt(parts[2], 10), locale);
           }
@@ -1262,7 +1262,7 @@ module.exports = async (req, res) => {
         case '/재작업':
         case '/리워크':
           if (!projectKey || !parts[2]) {
-            await reply(chatId, L(locale, 'Example: /rework eventbadge 1 (reason)', '예: /rework eventbadge 1 (사유)'));
+            await reply(chatId, L(locale, 'Example: /rework {{PRODUCT_REPO_4}} 1 (reason)', '예: /rework {{PRODUCT_REPO_4}} 1 (사유)'));
           } else {
             await cmdRework(chatId, projectKey, parseInt(parts[2], 10), parts.slice(3).join(' '), locale);
           }
@@ -1271,7 +1271,7 @@ module.exports = async (req, res) => {
         case '/비교':
         case '/report':
           if (!projectKey || !parts[2]) {
-            await reply(chatId, L(locale, 'Example: /compare eventbadge 1', '예: /compare eventbadge 1'));
+            await reply(chatId, L(locale, 'Example: /compare {{PRODUCT_REPO_4}} 1', '예: /compare {{PRODUCT_REPO_4}} 1'));
           } else {
             await cmdCompare(chatId, projectKey, parseInt(parts[2], 10), locale);
           }
@@ -1312,7 +1312,7 @@ module.exports = async (req, res) => {
         case 'issue': await cmdIssue(chatId, parsed.project, parsed.text, locale); break;
         case 'lang': await cmdLang(chatId, parsed.locale || 'en'); break;
         case 'blocker-help':
-          await reply(chatId, L(locale, 'PR number required. Example: "PR17 blocker check"', 'PR 번호가 필요합니다. 예: "PR17 blocker 확인" 또는 "eventbadge PR1 blocker"'));
+          await reply(chatId, L(locale, 'PR number required. Example: "PR17 blocker check"', 'PR 번호가 필요합니다. 예: "PR17 blocker 확인" 또는 "{{PRODUCT_REPO_4}} PR1 blocker"'));
           break;
       }
     } else {

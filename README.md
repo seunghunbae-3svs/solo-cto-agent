@@ -1,10 +1,10 @@
 # solo-cto-agent
 
 [![npm](https://img.shields.io/npm/v/solo-cto-agent)](https://www.npmjs.com/package/solo-cto-agent)
-[![Package Validate](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/package-validate.yml/badge.svg)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/package-validate.yml)
-[![Test](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/test.yml/badge.svg)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/test.yml)
-[![Changelog](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/changelog.yml/badge.svg)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/changelog.yml)
-[![License](https://img.shields.io/github/license/seunghunbae-3svs/solo-cto-agent)](LICENSE)
+[![Package Validate](https://github.com/{{GITHUB_OWNER}}/solo-cto-agent/actions/workflows/package-validate.yml/badge.svg)](https://github.com/{{GITHUB_OWNER}}/solo-cto-agent/actions/workflows/package-validate.yml)
+[![Test](https://github.com/{{GITHUB_OWNER}}/solo-cto-agent/actions/workflows/test.yml/badge.svg)](https://github.com/{{GITHUB_OWNER}}/solo-cto-agent/actions/workflows/test.yml)
+[![Changelog](https://github.com/{{GITHUB_OWNER}}/solo-cto-agent/actions/workflows/changelog.yml/badge.svg)](https://github.com/{{GITHUB_OWNER}}/solo-cto-agent/actions/workflows/changelog.yml)
+[![License](https://img.shields.io/github/license/{{GITHUB_OWNER}}/solo-cto-agent)](LICENSE)
 
 
 I made this because I got tired of using AI coding tools that were good at writing code, but still left me doing all the messy CTO work around it.
@@ -176,13 +176,13 @@ Publishing requires either:
 ### Quick install (Claude Code)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/seunghunbae-3svs/solo-cto-agent/main/setup.sh | bash
+curl -sSL https://raw.githubusercontent.com/{{GITHUB_OWNER}}/solo-cto-agent/main/setup.sh | bash
 ```
 
 ### Manual install
 
 ```bash
-git clone https://github.com/seunghunbae-3svs/solo-cto-agent.git
+git clone https://github.com/{{GITHUB_OWNER}}/solo-cto-agent.git
 cp -r solo-cto-agent/skills/* ~/.claude/skills/
 cat solo-cto-agent/autopilot.md >> ~/.claude/CLAUDE.md
 ```

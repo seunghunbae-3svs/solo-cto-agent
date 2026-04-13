@@ -387,7 +387,7 @@ async function main() {
   if (cli['pr-number']) {
     const repoInput = cli.repo || process.env.GITHUB_REPOSITORY || 'repo';
     const repoShort = repoInput.split('/').pop();
-    const repoFull = repoInput.includes('/') ? repoInput : `${process.env.GITHUB_REPOSITORY || `seunghunbae-3svs/${repoInput}`}`;
+    const repoFull = repoInput.includes('/') ? repoInput : `${process.env.GITHUB_REPOSITORY || `{{GITHUB_OWNER}}/${repoInput}`}`;
     const previewUrl = cli['preview-url'] || '';
     const hasBlocker = cli['has-blocker'] === 'true';
     const recommendation = hasBlocker || !previewUrl ? 'HOLD' : 'APPROVE';

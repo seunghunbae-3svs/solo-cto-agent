@@ -40,8 +40,8 @@ jobs:
             if (!prNumber || !branch) return;
 
             await github.rest.repos.createDispatchEvent({
-              owner: 'seunghunbae-3svs',
-              repo: 'dual-agent-review-orchestrator',
+              owner: '{{GITHUB_OWNER}}',
+              repo: '{{ORCHESTRATOR_REPO}}',
               event_type: 'rework-request',
               client_payload: {
                 repo: `${owner}/${repo}`,

@@ -19,11 +19,11 @@ const Ajv = require("ajv");
 const ROOT = path.resolve(__dirname, "../..");
 const SCHEMAS_DIR = path.join(__dirname, "schemas");
 
-// Support nested layout: references may be at ROOT/references/ or ROOT/dual-agent-review-orchestrator/references/
+// Support nested layout: references may be at ROOT/references/ or ROOT/{{ORCHESTRATOR_REPO}}/references/
 const REFS_DIR = fs.existsSync(path.join(ROOT, "references"))
   ? path.join(ROOT, "references")
-  : fs.existsSync(path.join(ROOT, "dual-agent-review-orchestrator", "references"))
-    ? path.join(ROOT, "dual-agent-review-orchestrator", "references")
+  : fs.existsSync(path.join(ROOT, "{{ORCHESTRATOR_REPO}}", "references"))
+    ? path.join(ROOT, "{{ORCHESTRATOR_REPO}}", "references")
     : path.join(ROOT, "references");
 
 const ajv = new Ajv({ allErrors: true, validateSchema: false });

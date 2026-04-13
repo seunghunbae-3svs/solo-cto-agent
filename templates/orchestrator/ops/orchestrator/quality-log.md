@@ -6,4 +6,4 @@ Purpose: record quality regressions and fixes in plain, auditable language.
 `YYYY-MM-DD | repo | issue/pr | type | impact | action | owner`
 
 ## Log
-2026-04-13 | dual-agent-review-orchestrator | - | process | initialized quality log | create baseline log | orchestrator
+2026-04-13 | {{ORCHESTRATOR_REPO}} | - | process | initialized quality log | create baseline log | orchestrator

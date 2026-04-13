@@ -7,7 +7,7 @@ const PR_REPO = process.env.PR_REPO;
 const PR_TITLE = process.env.PR_TITLE;
 
 const SKILL_REVIEW_CRITERIA = `
-## 리뷰 기준 (Bae Ship-Zero + Tribo Dev Guide)
+## 리뷰 기준 (Ship-Zero Protocol + Project Dev Guide)
 1. Import 경로: ./relative 대신 @/ 절대경로 사용했는지
 2. Prisma/Drizzle: 혼재 사용 없는지, generate 타이밍 맞는지
 3. NextAuth: 콜백 로직, 세션 확장 시 types 파일 있는지
@@ -92,7 +92,7 @@ async function main() {
 
   await telegram(`🔍 Claude 교차 리뷰 시작\n${PR_REPO} PR #${PR_NUMBER}\nCodex → Claude 리뷰`);
 
-  const review = await claude(`당신은 Claude, Bae의 시니어 개발자입니다. Codex가 만든 PR을 리뷰합니다.
+  const review = await claude(`당신은 Claude, the team's senior 개발자입니다. Codex가 만든 PR을 리뷰합니다.
 
 ${SKILL_REVIEW_CRITERIA}
 
