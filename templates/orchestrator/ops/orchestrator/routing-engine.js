@@ -46,7 +46,17 @@ function normalizeMode(mode) {
 function pickByScore(scores, repo, metric = "accuracy") {
   const repoScores = scores.by_repo[repo];
   const source = repoScores || scores.agents;
+  const agents = Object.keys(scores.agents);
 
+  // Single-agent mode: only one agent registered → always return it
+  if (agents.length === 1) {
+    const name = agents[0];
+    const val = source[name]?.[metric] ?? 0.5;
+    const tasks = (repoScores?.[name]?.tasks_completed ?? scores.agents[name]?.tasks_completed) || 0;
+    return { leader: name, [name]: val, [`${name}Tasks`]: tasks, codex: 0, claude: val, codexTasks: 0, claudeTasks: tasks };
+  }
+
+  // Multi-agent mode: compare all registered agents (default: codex vs claude)
   const codex = source.codex?.[metric] ?? 0.5;
   const claude = source.claude?.[metric] ?? 0.5;
   const codexTasks = (repoScores?.codex?.tasks_completed ?? scores.agents.codex?.tasks_completed) || 0;
@@ -156,8 +166,9 @@ function route(labels, repo) {
     }
   }
 
-  // Score-based override: force dual if both agents below threshold
-  if (hasSufficientData) {
+  // Score-based override: force dual if both agents below threshold (only when multiple agents exist)
+  const registeredAgents = Object.keys(scores.agents);
+  if (hasSufficientData && registeredAgents.length > 1) {
     if (
       scoreInfo.codex < thresholds.dual_required_below &&
       scoreInfo.claude < thresholds.dual_required_below
@@ -168,15 +179,15 @@ function route(labels, repo) {
         `both agents below ${thresholds.dual_required_below} accuracy → forced dual mode`
       );
     }
+  }
 
-    // Rework alert
-    const codexRework = scores.agents.codex?.rework_rate ?? 0;
-    const claudeRework = scores.agents.claude?.rework_rate ?? 0;
-    if (codexRework > thresholds.rework_alert_above) {
-      decision.reasoning.push(`⚠️ codex rework_rate ${codexRework.toFixed(2)} > ${thresholds.rework_alert_above}`);
-    }
-    if (claudeRework > thresholds.rework_alert_above) {
-      decision.reasoning.push(`⚠️ claude rework_rate ${claudeRework.toFixed(2)} > ${thresholds.rework_alert_above}`);
+  // Rework alert for all registered agents
+  if (hasSufficientData) {
+    for (const agentName of registeredAgents) {
+      const rework = scores.agents[agentName]?.rework_rate ?? 0;
+      if (rework > thresholds.rework_alert_above) {
+        decision.reasoning.push(`⚠️ ${agentName} rework_rate ${rework.toFixed(2)} > ${thresholds.rework_alert_above}`);
+      }
     }
   }
 
@@ -186,19 +197,19 @@ function route(labels, repo) {
       decision.implementer = scoreInfo.leader;
       decision.reasoning.push(`single-agent implementer set by score (${scoreInfo.leader})`);
     } else {
-      decision.implementer = defaults.fallback_implementer || "codex";
+      decision.implementer = defaults.fallback_implementer || defaults.lead || registeredAgents[0] || "claude";
       decision.reasoning.push(`single-agent implementer fallback: ${decision.implementer}`);
     }
   }
 
-  // Lead-reviewer readiness: ensure reviewer assigned
+  // Lead-reviewer readiness: ensure reviewer assigned (only when multiple agents)
   if (decision.mode === "lead-reviewer") {
     if (!decision.implementer && leadEligible) {
       decision.implementer = scoreInfo.leader;
       decision.reasoning.push(`lead-reviewer implementer set by score (${scoreInfo.leader})`);
     }
-    if (!decision.reviewer && decision.implementer) {
-      const other = decision.implementer === "codex" ? "claude" : "codex";
+    if (!decision.reviewer && decision.implementer && registeredAgents.length > 1) {
+      const other = registeredAgents.find(a => a !== decision.implementer) || registeredAgents[0];
       decision.reviewer = other;
     }
   }

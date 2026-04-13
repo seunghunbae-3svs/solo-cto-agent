@@ -1,17 +1,12 @@
 {
   "tiers": {
     "base": {
-      "name": "Core Dual-Agent CI/CD",
+      "name": "Single-Agent CI/CD (Claude)",
       "level": 4,
-      "description": "Core dual-agent orchestration with Claude + Codex automated CI/CD routing, cross-review workflows, comparison reports, and circuit breaker error detection.",
+      "description": "Single-agent orchestration with Claude automated CI/CD, preview feedback, rework cycle, and circuit breaker error detection.",
       "orchestrator_workflows": [
         "ci.yml",
         "claude-auto.yml",
-        "codex-auto.yml",
-        "combined-pr.yml",
-        "comparison-report.yml",
-        "cross-review-dispatch.yml",
-        "cross-review.yml",
         "ops-validate.yml",
         "orchestrator-check.yml",
         "preview-ready.yml",
@@ -68,6 +63,11 @@
       "description": "Extends base with 4-stage UI/UX quality gate (code review → visual review → cross-verification → auto-fix), daily briefings, decision tracking, agent scoring, and Telegram real-time notifications.",
       "includes_base": true,
       "additional_orchestrator_workflows": [
+        "codex-auto.yml",
+        "combined-pr.yml",
+        "comparison-report.yml",
+        "cross-review-dispatch.yml",
+        "cross-review.yml",
         "uiux-quality-gate.yml",
         "combined-pr-with-uiux.yml",
         "visual-check.yml",

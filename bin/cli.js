@@ -322,6 +322,78 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
     }
   }
 
+  // Builder tier: override routing-policy + agent-scores for single-agent mode
+  if (!isPro) {
+    const singleAgentPolicy = {
+      "$schema": "./schemas/routing-policy.schema.json",
+      "version": 1,
+      "defaults": {
+        "mode": "single-agent",
+        "lead": "claude",
+        "max_rounds": 2,
+        "auto_merge_after_hours": 24,
+        "minimum_sample": 5,
+        "fallback_implementer": "claude"
+      },
+      "label_rules": [
+        {
+          "match": { "labels": ["agent-claude"] },
+          "assign": { "implementer": "claude", "mode": "single-agent" },
+          "telegram_tier": "notify"
+        },
+        {
+          "match": { "labels": ["security", "auth", "payments", "migration", "regression", "bug"] },
+          "assign": { "mode": "single-agent", "lead": "claude" },
+          "telegram_tier": "decision"
+        },
+        {
+          "match": { "labels": ["hotfix", "urgent"] },
+          "assign": { "mode": "single-agent", "lead": "claude" },
+          "telegram_tier": "decision",
+          "max_rounds": 1
+        },
+        {
+          "match": { "labels": ["low-risk", "docs", "chore"] },
+          "assign": { "mode": "single-agent", "lead": "claude" },
+          "telegram_tier": "silent",
+          "auto_merge_after_hours": 12
+        }
+      ],
+      "score_thresholds": {
+        "lead_eligible_accuracy": 0.7,
+        "lead_min_gap": 0.1,
+        "review_min_gap": 0.1,
+        "dual_required_below": 0.5,
+        "rework_alert_above": 0.3
+      },
+      "repo_overrides": {}
+    };
+    fs.writeFileSync(
+      path.join(orchDir, "ops", "orchestrator", "routing-policy.json"),
+      JSON.stringify(singleAgentPolicy, null, 2),
+      "utf8"
+    );
+
+    const singleAgentScores = {
+      "meta": { "version": 1, "window": 20, "last_updated": new Date().toISOString() },
+      "agents": {
+        "claude": {
+          "accuracy": 0.5, "test_pass_rate": 0.5, "review_hit_rate": 0.5,
+          "rework_rate": 0, "tasks_completed": 0,
+          "ci_pass": 0, "ci_total": 0, "reviews_submitted": 0, "merges": 0, "hotfixes": 0
+        }
+      },
+      "by_repo": {},
+      "history": []
+    };
+    fs.writeFileSync(
+      path.join(orchDir, "ops", "orchestrator", "agent-scores.json"),
+      JSON.stringify(singleAgentScores, null, 2),
+      "utf8"
+    );
+    console.log("   ✅ Single-agent config applied (routing-policy + agent-scores)");
+  }
+
   // Copy pro orchestrator extras
   if (isPro) {
     for (const item of proTier.ops_orchestrator_extras) {

@@ -103,7 +103,7 @@ For solo devs who want Claude reviewing every PR automatically. One agent, no ex
 |---|---|
 | Agent | Claude (single) |
 | Product repo workflows | 3 core + 1 optional (telegram) |
-| Orchestrator workflows | 13 |
+| Orchestrator workflows | 8 (single-agent only) |
 | Skills | spark, review, memory, craft, build, ship |
 | Required secrets | `ORCHESTRATOR_PAT`, `ANTHROPIC_API_KEY` |
 | Optional secrets | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
@@ -118,7 +118,7 @@ For teams or power users who want agents competing and cross-checking each other
 |---|---|
 | Agents | Claude + Codex (extensible to Cursor, Copilot, etc.) |
 | Product repo workflows | 7 core + 1 optional (telegram) |
-| Orchestrator workflows | 24 (13 base + 11 pro) |
+| Orchestrator workflows | 24 (8 base + 16 multi-agent & pro) |
 | Skills | all Builder skills + orchestrate |
 | Required secrets | `ORCHESTRATOR_PAT`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` |
 | Optional secrets | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
@@ -146,7 +146,7 @@ Product repo automation: PR opened → Claude + Codex both review → cross-revi
 
 ### Multi-Agent Extensibility (CTO tier)
 
-The routing engine (`ops/orchestrator/routing-engine.js`) and agent scoring system (`agent-scores.json`) are designed for N agents, not just two. Current implementation ships with Claude + Codex. To add a third agent (e.g., Cursor Agent, Copilot), you would extend `agent-scores.json` with the new agent's metrics and add a corresponding workflow. The routing policy (`routing-policy.json`) supports label-based and score-based assignment across any number of agents.
+The routing engine (`ops/orchestrator/routing-engine.js`) dynamically adapts to the number of registered agents. Builder tier ships with Claude-only `agent-scores.json` and `routing-policy.json` (default: `single-agent` mode). CTO tier ships with Claude + Codex dual-agent config. To add a third agent (e.g., Cursor Agent, Copilot), extend `agent-scores.json` with the new agent's metrics and add a corresponding workflow. The routing engine auto-detects registered agents and skips dual-agent logic when only one agent exists.
 
 ### Secrets Summary
 
