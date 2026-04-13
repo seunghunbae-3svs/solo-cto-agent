@@ -133,3 +133,9 @@ Each workflow should:
                                          ## What this is NOT
 
                                          This is not a CI/CD system. It sits on top of your existing CI. It does not run tests or builds directly -- it coordinates which agent works on what, ensures cross-review happens, and handles failure recovery. Your existing GitHub Actions, Vercel, or whatever deployment pipeline stays exactly as-is.
+
+## Execution Examples
+
+- "Use orchestrate to run a dual-agent review for Issue #42."
+- "Use orchestrate to compare Codex and Claude outputs and recommend a winner."
+- "Use orchestrate to prepare a Telegram-ready decision summary."

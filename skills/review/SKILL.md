@@ -187,3 +187,9 @@ Use it:
 
 The purpose of this skill is not to kill ideas reflexively.
 It is to make weak assumptions visible early enough to fix.
+
+## Execution Examples
+
+- "Use review to critique this PR for missing tests and regression risk."
+- "Use review to evaluate this plan as an investor and competitor."
+- "Use review to list blockers before approval."

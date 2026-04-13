@@ -261,3 +261,9 @@ At the end, ask:
 ```
 
 If not, the output is still too fuzzy.
+
+## Execution Examples
+
+- "Use spark to evaluate a B2B SaaS idea with market and risk analysis."
+- "Use spark to draft a PRD outline for a new feature."
+- "Use spark to compare two go-to-market options."

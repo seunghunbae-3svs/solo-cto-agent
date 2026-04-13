@@ -226,3 +226,9 @@ When this skill is applied, the result should help answer:
 * what is still unresolved but worth keeping visible
 
 This skill should make the next session lighter, not just longer.
+
+## Execution Examples
+
+- "Use memory to capture today\'s key decisions and update the context log."
+- "Use memory to record a repeated error pattern and the fix."
+- "Use memory to summarize what changed in this repo this week."
