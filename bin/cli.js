@@ -464,10 +464,13 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
   console.log("  2. Set secrets on orchestrator repo:");
   console.log("");
   console.log("     # GitHub PAT with repo + workflow scope (cross-repo dispatch)");
-  console.log("     gh secret set PAT_TOKEN");
+  console.log("     gh secret set ORCHESTRATOR_PAT");
   console.log("");
   console.log("     # Anthropic API key (Claude code review + visual analysis)");
   console.log("     gh secret set ANTHROPIC_API_KEY");
+  console.log("");
+  console.log("     # OpenAI API key (Codex agent, AI-powered analysis)");
+  console.log("     gh secret set OPENAI_API_KEY");
   console.log("");
   if (isPro) {
     console.log("     # Telegram notifications (optional)");
@@ -479,12 +482,13 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
   console.log("");
   if (productRepoList.length > 0) {
     for (const repo of productRepoList) {
-      console.log(`     cd ${repo} && gh secret set PAT_TOKEN && gh secret set ANTHROPIC_API_KEY`);
+      console.log(`     cd ${repo} && gh secret set ORCHESTRATOR_PAT && gh secret set ANTHROPIC_API_KEY && gh secret set OPENAI_API_KEY`);
     }
   } else {
     console.log("     cd your-product-repo");
-    console.log("     gh secret set PAT_TOKEN");
+    console.log("     gh secret set ORCHESTRATOR_PAT");
     console.log("     gh secret set ANTHROPIC_API_KEY");
+    console.log("     gh secret set OPENAI_API_KEY");
   }
   console.log("");
   console.log("  4. Push product repos with new workflows:");
@@ -492,12 +496,15 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
   console.log("");
   console.log("═══ WHY EACH SECRET ═══");
   console.log("");
-  console.log("  PAT_TOKEN         Cross-repo dispatch (product → orchestrator)");
+  console.log("  ORCHESTRATOR_PAT  Cross-repo dispatch (product → orchestrator)");
   console.log("                    Scope: repo + workflow");
   console.log("                    Create: https://github.com/settings/tokens");
   console.log("");
   console.log("  ANTHROPIC_API_KEY Claude code review, visual analysis, UI/UX gate");
   console.log("                    Get: https://console.anthropic.com");
+  console.log("");
+  console.log("  OPENAI_API_KEY    Codex agent, AI-powered code analysis");
+  console.log("                    Get: https://platform.openai.com/api-keys");
   console.log("");
   console.log("  GITHUB_TOKEN      Auto-provided by GitHub Actions (no action needed)");
 }
@@ -509,11 +516,18 @@ function generateEnvGuide(isPro, org) {
 
 # ═══ REQUIRED ═══
 
-# GitHub token (auto-provided in GitHub Actions, needed locally for testing)
-GITHUB_TOKEN=
+# GitHub PAT with repo + workflow scope (cross-repo dispatch)
+# This is referenced as ORCHESTRATOR_PAT in workflows
+ORCHESTRATOR_PAT=
 
 # Anthropic API key (for Claude-powered code review and visual analysis)
 ANTHROPIC_API_KEY=
+
+# OpenAI API key (for Codex agent and AI-powered analysis)
+OPENAI_API_KEY=
+
+# GitHub token (auto-provided in GitHub Actions, no action needed)
+GITHUB_TOKEN=
 
 # Your GitHub org/user (used for repository_dispatch between repos)
 GITHUB_OWNER=${org || "your-github-org"}
