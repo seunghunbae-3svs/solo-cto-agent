@@ -40,11 +40,11 @@ export const CIRCUIT_MAX_FAILURES = 3
 export const CIRCUIT_COOLDOWN_MS = 30 * 60 * 1000 // 30 minutes
 
 export const PRODUCT_REPOS = [
-  'eventbadge',
-  'golf-now',
-  'tribo-store',
-  'palate-pilot',
-  '3stripe-event',
+  '{{PRODUCT_REPO_4}}',
+  '{{PRODUCT_REPO_2}}',
+  '{{PRODUCT_REPO_1}}',
+  '{{PRODUCT_REPO_3}}',
+  '{{PRODUCT_REPO_5}}',
 ] as const
 
 export type ProductRepo = (typeof PRODUCT_REPOS)[number]

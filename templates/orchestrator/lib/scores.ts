@@ -6,8 +6,8 @@ let cacheTime = 0
 const CACHE_TTL_MS = 60_000
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || ''
-const REPO_OWNER = 'seunghunbae-3svs'
-const REPO_NAME = 'dual-agent-review-orchestrator'
+const REPO_OWNER = '{{GITHUB_OWNER}}'
+const REPO_NAME = '{{ORCHESTRATOR_REPO}}'
 const SCORE_FILE_PATH = 'agent-scores.json'
 
 async function githubFetch(path: string, options: RequestInit = {}): Promise<Response> {

@@ -4,12 +4,12 @@
 
 ---
 
-## eventbadge
+## {{PRODUCT_REPO_4}}
 
 ```
-GitHub repo seunghunbae-3svs/eventbadge 를 클론해서 feature/1-codex 브랜치를 만들어.
+GitHub repo {{GITHUB_OWNER}}/{{PRODUCT_REPO_4}} 를 클론해서 feature/1-codex 브랜치를 만들어.
 
-Issue: https://github.com/seunghunbae-3svs/dual-agent-review-orchestrator/issues/1
+Issue: https://github.com/{{GITHUB_OWNER}}/{{ORCHESTRATOR_REPO}}/issues/1
 
 작업:
 1. ESLint + Prettier 설정 추가
@@ -19,19 +19,19 @@ Issue: https://github.com/seunghunbae-3svs/dual-agent-review-orchestrator/issues
 5. 핵심 플로우 테스트 3개 추가
 6. npm run build 통과 확인
 
-완료 후 main으로 PR 만들어. 제목: "[Codex] eventbadge: 코드 품질 검증 + CI 구축"
+완료 후 main으로 PR 만들어. 제목: "[Codex] {{PRODUCT_REPO_4}}: 코드 품질 검증 + CI 구축"
 PR에 self-review 코멘트도 남겨.
 ```
 
 ---
 
-## 3stripe-event
+## {{PRODUCT_REPO_5}}
 
 ```
-GitHub repo seunghunbae-3svs/3stripe-event 를 클론해서 feature/2-codex 브랜치를 만들어.
+GitHub repo {{GITHUB_OWNER}}/{{PRODUCT_REPO_5}} 를 클론해서 feature/2-codex 브랜치를 만들어.
 
 Claude가 이미 PR을 만들었으니, Claude PR #1을 리뷰해줘.
-https://github.com/seunghunbae-3svs/3stripe-event/pull/1
+https://github.com/{{GITHUB_OWNER}}/{{PRODUCT_REPO_5}}/pull/1
 
 리뷰 기준: requirement mismatch, regression, missing tests, edge cases, security, rollback risk
 각 항목을 blocker/suggestion/nit으로 분류해서 PR에 리뷰 코멘트 남겨.
@@ -39,12 +39,12 @@ https://github.com/seunghunbae-3svs/3stripe-event/pull/1
 
 ---
 
-## golf-now
+## {{PRODUCT_REPO_2}}
 
 ```
-GitHub repo seunghunbae-3svs/golf-now 를 클론해서 feature/3-codex 브랜치를 만들어.
+GitHub repo {{GITHUB_OWNER}}/{{PRODUCT_REPO_2}} 를 클론해서 feature/3-codex 브랜치를 만들어.
 
-Issue: https://github.com/seunghunbae-3svs/dual-agent-review-orchestrator/issues/3
+Issue: https://github.com/{{GITHUB_OWNER}}/{{ORCHESTRATOR_REPO}}/issues/3
 
 작업:
 1. TypeScript any 타입 제거
@@ -54,18 +54,18 @@ Issue: https://github.com/seunghunbae-3svs/dual-agent-review-orchestrator/issues
 5. 미사용 CSS 정리
 6. npm run build + lint 통과
 
-완료 후 main으로 PR 만들어. 제목: "[Codex] golf-now: TypeScript 강화 + 최적화"
+완료 후 main으로 PR 만들어. 제목: "[Codex] {{PRODUCT_REPO_2}}: TypeScript 강화 + 최적화"
 PR에 self-review 코멘트도 남겨.
 ```
 
 ---
 
-## tribo-store
+## {{PRODUCT_REPO_1}}
 
 ```
-GitHub repo seunghunbae-3svs/tribo-store 를 클론해서 feature/4-codex 브랜치를 만들어.
+GitHub repo {{GITHUB_OWNER}}/{{PRODUCT_REPO_1}} 를 클론해서 feature/4-codex 브랜치를 만들어.
 
-Issue: https://github.com/seunghunbae-3svs/dual-agent-review-orchestrator/issues/4
+Issue: https://github.com/{{GITHUB_OWNER}}/{{ORCHESTRATOR_REPO}}/issues/4
 ⚠️ HIGH PRIORITY — 최근 3커밋이 전부 배포 실패 수정
 
 작업:
@@ -75,18 +75,18 @@ Issue: https://github.com/seunghunbae-3svs/dual-agent-review-orchestrator/issues
 4. Vercel 빌드 파이프라인 안정화
 5. npm run type-check + build 통과
 
-완료 후 main으로 PR 만들어. 제목: "[Codex] tribo-store: 배포 안정화 + 근본 원인 수정"
+완료 후 main으로 PR 만들어. 제목: "[Codex] {{PRODUCT_REPO_1}}: 배포 안정화 + 근본 원인 수정"
 PR에 근본 원인 분석 + self-review 남겨.
 ```
 
 ---
 
-## palate-pilot
+## {{PRODUCT_REPO_3}}
 
 ```
-GitHub repo seunghunbae-3svs/palate-pilot 를 클론해서 feature/5-codex 브랜치를 만들어.
+GitHub repo {{GITHUB_OWNER}}/{{PRODUCT_REPO_3}} 를 클론해서 feature/5-codex 브랜치를 만들어.
 
-Issue: https://github.com/seunghunbae-3svs/dual-agent-review-orchestrator/issues/5
+Issue: https://github.com/{{GITHUB_OWNER}}/{{ORCHESTRATOR_REPO}}/issues/5
 
 작업:
 1. 카카오 검색 API 에러 핸들링 + rate limit 대응
@@ -95,6 +95,6 @@ Issue: https://github.com/seunghunbae-3svs/dual-agent-review-orchestrator/issues
 4. 추천 알고리즘 에지 케이스 검증
 5. build 통과
 
-완료 후 main으로 PR 만들어. 제목: "[Codex] palate-pilot: 카카오 API + DB 검증"
+완료 후 main으로 PR 만들어. 제목: "[Codex] {{PRODUCT_REPO_3}}: 카카오 API + DB 검증"
 PR에 self-review 남겨.
 ```

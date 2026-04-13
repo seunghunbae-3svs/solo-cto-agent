@@ -2,7 +2,7 @@
 
 ## Reporting
 
-If you find a security issue, email seunghunbae@gmail.com directly.
+If you find a security issue, email security@your-org.com directly.
 
 Do not open a public issue. I will respond within 48 hours.
 

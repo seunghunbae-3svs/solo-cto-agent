@@ -54,16 +54,34 @@ function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-function copyRecursive(src, dest) {
+function copyRecursive(src, dest, replacements) {
   ensureDir(path.dirname(dest));
   if (fs.statSync(src).isDirectory()) {
     ensureDir(dest);
     for (const item of fs.readdirSync(src)) {
-      copyRecursive(path.join(src, item), path.join(dest, item));
+      copyRecursive(path.join(src, item), path.join(dest, item), replacements);
     }
+  } else if (replacements) {
+    copyFileWithReplace(src, dest, replacements);
   } else {
     fs.copyFileSync(src, dest);
   }
+}
+
+const TEXT_EXTENSIONS = new Set([".yml", ".yaml", ".js", ".ts", ".md", ".json", ".sh", ".html", ".txt"]);
+
+function copyFileWithReplace(src, dest, replacements) {
+  ensureDir(path.dirname(dest));
+  const ext = path.extname(src).toLowerCase();
+  if (!TEXT_EXTENSIONS.has(ext) || !replacements) {
+    fs.copyFileSync(src, dest);
+    return;
+  }
+  let content = fs.readFileSync(src, "utf8");
+  for (const [placeholder, value] of Object.entries(replacements)) {
+    content = content.split(placeholder).join(value);
+  }
+  fs.writeFileSync(dest, content, "utf8");
 }
 
 function writeFileIfMissing(filePath, content, force) {
@@ -152,10 +170,34 @@ Style: {{YOUR_STYLE}}
 
 // ─── setup-pipeline: Full Pipeline Deploy ───────────────────
 
-function setupPipelineCommand(tier, org, repos, force) {
+function setupPipelineCommand(tier, org, repos, orchName, force) {
+  if (!org) {
+    console.error("❌ --org is required. Specify your GitHub org/username.");
+    console.error("   Example: solo-cto-agent setup-pipeline --org myorg --tier base");
+    process.exit(1);
+  }
+
+  const orchestratorRepo = orchName || "dual-agent-orchestrator";
+  const productRepoList = repos ? repos.split(",").map(r => r.trim()) : [];
+
+  // Build template replacement map
+  const replacements = {
+    "{{GITHUB_OWNER}}": org,
+    "{{ORCHESTRATOR_REPO}}": orchestratorRepo,
+  };
+  // Map product repos to numbered placeholders
+  productRepoList.forEach((repo, i) => {
+    replacements[`{{PRODUCT_REPO_${i + 1}}}`] = path.basename(repo);
+  });
+  // Fill remaining placeholders with generic names
+  for (let i = productRepoList.length + 1; i <= 10; i++) {
+    replacements[`{{PRODUCT_REPO_${i}}}`] = `your-product-repo-${i}`;
+  }
+
   console.log("╔══════════════════════════════════════════════════╗");
   console.log("║  solo-cto-agent — Pipeline Setup                ║");
   console.log(`║  Tier: ${(tier === "pro" ? "Pro (Lv5+6)" : "Base (Lv4)").padEnd(42)}║`);
+  console.log(`║  Org:  ${org.padEnd(42)}║`);
   console.log("╚══════════════════════════════════════════════════╝");
   console.log("");
 
@@ -172,7 +214,7 @@ function setupPipelineCommand(tier, org, repos, force) {
   // ── Step 1: Create orchestrator repo ──
   console.log("[1/4] Setting up orchestrator repo...");
 
-  const orchDir = path.resolve("dual-agent-review-orchestrator");
+  const orchDir = path.resolve(orchestratorRepo);
   let orchCreated = false;
 
   if (fs.existsSync(orchDir) && fs.existsSync(path.join(orchDir, ".git"))) {
@@ -194,7 +236,7 @@ function setupPipelineCommand(tier, org, repos, force) {
   for (const wf of baseTier.orchestrator_workflows) {
     const src = path.join(ORCH_TEMPLATE, ".github", "workflows", wf);
     if (fs.existsSync(src)) {
-      fs.copyFileSync(src, path.join(workflowDest, wf));
+      copyFileWithReplace(src, path.join(workflowDest, wf), replacements);
     }
   }
 
@@ -203,7 +245,7 @@ function setupPipelineCommand(tier, org, repos, force) {
     for (const wf of proTier.additional_orchestrator_workflows) {
       const src = path.join(ORCH_TEMPLATE, ".github", "workflows", wf);
       if (fs.existsSync(src)) {
-        fs.copyFileSync(src, path.join(workflowDest, wf));
+        copyFileWithReplace(src, path.join(workflowDest, wf), replacements);
       }
     }
   }
@@ -218,7 +260,7 @@ function setupPipelineCommand(tier, org, repos, force) {
   const agentsSrc = path.join(ORCH_TEMPLATE, "ops", "agents");
   if (fs.existsSync(agentsSrc)) {
     for (const f of fs.readdirSync(agentsSrc)) {
-      fs.copyFileSync(path.join(agentsSrc, f), path.join(orchDir, "ops", "agents", f));
+      copyFileWithReplace(path.join(agentsSrc, f), path.join(orchDir, "ops", "agents", f), replacements);
     }
   }
 
@@ -226,7 +268,7 @@ function setupPipelineCommand(tier, org, repos, force) {
   for (const s of baseTier.ops_scripts) {
     const src = path.join(ORCH_TEMPLATE, "ops", "scripts", s);
     if (fs.existsSync(src)) {
-      fs.copyFileSync(src, path.join(orchDir, "ops", "scripts", s));
+      copyFileWithReplace(src, path.join(orchDir, "ops", "scripts", s), replacements);
     }
   }
 
@@ -235,7 +277,7 @@ function setupPipelineCommand(tier, org, repos, force) {
     for (const s of proTier.ops_scripts) {
       const src = path.join(ORCH_TEMPLATE, "ops", "scripts", s);
       if (fs.existsSync(src)) {
-        fs.copyFileSync(src, path.join(orchDir, "ops", "scripts", s));
+        copyFileWithReplace(src, path.join(orchDir, "ops", "scripts", s), replacements);
       }
     }
   }
@@ -244,7 +286,7 @@ function setupPipelineCommand(tier, org, repos, force) {
   for (const l of baseTier.ops_libs) {
     const src = path.join(ORCH_TEMPLATE, "ops", "lib", l);
     if (fs.existsSync(src)) {
-      fs.copyFileSync(src, path.join(orchDir, "ops", "lib", l));
+      copyFileWithReplace(src, path.join(orchDir, "ops", "lib", l), replacements);
     }
   }
 
@@ -253,7 +295,7 @@ function setupPipelineCommand(tier, org, repos, force) {
     for (const l of proTier.ops_libs) {
       const src = path.join(ORCH_TEMPLATE, "ops", "lib", l);
       if (fs.existsSync(src)) {
-        fs.copyFileSync(src, path.join(orchDir, "ops", "lib", l));
+        copyFileWithReplace(src, path.join(orchDir, "ops", "lib", l), replacements);
       }
     }
   }
@@ -265,11 +307,11 @@ function setupPipelineCommand(tier, org, repos, force) {
       const dirName = item.replace("/", "");
       const src = path.join(ORCH_TEMPLATE, "ops", "orchestrator", dirName);
       const dest = path.join(orchDir, "ops", "orchestrator", dirName);
-      if (fs.existsSync(src)) copyRecursive(src, dest);
+      if (fs.existsSync(src)) copyRecursive(src, dest, replacements);
     } else {
       const src = path.join(ORCH_TEMPLATE, "ops", "orchestrator", item);
       if (fs.existsSync(src)) {
-        fs.copyFileSync(src, path.join(orchDir, "ops", "orchestrator", item));
+        copyFileWithReplace(src, path.join(orchDir, "ops", "orchestrator", item), replacements);
       }
     }
   }
@@ -279,7 +321,7 @@ function setupPipelineCommand(tier, org, repos, force) {
     for (const item of proTier.ops_orchestrator_extras) {
       const src = path.join(ORCH_TEMPLATE, "ops", "orchestrator", item);
       if (fs.existsSync(src)) {
-        fs.copyFileSync(src, path.join(orchDir, "ops", "orchestrator", item));
+        copyFileWithReplace(src, path.join(orchDir, "ops", "orchestrator", item), replacements);
       }
     }
 
@@ -288,7 +330,7 @@ function setupPipelineCommand(tier, org, repos, force) {
     for (const c of proTier.ops_config) {
       const src = path.join(ORCH_TEMPLATE, "ops", "config", c);
       if (fs.existsSync(src)) {
-        fs.copyFileSync(src, path.join(orchDir, "ops", "config", c));
+        copyFileWithReplace(src, path.join(orchDir, "ops", "config", c), replacements);
       }
     }
 
@@ -297,7 +339,7 @@ function setupPipelineCommand(tier, org, repos, force) {
     for (const i of proTier.ops_integrations) {
       const src = path.join(ORCH_TEMPLATE, "ops", "integrations", i);
       if (fs.existsSync(src)) {
-        fs.copyFileSync(src, path.join(orchDir, "ops", "integrations", i));
+        copyFileWithReplace(src, path.join(orchDir, "ops", "integrations", i), replacements);
       }
     }
 
@@ -305,7 +347,7 @@ function setupPipelineCommand(tier, org, repos, force) {
     for (const c of proTier.ops_codex_extras) {
       const src = path.join(ORCH_TEMPLATE, "ops", c);
       if (fs.existsSync(src)) {
-        fs.copyFileSync(src, path.join(orchDir, "ops", c));
+        copyFileWithReplace(src, path.join(orchDir, "ops", c), replacements);
       }
     }
   }
@@ -314,7 +356,7 @@ function setupPipelineCommand(tier, org, repos, force) {
   for (const f of baseTier.root_config) {
     const src = path.join(ORCH_TEMPLATE, f);
     if (fs.existsSync(src)) {
-      fs.copyFileSync(src, path.join(orchDir, f));
+      copyFileWithReplace(src, path.join(orchDir, f), replacements);
     }
   }
 
@@ -323,13 +365,13 @@ function setupPipelineCommand(tier, org, repos, force) {
     const dirName = item.replace("/*", "").replace("/", "");
     const src = path.join(ORCH_TEMPLATE, dirName);
     const dest = path.join(orchDir, dirName);
-    if (fs.existsSync(src)) copyRecursive(src, dest);
+    if (fs.existsSync(src)) copyRecursive(src, dest, replacements);
   }
 
   // Copy ops package.json
   const opsPackageSrc = path.join(ORCH_TEMPLATE, "ops", "package.json");
   if (fs.existsSync(opsPackageSrc)) {
-    fs.copyFileSync(opsPackageSrc, path.join(orchDir, "ops", "package.json"));
+    copyFileWithReplace(opsPackageSrc, path.join(orchDir, "ops", "package.json"), replacements);
   }
   const opsLockSrc = path.join(ORCH_TEMPLATE, "ops", "package-lock.json");
   if (fs.existsSync(opsLockSrc)) {
@@ -343,15 +385,14 @@ function setupPipelineCommand(tier, org, repos, force) {
   console.log("");
   console.log("[2/4] Installing product-repo workflows...");
 
-  const productRepos = repos ? repos.split(",").map(r => r.trim()) : [];
   const productWorkflows = tiersData.product_repo_templates.workflows;
   const productOther = tiersData.product_repo_templates.other;
 
-  if (productRepos.length === 0) {
+  if (productRepoList.length === 0) {
     console.log("   No product repos specified. Use --repos <repo1,repo2,...>");
-    console.log("   You can also run: solo-cto-agent setup-repo <path> later");
+    console.log("   You can also run: solo-cto-agent setup-repo <path> --org <org> later");
   } else {
-    for (const repo of productRepos) {
+    for (const repo of productRepoList) {
       const repoDir = path.resolve(repo);
       if (!fs.existsSync(repoDir)) {
         console.log(`   ⚠️  ${repo} — not found, skipping`);
@@ -364,7 +405,7 @@ function setupPipelineCommand(tier, org, repos, force) {
       for (const wf of productWorkflows) {
         const src = path.join(PRODUCT_TEMPLATE, ".github", "workflows", wf);
         if (fs.existsSync(src)) {
-          fs.copyFileSync(src, path.join(wfDir, wf));
+          copyFileWithReplace(src, path.join(wfDir, wf), replacements);
         }
       }
 
@@ -375,9 +416,9 @@ function setupPipelineCommand(tier, org, repos, force) {
         if (fs.existsSync(src)) {
           ensureDir(path.dirname(dest));
           if (fs.statSync(src).isDirectory()) {
-            copyRecursive(src, dest);
+            copyRecursive(src, dest, replacements);
           } else {
-            fs.copyFileSync(src, dest);
+            copyFileWithReplace(src, dest, replacements);
           }
         }
       }
@@ -417,10 +458,10 @@ function setupPipelineCommand(tier, org, repos, force) {
   }
   console.log("");
   console.log("Next steps:");
-  console.log("  1. cd dual-agent-review-orchestrator && git add -A && git commit -m 'feat: init orchestrator'");
+  console.log(`  1. cd ${orchestratorRepo} && git add -A && git commit -m 'feat: init orchestrator'`);
   console.log("  2. gh repo create <name> --push --source . --private");
   console.log("  3. Add secrets: gh secret set ANTHROPIC_API_KEY");
-  if (productRepos.length > 0) {
+  if (productRepoList.length > 0) {
     console.log(`  4. cd each product repo → git add . && git commit -m 'ci: add dual-agent workflows' && git push`);
   }
 }
@@ -468,7 +509,23 @@ TELEGRAM_CHAT_ID=
 
 // ─── setup-repo: Single Product Repo ────────────────────────
 
-function setupRepoCommand(repoPath, tier) {
+function setupRepoCommand(repoPath, tier, org, orchName) {
+  if (!org) {
+    console.error("❌ --org is required. Specify your GitHub org/username.");
+    console.error("   Example: solo-cto-agent setup-repo ./my-repo --org myorg");
+    process.exit(1);
+  }
+
+  const orchestratorRepo = orchName || "dual-agent-orchestrator";
+  const replacements = {
+    "{{GITHUB_OWNER}}": org,
+    "{{ORCHESTRATOR_REPO}}": orchestratorRepo,
+    "{{PRODUCT_REPO_1}}": path.basename(repoPath),
+  };
+  for (let i = 2; i <= 10; i++) {
+    replacements[`{{PRODUCT_REPO_${i}}}`] = `your-product-repo-${i}`;
+  }
+
   const resolved = path.resolve(repoPath);
   if (!fs.existsSync(resolved)) {
     console.error(`❌ Directory not found: ${resolved}`);
@@ -486,7 +543,7 @@ function setupRepoCommand(repoPath, tier) {
   for (const wf of productWorkflows) {
     const src = path.join(PRODUCT_TEMPLATE, ".github", "workflows", wf);
     if (fs.existsSync(src)) {
-      fs.copyFileSync(src, path.join(wfDir, wf));
+      copyFileWithReplace(src, path.join(wfDir, wf), replacements);
       count++;
     }
   }
@@ -497,9 +554,9 @@ function setupRepoCommand(repoPath, tier) {
     if (fs.existsSync(src)) {
       ensureDir(path.dirname(dest));
       if (fs.statSync(src).isDirectory()) {
-        copyRecursive(src, dest);
+        copyRecursive(src, dest, replacements);
       } else {
-        fs.copyFileSync(src, dest);
+        copyFileWithReplace(src, dest, replacements);
       }
     }
   }
@@ -575,7 +632,7 @@ async function statusCommand() {
   const count = catalogOk ? readCatalogCount(catalogPath) : 0;
 
   // Check orchestrator
-  const orchDir = path.resolve("dual-agent-review-orchestrator");
+  const orchDir = path.resolve("{{ORCHESTRATOR_REPO}}");
   const orchExists = fs.existsSync(orchDir);
   const orchWorkflows = orchExists
     ? fs.readdirSync(path.join(orchDir, ".github", "workflows")).filter(f => f.endsWith(".yml")).length
@@ -693,19 +750,25 @@ async function main() {
     const org = orgIndex >= 0 ? args[orgIndex + 1] : null;
     const reposIndex = args.indexOf("--repos");
     const repos = reposIndex >= 0 ? args[reposIndex + 1] : null;
-    setupPipelineCommand(tier, org, repos, force);
+    const orchIndex = args.indexOf("--orchestrator-name");
+    const orchName = orchIndex >= 0 ? args[orchIndex + 1] : null;
+    setupPipelineCommand(tier, org, repos, orchName, force);
     return;
   }
 
   if (cmd === "setup-repo") {
     const repoPath = args[1];
     if (!repoPath) {
-      console.error("Usage: solo-cto-agent setup-repo <path> [--tier base|pro]");
+      console.error("Usage: solo-cto-agent setup-repo <path> --org <github-org> [--tier base|pro]");
       process.exit(1);
     }
     const tierIndex = args.indexOf("--tier");
     const tier = tierIndex >= 0 ? args[tierIndex + 1] : "base";
-    setupRepoCommand(repoPath, tier);
+    const orgIndex = args.indexOf("--org");
+    const org = orgIndex >= 0 ? args[orgIndex + 1] : null;
+    const orchIndex = args.indexOf("--orchestrator-name");
+    const orchName = orchIndex >= 0 ? args[orchIndex + 1] : null;
+    setupRepoCommand(repoPath, tier, org, orchName);
     return;
   }
 

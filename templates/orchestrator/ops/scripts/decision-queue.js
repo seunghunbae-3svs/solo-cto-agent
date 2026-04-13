@@ -1,5 +1,5 @@
-const GITHUB_OWNER = 'seunghunbae-3svs';
-const ORCH_REPO = 'dual-agent-review-orchestrator';
+const GITHUB_OWNER = '{{GITHUB_OWNER}}';
+const ORCH_REPO = '{{ORCHESTRATOR_REPO}}';
 const fs = require('fs');
 const TOKEN = process.env.ORCHESTRATOR_PAT || process.env.GITHUB_TOKEN;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -7,12 +7,12 @@ const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const SETTINGS_PATH = 'ops/orchestrator/telegram-settings.json';
 
 const PROJECTS = [
-  { key: 'tribo', repo: 'tribo-store' },
-  { key: 'golf', repo: 'golf-now' },
-  { key: 'palate', repo: 'palate-pilot' },
-  { key: 'eventbadge', repo: 'eventbadge' },
-  { key: '3stripe', repo: '3stripe-event' },
-  { key: 'orchestrator', repo: 'dual-agent-review-orchestrator' },
+  { key: 'tribo', repo: '{{PRODUCT_REPO_1}}' },
+  { key: 'golf', repo: '{{PRODUCT_REPO_2}}' },
+  { key: 'palate', repo: '{{PRODUCT_REPO_3}}' },
+  { key: '{{PRODUCT_REPO_4}}', repo: '{{PRODUCT_REPO_4}}' },
+  { key: '3stripe', repo: '{{PRODUCT_REPO_5}}' },
+  { key: 'orchestrator', repo: '{{ORCHESTRATOR_REPO}}' },
 ];
 
 const LIMIT = parseInt(process.env.DECISION_QUEUE_LIMIT || '3', 10);

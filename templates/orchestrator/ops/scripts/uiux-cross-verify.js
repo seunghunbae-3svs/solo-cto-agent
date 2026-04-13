@@ -350,11 +350,11 @@ function generateCrossVerifyComment(report, decision) {
 // CLI
 async function main() {
   const args = process.argv.slice(2);
-  let owner = "seunghunbae-3svs";
-  let repo = "tribo-store";
+  let owner = "{{GITHUB_OWNER}}";
+  let repo = "{{PRODUCT_REPO_1}}";
   let prNumber = 1;
   let previewUrl = process.env.VERCEL_PREVIEW_URL || "";
-  let projectKey = "tribo-store";
+  let projectKey = "{{PRODUCT_REPO_1}}";
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--owner") owner = args[++i];

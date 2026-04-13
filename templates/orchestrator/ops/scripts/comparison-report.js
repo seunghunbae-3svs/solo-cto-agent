@@ -9,7 +9,7 @@ const PR_NUMBER = parseInt(process.env.PR_NUMBER || '0', 10);
 const PR_TITLE = process.env.PR_TITLE || '';
 const PR_URL = process.env.PR_URL || '';
 
-const PROJECT_ORDER = ['tribo-store', 'golf-now', 'palate-pilot', 'eventbadge', '3stripe-event', 'dual-agent-review-orchestrator'];
+const PROJECT_ORDER = ['{{PRODUCT_REPO_1}}', '{{PRODUCT_REPO_2}}', '{{PRODUCT_REPO_3}}', '{{PRODUCT_REPO_4}}', '{{PRODUCT_REPO_5}}', '{{ORCHESTRATOR_REPO}}'];
 
 async function gh(endpoint, method = 'GET', body = null) {
   const res = await fetch(`https://api.github.com${endpoint}`, {
@@ -224,7 +224,7 @@ function hasHold(comments) {
 }
 
 async function createMetaIssue(title, body) {
-  const issue = await gh(`/repos/seunghunbae-3svs/dual-agent-review-orchestrator/issues`, 'POST', {
+  const issue = await gh(`/repos/{{GITHUB_OWNER}}/{{ORCHESTRATOR_REPO}}/issues`, 'POST', {
     title,
     body,
     labels: ['meta-validation']

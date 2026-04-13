@@ -24,7 +24,7 @@ jobs:
       - name: Build combined PR with verification
         env:
           GITHUB_TOKEN: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
-          COMBINED_REPOS: "seunghunbae-3svs/tribo-store,seunghunbae-3svs/golf-now,seunghunbae-3svs/palate-pilot,seunghunbae-3svs/eventbadge,seunghunbae-3svs/3stripe-event"
+          COMBINED_REPOS: "{{GITHUB_OWNER}}/{{PRODUCT_REPO_1}},{{GITHUB_OWNER}}/{{PRODUCT_REPO_2}},{{GITHUB_OWNER}}/{{PRODUCT_REPO_3}},{{GITHUB_OWNER}}/{{PRODUCT_REPO_4}},{{GITHUB_OWNER}}/{{PRODUCT_REPO_5}}"
         run: |
           node ops/scripts/combined-pr.js 2>&1 || true
           # Continue even if individual builds fail, so we can still report status on PRs

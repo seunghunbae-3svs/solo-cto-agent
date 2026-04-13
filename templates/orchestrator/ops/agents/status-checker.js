@@ -1,15 +1,15 @@
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const OWNER = 'seunghunbae-3svs';
-const ORCH_REPO = 'dual-agent-review-orchestrator';
+const OWNER = '{{GITHUB_OWNER}}';
+const ORCH_REPO = '{{ORCHESTRATOR_REPO}}';
 
 const PROJECTS = {
-  eventbadge: 'eventbadge',
-  '3stripe': '3stripe-event',
-  golf: 'golf-now',
-  tribo: 'tribo-store',
-  palate: 'palate-pilot',
+  {{PRODUCT_REPO_4}}: '{{PRODUCT_REPO_4}}',
+  '3stripe': '{{PRODUCT_REPO_5}}',
+  golf: '{{PRODUCT_REPO_2}}',
+  tribo: '{{PRODUCT_REPO_1}}',
+  palate: '{{PRODUCT_REPO_3}}',
 };
 
 async function gh(endpoint) {

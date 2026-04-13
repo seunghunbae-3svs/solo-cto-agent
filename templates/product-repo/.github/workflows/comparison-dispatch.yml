@@ -47,8 +47,8 @@ jobs:
             if (hasHold && previewUrls.length === 0) return;
 
             await github.rest.repos.createDispatchEvent({
-              owner: 'seunghunbae-3svs',
-              repo: 'dual-agent-review-orchestrator',
+              owner: '{{GITHUB_OWNER}}',
+              repo: '{{ORCHESTRATOR_REPO}}',
               event_type: action,
               client_payload: {
                 repo: `${owner}/${repo}`,

@@ -7,7 +7,7 @@
  * Usage (GitHub Actions):
  *   node routing-engine.js \
  *     --labels "agent-codex,enhancement" \
- *     --repo "seunghunbae-3svs/tribo-store" \
+ *     --repo "{{GITHUB_OWNER}}/{{PRODUCT_REPO_1}}" \
  *     --issue 42
  *
  * Output: JSON to stdout + sets GitHub Actions outputs via GITHUB_OUTPUT

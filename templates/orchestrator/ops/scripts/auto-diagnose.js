@@ -2,49 +2,49 @@ const TOKEN = process.env.ORCHESTRATOR_PAT || process.env.GITHUB_TOKEN;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-const OWNER = "seunghunbae-3svs";
-const ORCH_REPO = "dual-agent-review-orchestrator";
+const OWNER = "{{GITHUB_OWNER}}";
+const ORCH_REPO = "{{ORCHESTRATOR_REPO}}";
 
 const CHECKS = [
   {
     id: "tribo-login",
-    repo: "tribo-store",
-    url: "https://tribo-store.vercel.app/admin/login",
+    repo: "{{PRODUCT_REPO_1}}",
+    url: "https://{{PRODUCT_REPO_1}}.vercel.app/admin/login",
     expect: ["Tribo Admin", "Sign in"],
     title: "로그인 박스/화면 이상",
   },
   {
     id: "tribo-seller",
-    repo: "tribo-store",
-    url: "https://tribo-store.vercel.app/s/beauty-by-kim",
+    repo: "{{PRODUCT_REPO_1}}",
+    url: "https://{{PRODUCT_REPO_1}}.vercel.app/s/beauty-by-kim",
     expect: ["Products", "Track Order"],
     title: "셀러 페이지 접근 불가",
   },
   {
     id: "golf-home",
-    repo: "golf-now",
-    url: "https://golf-now.vercel.app",
+    repo: "{{PRODUCT_REPO_2}}",
+    url: "https://{{PRODUCT_REPO_2}}.vercel.app",
     expect: [],
     title: "홈 화면 접근 불가",
   },
   {
     id: "palate-home",
-    repo: "palate-pilot",
-    url: "https://palate-pilot.vercel.app",
+    repo: "{{PRODUCT_REPO_3}}",
+    url: "https://{{PRODUCT_REPO_3}}.vercel.app",
     expect: [],
     title: "홈 화면 접근 불가",
   },
   {
-    id: "eventbadge-home",
-    repo: "eventbadge",
-    url: "https://eventbadge.vercel.app",
+    id: "{{PRODUCT_REPO_4}}-home",
+    repo: "{{PRODUCT_REPO_4}}",
+    url: "https://{{PRODUCT_REPO_4}}.vercel.app",
     expect: [],
     title: "홈 화면 접근 불가",
   },
   {
     id: "3stripe-home",
-    repo: "3stripe-event",
-    url: "https://3stripe-event.vercel.app",
+    repo: "{{PRODUCT_REPO_5}}",
+    url: "https://{{PRODUCT_REPO_5}}.vercel.app",
     expect: [],
     title: "홈 화면 접근 불가",
   },

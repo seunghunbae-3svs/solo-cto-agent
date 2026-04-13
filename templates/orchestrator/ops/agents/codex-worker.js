@@ -6,7 +6,7 @@ const ISSUE_NUMBER = process.env.ISSUE_NUMBER;
 const ISSUE_TITLE = process.env.ISSUE_TITLE;
 const ISSUE_BODY = process.env.ISSUE_BODY;
 
-const OWNER = 'seunghunbae-3svs';
+const OWNER = '{{GITHUB_OWNER}}';
 
 // ── Helpers ──
 async function gh(endpoint, method = 'GET', body = null) {
@@ -60,15 +60,15 @@ function parseTargetRepo() {
   if (!match) return null;
   const key = match[1].toLowerCase();
   const map = {
-    eventbadge: 'eventbadge',
-    '3stripe-event': '3stripe-event',
-    '3stripe': '3stripe-event',
-    'golf-now': 'golf-now',
-    golf: 'golf-now',
-    'tribo-store': 'tribo-store',
-    tribo: 'tribo-store',
-    'palate-pilot': 'palate-pilot',
-    palate: 'palate-pilot',
+    {{PRODUCT_REPO_4}}: '{{PRODUCT_REPO_4}}',
+    '{{PRODUCT_REPO_5}}': '{{PRODUCT_REPO_5}}',
+    '3stripe': '{{PRODUCT_REPO_5}}',
+    '{{PRODUCT_REPO_2}}': '{{PRODUCT_REPO_2}}',
+    golf: '{{PRODUCT_REPO_2}}',
+    '{{PRODUCT_REPO_1}}': '{{PRODUCT_REPO_1}}',
+    tribo: '{{PRODUCT_REPO_1}}',
+    '{{PRODUCT_REPO_3}}': '{{PRODUCT_REPO_3}}',
+    palate: '{{PRODUCT_REPO_3}}',
   };
   return map[key] || null;
 }

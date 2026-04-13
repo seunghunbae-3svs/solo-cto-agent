@@ -5,18 +5,18 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const ISSUE_NUMBER = process.env.ISSUE_NUMBER;
 const ISSUE_TITLE = process.env.ISSUE_TITLE;
 const ISSUE_BODY = process.env.ISSUE_BODY;
-const OWNER = 'seunghunbae-3svs';
+const OWNER = '{{GITHUB_OWNER}}';
 
 // ?? Embedded skill knowledge (from Cowork skills) ??
 const SKILL_CONTEXT = `
-## Bae Ship-Zero 寃利?泥댄겕由ъ뒪??
+## Ship-Zero Protocol 寃利?泥댄겕由ъ뒪??
 - Prisma: schema validate, generate ??대컢, postinstall ?ㅽ겕由쏀듃
 - NextAuth: import 寃쎈줈 (@/lib/), 肄쒕갚 濡쒖쭅, ?몄뀡 ?ㅼ젙
 - Vercel 鍮뚮뱶: env 蹂??議댁옱 ?뺤씤, build command, output directory
 - TypeScript: strict 紐⑤뱶, any ????쒓굅, ????꾨씫
 - Supabase: RLS ?뺤콉, service_role vs anon key 援щ텇, N+1 荑쇰━
 
-## Tribo Dev Guide ?먮윭 ?⑦꽩
+## Project Dev Guide ?먮윭 ?⑦꽩
 - import 寃쎈줈 ?먮윭: ./relative ??@/absolute 蹂???꾩닔
 - Prisma + Drizzle ?쇱옱 湲덉?: ?섎굹留??ъ슜
 - NextAuth 肄쒕갚?먯꽌 session.user ?뺤옣 ??types ?뚯씪 ?꾩슂
@@ -99,10 +99,10 @@ function parseTargetRepo() {
   if (!match) return null;
   const key = match[1].toLowerCase();
   const map = {
-    eventbadge: 'eventbadge', '3stripe-event': '3stripe-event', '3stripe': '3stripe-event',
-    'golf-now': 'golf-now', golf: 'golf-now',
-    'tribo-store': 'tribo-store', tribo: 'tribo-store',
-    'palate-pilot': 'palate-pilot', palate: 'palate-pilot',
+    {{PRODUCT_REPO_4}}: '{{PRODUCT_REPO_4}}', '{{PRODUCT_REPO_5}}': '{{PRODUCT_REPO_5}}', '3stripe': '{{PRODUCT_REPO_5}}',
+    '{{PRODUCT_REPO_2}}': '{{PRODUCT_REPO_2}}', golf: '{{PRODUCT_REPO_2}}',
+    '{{PRODUCT_REPO_1}}': '{{PRODUCT_REPO_1}}', tribo: '{{PRODUCT_REPO_1}}',
+    '{{PRODUCT_REPO_3}}': '{{PRODUCT_REPO_3}}', palate: '{{PRODUCT_REPO_3}}',
   };
   return map[key] || null;
 }
@@ -205,7 +205,7 @@ async function main() {
     fileContext += `\n=== ${path} ===\n${content}\n`;
   }
 
-  const raw = await claude(`You are Claude, a senior developer working for Bae.
+  const raw = await claude(`You are Claude, a senior developer working for the team.
 
 ${SKILL_CONTEXT}
 

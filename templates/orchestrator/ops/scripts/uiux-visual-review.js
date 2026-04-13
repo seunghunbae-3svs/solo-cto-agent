@@ -185,7 +185,7 @@ function displayVisualReviewResults(results) {
 async function main() {
   const args = process.argv.slice(2);
   let previewUrl = process.env.VERCEL_PREVIEW_URL || "";
-  let projectKey = "tribo-store";
+  let projectKey = "{{PRODUCT_REPO_1}}";
   let prNumber = 1;
 
   for (let i = 0; i < args.length; i++) {

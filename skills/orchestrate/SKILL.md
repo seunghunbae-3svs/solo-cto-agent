@@ -32,7 +32,7 @@ Orchestrator Repo
 ### 1. Create the orchestrator repo
 
 ```bash
-gh repo create {{YOUR_ORG}}/dual-agent-review-orchestrator --private
+gh repo create {{YOUR_ORG}}/{{ORCHESTRATOR_REPO}} --private
 ```
 
 ### 2. Add dispatch workflow to each product repo
@@ -125,7 +125,7 @@ Each workflow should:
                                       
                                        - ```
                                          {{YOUR_ORG}}              ->  your GitHub org or username
-                                         {{YOUR_ORCHESTRATOR}}     ->  dual-agent-review-orchestrator (or custom name)
+                                         {{YOUR_ORCHESTRATOR}}     ->  {{ORCHESTRATOR_REPO}} (or custom name)
                                          {{YOUR_PRODUCT_REPOS}}    ->  comma-separated list of repos to orchestrate
                                          {{YOUR_TELEGRAM_CHAT}}    ->  Telegram chat ID for notifications
                                          ```

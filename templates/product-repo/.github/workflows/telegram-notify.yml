@@ -81,7 +81,7 @@ jobs:
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.ORCHESTRATOR_PAT }}
-          repository: seunghunbae-3svs/dual-agent-review-orchestrator
+          repository: {{GITHUB_OWNER}}/{{ORCHESTRATOR_REPO}}
           event-type: score-event
           client-payload: |
             {
