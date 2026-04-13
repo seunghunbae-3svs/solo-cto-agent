@@ -63,3 +63,8 @@ That is useful feedback here.
 - Ensure all SKILL.md files have valid frontmatter
 - Avoid breaking repo-level instructions (CLAUDE.md / templates)
 - Keep README claims aligned with actual files
+
+
+## CI checks
+- package-validate workflow must pass
+- changelog auto-update must stay clean
