@@ -136,13 +136,25 @@ Product repo automation: PR opened → Claude + Codex both review → cross-revi
 | Comparison reports | — | Yes |
 | Agent score tracking | — | Yes |
 | UI/UX quality gate (4-stage) | — | Yes |
-| Visual regression (Claude Vision) | — | Yes |
+| Visual regression (Playwright + Vision) | Scheduled | Scheduled + PR-triggered |
 | Daily briefings | — | Yes |
 | Decision queue + insights | — | Yes |
 | Telegram notifications | Optional | Optional |
 | Rework dispatch | Yes | Yes |
 | Preview summary | Yes | Yes |
 | Circuit breaker (3-fail stop) | Yes | Yes |
+
+### Visual Verification (Both tiers)
+
+Visual checks use Playwright for real browser screenshots (desktop 1280px + mobile 375px). Scheduled mode runs every 6 hours comparing against baselines and opens issues on visual regression. PR mode triggers on preview deployment, screenshots the preview URL, and posts results as a PR comment. Falls back to thum.io if Playwright is unavailable.
+
+### Auto Service Detection (Both tiers)
+
+When you run `setup-pipeline` or `setup-repo`, the CLI scans your project's `package.json` and file structure to detect required services (NextAuth, Supabase, Stripe, Prisma, Firebase, AWS, etc.). It then prints every secret needed and generates copy-paste `gh secret set` commands for one-shot setup. No more discovering missing secrets mid-deployment.
+
+### Agent Score Personalization (CTO tier)
+
+`agent-scores.json` auto-updates on every PR event, review, and CI run. Scores are tracked globally and per-repo (`by_repo`), so the routing engine learns which agent performs better on which project. History is kept for trend analysis, and feedback patterns from `repository_dispatch` events feed into personalization. Over time the system routes work to the best-performing agent for each repo.
 
 ### Multi-Agent Extensibility (CTO tier)
 

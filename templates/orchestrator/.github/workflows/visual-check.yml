@@ -1,18 +1,31 @@
 name: Visual UI Check
 
 on:
+  # Scheduled baseline comparison (existing)
   schedule:
     - cron: "30 */6 * * *"
+  # PR-triggered: preview deployment ready
+  repository_dispatch:
+    types: [preview-deployed, visual-check]
   workflow_dispatch:
     inputs:
       mode:
-        description: "check | baseline"
+        description: "check | baseline | pr"
         required: false
         default: "check"
+      deploy_url:
+        description: "Preview URL to check (pr mode)"
+        required: false
+      pr_number:
+        description: "PR number to comment on"
+        required: false
+      product_repo:
+        description: "Product repo name"
+        required: false
 
 concurrency:
-  group: visual-check
-  cancel-in-progress: false
+  group: visual-check-${{ github.event.client_payload.pr_number || github.run_id }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -28,19 +41,30 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Install dependencies
+        working-directory: ops
+        run: npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts 2>/dev/null || true
+
+      - name: Install Playwright
+        run: npx playwright install chromium --with-deps 2>/dev/null || echo "Playwright not available, using fallback"
+
       - name: Run visual check
         env:
           ORCHESTRATOR_PAT: ${{ secrets.ORCHESTRATOR_PAT }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          VISUAL_MODE: ${{ github.event.inputs.mode || 'check' }}
+          VISUAL_MODE: ${{ github.event.inputs.mode || github.event.client_payload.mode || 'check' }}
           VISUAL_NOTIFY: "false"
           VISUAL_AUTO_BASELINE: "true"
-          VISUAL_WIDTH: "800"
+          # PR-triggered context
+          PR_NUMBER: ${{ github.event.inputs.pr_number || github.event.client_payload.pr_number || '' }}
+          DEPLOY_URL: ${{ github.event.inputs.deploy_url || github.event.client_payload.deploy_url || '' }}
+          PRODUCT_REPO: ${{ github.event.inputs.product_repo || github.event.client_payload.product_repo || '' }}
         run: node ops/scripts/visual-check.js
 
       - name: Commit baseline updates
+        if: ${{ !env.PR_NUMBER }}
         run: |
           git config user.name "orchestrator-bot"
           git config user.email "orchestrator-bot@users.noreply.github.com"

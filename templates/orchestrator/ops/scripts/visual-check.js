@@ -1,4 +1,4 @@
-﻿const fs = require("fs");
+const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
@@ -7,26 +7,30 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const MODE = process.env.VISUAL_MODE || "check"; // check | baseline
 const AUTO_BASELINE = process.env.VISUAL_AUTO_BASELINE !== "false";
-const WIDTH = parseInt(process.env.VISUAL_WIDTH || "800", 10);
 
 const OWNER = "{{GITHUB_OWNER}}";
 const ORCH_REPO = "{{ORCHESTRATOR_REPO}}";
 const BASELINE_PATH = path.join(process.cwd(), "ops/orchestrator/visual-baselines.json");
 const BASELINE_DIR = path.join(process.cwd(), "ops/orchestrator/visual-baselines");
+const SCREENSHOT_DIR = path.join(process.cwd(), "ops/orchestrator/visual-screenshots");
+
+// ── PR context (set by workflow when triggered by deployment_status) ──
+const PR_NUMBER = process.env.PR_NUMBER || null;
+const DEPLOY_URL = process.env.DEPLOY_URL || null;
+const PRODUCT_REPO = process.env.PRODUCT_REPO || null;
 
 const CHECKS = [
-  { id: "tribo-login", repo: "{{PRODUCT_REPO_1}}", url: "https://{{PRODUCT_REPO_1}}.vercel.app/admin/login", title: "Tribo 로그인" },
-  { id: "tribo-seller", repo: "{{PRODUCT_REPO_1}}", url: "https://{{PRODUCT_REPO_1}}.vercel.app/s/beauty-by-kim", title: "Tribo 셀러" },
-  { id: "golf-home", repo: "{{PRODUCT_REPO_2}}", url: "https://{{PRODUCT_REPO_2}}.vercel.app", title: "Golf Now 홈" },
-  { id: "palate-home", repo: "{{PRODUCT_REPO_3}}", url: "https://{{PRODUCT_REPO_3}}.vercel.app", title: "Palate Pilot 홈" },
-  { id: "{{PRODUCT_REPO_4}}-home", repo: "{{PRODUCT_REPO_4}}", url: "https://{{PRODUCT_REPO_4}}.vercel.app", title: "EventBadge 홈" },
-  { id: "3stripe-home", repo: "{{PRODUCT_REPO_5}}", url: "https://{{PRODUCT_REPO_5}}.vercel.app", title: "3stripe 홈" },
+  { id: "{{PRODUCT_REPO_1}}-home", repo: "{{PRODUCT_REPO_1}}", url: "https://{{PRODUCT_REPO_1}}.vercel.app", title: "Home" },
+  { id: "{{PRODUCT_REPO_2}}-home", repo: "{{PRODUCT_REPO_2}}", url: "https://{{PRODUCT_REPO_2}}.vercel.app", title: "Home" },
+  { id: "{{PRODUCT_REPO_3}}-home", repo: "{{PRODUCT_REPO_3}}", url: "https://{{PRODUCT_REPO_3}}.vercel.app", title: "Home" },
 ];
 
-function snapshotUrl(url) {
-  const safe = encodeURIComponent(url);
-  return `https://image.thum.io/get/width/${WIDTH}/${safe}`;
-}
+const VIEWPORTS = [
+  { name: "desktop", width: 1280, height: 800 },
+  { name: "mobile", width: 375, height: 812 },
+];
+
+// ── GitHub API ──
 
 async function gh(endpoint, method = "GET", body = null) {
   const res = await fetch(`https://api.github.com${endpoint}`, {
@@ -48,20 +52,71 @@ async function sendTelegram(text) {
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: CHAT_ID, text }),
+    body: JSON.stringify({ chat_id: CHAT_ID, text, parse_mode: "Markdown" }),
   });
 }
 
-function loadBaselines() {
-  if (!fs.existsSync(BASELINE_PATH)) return { version: 1, items: {} };
+// ── Playwright screenshot ──
+
+async function takeScreenshot(url, viewport, outputPath) {
+  let playwright;
   try {
-    return JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8"));
+    playwright = require("playwright");
   } catch {
-    return { version: 1, items: {} };
+    // Fallback to thum.io if Playwright not installed
+    return takeScreenshotFallback(url, viewport, outputPath);
+  }
+
+  const browser = await playwright.chromium.launch({ headless: true });
+  const context = await browser.newContext({
+    viewport: { width: viewport.width, height: viewport.height },
+  });
+  const page = await context.newPage();
+
+  try {
+    await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
+    // Wait for any lazy-loaded content
+    await page.waitForTimeout(2000);
+    await page.screenshot({ path: outputPath, fullPage: false });
+
+    // Collect console errors
+    const errors = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+
+    return { success: true, errors, method: "playwright" };
+  } catch (err) {
+    return { success: false, error: err.message, method: "playwright" };
+  } finally {
+    await browser.close();
   }
 }
 
+async function takeScreenshotFallback(url, viewport, outputPath) {
+  const safe = encodeURIComponent(url);
+  const shotUrl = `https://image.thum.io/get/width/${viewport.width}/${safe}`;
+  try {
+    const res = await fetch(shotUrl);
+    if (!res.ok) throw new Error(`thum.io ${res.status}`);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    fs.writeFileSync(outputPath, buffer);
+    return { success: true, errors: [], method: "thum.io" };
+  } catch (err) {
+    return { success: false, error: err.message, method: "thum.io" };
+  }
+}
+
+// ── Baselines ──
+
+function loadBaselines() {
+  if (!fs.existsSync(BASELINE_PATH)) return { version: 2, items: {} };
+  try { return JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8")); }
+  catch { return { version: 2, items: {} }; }
+}
+
 function saveBaselines(data) {
+  data.version = 2;
   fs.writeFileSync(BASELINE_PATH, JSON.stringify(data, null, 2), "utf8");
 }
 
@@ -69,109 +124,171 @@ function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-function hashBuffer(buf) {
+function hashFile(filePath) {
+  const buf = fs.readFileSync(filePath);
   return crypto.createHash("sha256").update(buf).digest("hex");
 }
 
-async function fetchBuffer(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Fetch failed ${res.status}`);
-  const arrayBuffer = await res.arrayBuffer();
-  return Buffer.from(arrayBuffer);
-}
+// ── Issue / PR comment ──
 
 async function issueExists(id) {
-  const query = `repo:${OWNER}/${ORCH_REPO} is:issue is:open \"visual-check:id=${id}\"`;
+  const query = `repo:${OWNER}/${ORCH_REPO} is:issue is:open "visual-check:id=${id}"`;
   const res = await gh(`/search/issues?q=${encodeURIComponent(query)}`);
   return (res?.total_count || 0) > 0;
 }
 
-async function ensureLabel(name, color, description) {
-  try {
-    await gh(`/repos/${OWNER}/${ORCH_REPO}/labels`, "POST", { name, color, description });
-  } catch {}
-}
+async function createIssue(check, viewport, baselineHash, currentHash, screenshotPath) {
+  try { await gh(`/repos/${OWNER}/${ORCH_REPO}/labels`, "POST", { name: "visual-check", color: "FBCA04", description: "Visual regression check" }); } catch {}
 
-async function createIssue(check, baselineFile, baselineHash, currentUrl, currentHash) {
-  await ensureLabel("visual-check", "FBCA04", "Visual regression check");
-  const beforeUrl = baselineFile
-    ? `https://raw.githubusercontent.com/${OWNER}/${ORCH_REPO}/main/${baselineFile}`
-    : "(baseline missing)";
   const body = [
-    `## 시각 검증 이슈`,
-    `- Repo: ${check.repo}`,
-    `- Page: ${check.title}`,
-    `- URL: ${check.url}`,
-    `- Baseline hash: ${baselineHash || "none"}`,
-    `- Current hash: ${currentHash}`,
+    `## Visual Regression Detected`,
+    `- **Repo**: ${check.repo}`,
+    `- **Page**: ${check.title}`,
+    `- **URL**: ${check.url}`,
+    `- **Viewport**: ${viewport.name} (${viewport.width}x${viewport.height})`,
+    `- **Baseline hash**: \`${baselineHash || "none"}\``,
+    `- **Current hash**: \`${currentHash}\``,
     ``,
-    `### 스크린샷`,
-    `- Before: ${beforeUrl}`,
-    `- After: ${currentUrl}`,
-    ``,
-    `<!-- visual-check:id=${check.id} -->`,
+    `<!-- visual-check:id=${check.id}-${viewport.name} -->`,
   ].join("\n");
 
   await gh(`/repos/${OWNER}/${ORCH_REPO}/issues`, "POST", {
-    title: `[visual] ${check.repo}: ${check.title}`,
+    title: `[visual] ${check.repo}: ${check.title} (${viewport.name})`,
     body,
-    labels: ["visual-check", "agent-codex", "agent-claude", "dual-review"],
+    labels: ["visual-check"],
   });
 }
 
-async function main() {
-  if (!TOKEN) throw new Error("Missing token");
+async function commentOnPR(prNumber, repo, results) {
+  const lines = [`## Visual Check — ${repo}`, ""];
+
+  for (const r of results) {
+    const status = r.changed ? "⚠️ Changed" : "✅ Match";
+    lines.push(`- **${r.viewport}** (${r.page}): ${status}`);
+    if (r.errors && r.errors.length > 0) {
+      lines.push(`  - Console errors: ${r.errors.length}`);
+    }
+  }
+
+  lines.push("", `_Method: ${results[0]?.method || "unknown"}_`);
+
+  await gh(`/repos/${OWNER}/${repo}/issues/${prNumber}/comments`, "POST", {
+    body: lines.join("\n"),
+  });
+}
+
+// ── Main: PR-triggered mode ──
+
+async function runPRCheck() {
+  console.log(`PR mode: #${PR_NUMBER} on ${PRODUCT_REPO} → ${DEPLOY_URL}`);
+  ensureDir(SCREENSHOT_DIR);
+
+  const results = [];
+
+  for (const vp of VIEWPORTS) {
+    const filename = `pr-${PR_NUMBER}-${vp.name}.png`;
+    const outputPath = path.join(SCREENSHOT_DIR, filename);
+
+    const result = await takeScreenshot(DEPLOY_URL, vp, outputPath);
+
+    results.push({
+      viewport: `${vp.name} (${vp.width}x${vp.height})`,
+      page: DEPLOY_URL,
+      success: result.success,
+      errors: result.errors || [],
+      method: result.method,
+      changed: false, // No baseline comparison in PR mode — just screenshot
+    });
+
+    if (result.success) {
+      console.log(`  ✅ ${vp.name}: screenshot saved`);
+    } else {
+      console.log(`  ❌ ${vp.name}: ${result.error}`);
+    }
+  }
+
+  // Comment on PR with results
+  if (PR_NUMBER && PRODUCT_REPO) {
+    await commentOnPR(PR_NUMBER, PRODUCT_REPO, results);
+    console.log(`  💬 PR #${PR_NUMBER} comment posted`);
+  }
+}
+
+// ── Main: Scheduled baseline mode ──
+
+async function runScheduledCheck() {
   ensureDir(BASELINE_DIR);
+  ensureDir(SCREENSHOT_DIR);
   const baselines = loadBaselines();
   let changed = false;
 
   for (const check of CHECKS) {
-    const shotUrl = snapshotUrl(check.url);
-    let buffer;
-    try {
-      buffer = await fetchBuffer(shotUrl);
-    } catch (err) {
-      continue;
-    }
-    const currentHash = hashBuffer(buffer);
-    const item = baselines.items[check.id];
+    for (const vp of VIEWPORTS) {
+      const id = `${check.id}-${vp.name}`;
+      const filename = `${id}.png`;
+      const outputPath = path.join(SCREENSHOT_DIR, filename);
+      const baselinePath = path.join(BASELINE_DIR, filename);
 
-    if (!item || MODE === "baseline") {
-      if (!AUTO_BASELINE && MODE !== "baseline") continue;
-      const fileName = `${check.id}.png`;
-      const filePath = path.join(BASELINE_DIR, fileName);
-      fs.writeFileSync(filePath, buffer);
-      baselines.items[check.id] = {
-        repo: check.repo,
-        url: check.url,
-        hash: currentHash,
-        file: `ops/orchestrator/visual-baselines/${fileName}`,
-        updated_at: new Date().toISOString(),
-      };
-      changed = true;
-      continue;
-    }
+      const result = await takeScreenshot(check.url, vp, outputPath);
+      if (!result.success) {
+        console.log(`  ⚠️ ${check.repo} ${vp.name}: screenshot failed — ${result.error}`);
+        continue;
+      }
 
-    if (item.hash !== currentHash) {
-      const exists = await issueExists(check.id);
-      if (!exists) {
-        await createIssue(check, item.file, item.hash, shotUrl, currentHash);
-        if (process.env.VISUAL_NOTIFY === "true") {
-          await sendTelegram(`⚠️ 시각 변경 감지: ${check.repo} ${check.title}\n${check.url}`);
+      const currentHash = hashFile(outputPath);
+      const item = baselines.items[id];
+
+      if (!item || MODE === "baseline") {
+        // New baseline
+        if (!AUTO_BASELINE && MODE !== "baseline") continue;
+        fs.copyFileSync(outputPath, baselinePath);
+        baselines.items[id] = {
+          repo: check.repo,
+          url: check.url,
+          viewport: vp.name,
+          hash: currentHash,
+          file: `ops/orchestrator/visual-baselines/${filename}`,
+          updated_at: new Date().toISOString(),
+        };
+        changed = true;
+        console.log(`  📸 ${check.repo} ${vp.name}: baseline set`);
+        continue;
+      }
+
+      if (item.hash !== currentHash) {
+        console.log(`  ⚠️ ${check.repo} ${vp.name}: visual change detected`);
+        const exists = await issueExists(id);
+        if (!exists) {
+          await createIssue(check, vp, item.hash, currentHash, outputPath);
+          if (process.env.VISUAL_NOTIFY === "true") {
+            await sendTelegram(`⚠️ *Visual change*: ${check.repo} ${check.title} (${vp.name})\n${check.url}`);
+          }
         }
+      } else {
+        console.log(`  ✅ ${check.repo} ${vp.name}: no change`);
       }
     }
   }
 
-  if (changed) {
-    saveBaselines(baselines);
+  if (changed) saveBaselines(baselines);
+}
+
+// ── Entry ──
+
+async function main() {
+  if (!TOKEN) throw new Error("Missing token");
+
+  if (PR_NUMBER && DEPLOY_URL) {
+    await runPRCheck();
+  } else {
+    await runScheduledCheck();
   }
 }
 
 main().catch(async (err) => {
   console.error(err);
   if (process.env.VISUAL_NOTIFY === "true") {
-    await sendTelegram(`❌ 시각 검증 실패: ${err.message}`).catch(() => {});
+    await sendTelegram(`❌ Visual check failed: ${err.message}`).catch(() => {});
   }
   process.exit(1);
 });

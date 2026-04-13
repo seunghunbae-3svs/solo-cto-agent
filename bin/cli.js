@@ -459,6 +459,9 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
 
       const agentLabel = isPro ? "dual/triple-agent" : "single-agent";
       console.log(`   ✅ ${repo} — ${productWorkflows.length} workflows (${agentLabel})`);
+
+      // Detect services in each product repo
+      printServiceDetection(repoDir, isPro);
     }
   }
 
@@ -542,6 +545,109 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
   console.log("                    Get: https://t.me/BotFather");
   console.log("");
   console.log("  GITHUB_TOKEN      Auto-provided by GitHub Actions (no action needed)");
+}
+
+// ─── Service Detection ─────────────────────────────────────
+
+const SERVICE_PATTERNS = {
+  "next-auth": { files: ["**/next-auth*", "**/[...nextauth]*"], imports: ["next-auth", "@auth/"], secrets: ["NEXTAUTH_SECRET", "NEXTAUTH_URL"], guide: "OAuth provider credentials (Google, GitHub, etc.)" },
+  supabase: { files: ["**/supabase*"], imports: ["@supabase/"], secrets: ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"], guide: "https://app.supabase.com → Settings → API" },
+  stripe: { files: [], imports: ["@stripe/stripe-js", "stripe"], secrets: ["STRIPE_SECRET_KEY", "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY", "STRIPE_WEBHOOK_SECRET"], guide: "https://dashboard.stripe.com/apikeys" },
+  prisma: { files: ["**/schema.prisma"], imports: ["@prisma/client"], secrets: ["DATABASE_URL"], guide: "Connection string from your database provider" },
+  firebase: { files: [], imports: ["firebase", "firebase-admin"], secrets: ["FIREBASE_PROJECT_ID", "FIREBASE_CLIENT_EMAIL", "FIREBASE_PRIVATE_KEY"], guide: "Firebase Console → Project Settings → Service accounts" },
+  paymongo: { files: [], imports: ["paymongo"], secrets: ["PAYMONGO_SECRET_KEY", "PAYMONGO_PUBLIC_KEY"], guide: "https://dashboard.paymongo.com/developers" },
+  resend: { files: [], imports: ["resend"], secrets: ["RESEND_API_KEY"], guide: "https://resend.com/api-keys" },
+  aws: { files: [], imports: ["@aws-sdk/", "aws-sdk"], secrets: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"], guide: "AWS IAM Console" },
+};
+
+function detectServicesInRepo(repoDir) {
+  const detected = [];
+  if (!fs.existsSync(repoDir)) return detected;
+
+  // Scan package.json for dependencies
+  const pkgPath = path.join(repoDir, "package.json");
+  let deps = {};
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+      deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    } catch {}
+  }
+
+  for (const [service, config] of Object.entries(SERVICE_PATTERNS)) {
+    // Check imports in package.json deps
+    const found = config.imports.some((imp) =>
+      Object.keys(deps).some((dep) => dep.startsWith(imp) || dep === imp)
+    );
+
+    // Check for config files
+    const hasFile = config.files.some((pattern) => {
+      const baseName = pattern.replace("**/", "");
+      return findFileRecursive(repoDir, baseName, 3);
+    });
+
+    if (found || hasFile) {
+      detected.push({ service, ...config });
+    }
+  }
+
+  return detected;
+}
+
+function findFileRecursive(dir, name, maxDepth) {
+  if (maxDepth <= 0) return false;
+  try {
+    const items = fs.readdirSync(dir, { withFileTypes: true });
+    for (const item of items) {
+      if (item.name === "node_modules" || item.name === ".git" || item.name === ".next") continue;
+      if (item.name.includes(name.replace("*", ""))) return true;
+      if (item.isDirectory() && maxDepth > 1) {
+        if (findFileRecursive(path.join(dir, item.name), name, maxDepth - 1)) return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+
+function printServiceDetection(repoDir, isPro) {
+  const services = detectServicesInRepo(repoDir);
+  if (services.length === 0) return;
+
+  console.log("");
+  console.log("═══ DETECTED SERVICES ═══");
+  console.log("");
+  console.log(`  Scanned: ${path.basename(repoDir)}`);
+  console.log(`  Found ${services.length} service(s) requiring configuration:`);
+  console.log("");
+
+  const allSecrets = new Set();
+
+  for (const svc of services) {
+    console.log(`  📦 ${svc.service}`);
+    console.log(`     Secrets: ${svc.secrets.join(", ")}`);
+    console.log(`     Guide:   ${svc.guide}`);
+    console.log("");
+    svc.secrets.forEach((s) => allSecrets.add(s));
+  }
+
+  // Generate one-shot gh secret set script
+  if (allSecrets.size > 0) {
+    console.log("═══ ONE-SHOT SECRET SETUP ═══");
+    console.log("");
+    console.log("  Copy-paste this block to set all secrets at once:");
+    console.log("");
+    const repoName = path.basename(repoDir);
+    for (const secret of allSecrets) {
+      console.log(`  gh secret set ${secret} -R ${repoName}`);
+    }
+    // Always include pipeline secrets
+    console.log(`  gh secret set ORCHESTRATOR_PAT -R ${repoName}`);
+    console.log(`  gh secret set ANTHROPIC_API_KEY -R ${repoName}`);
+    if (isPro) {
+      console.log(`  gh secret set OPENAI_API_KEY -R ${repoName}`);
+    }
+    console.log("");
+  }
 }
 
 function generateEnvGuide(isPro, org) {
@@ -655,6 +761,9 @@ function setupRepoCommand(repoPath, tier, org, orchName) {
 
   const agentLabel = isPro ? "dual/triple-agent" : "single-agent";
   console.log(`✅ ${path.basename(resolved)} — ${count} workflows (${agentLabel}) + ${productOther.length} templates installed`);
+
+  // Detect services in the repo
+  printServiceDetection(resolved, isPro);
   console.log(`   Location: ${wfDir}`);
   console.log("");
   console.log("Next: git add .github/ && git commit -m 'ci: add dual-agent workflows' && git push");
