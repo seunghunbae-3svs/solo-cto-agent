@@ -91,6 +91,27 @@ solo-cto-agent/
     └── context.md
 ```
 
+## Two Modes
+
+The CLI supports two workflow modes. Pick during `init --wizard`:
+
+| | codex-main | cowork-main |
+|---|---|---|
+| **Primary tool** | GitHub Actions + Codex | Claude Code / Cowork Desktop |
+| **Automation** | Full — webhooks, auto-rework, auto-score | Manual — `sync`, `local-review`, `knowledge` |
+| **CI/CD pipeline** | Required (setup-pipeline) | Optional |
+| **Network dependency** | Needs stable GitHub API access | Works offline, sync when convenient |
+| **Best for** | Teams with CI/CD infra, power users | Solo devs, unstable connections, local-first |
+| **Error patterns** | Auto-collected from CI failures | Manual sync with `--apply` flag |
+| **Agent scores** | Auto-updated per PR event | Synced on demand |
+
+Both modes use the same skills and tiers. The difference is whether automation runs automatically (codex-main) or on-demand (cowork-main).
+
+```bash
+npx solo-cto-agent init --wizard
+# Prompts: Choose mode → [1] codex-main  [2] cowork-main
+```
+
 ## Tiers
 
 Two tiers, one CLI. Pick what fits your workflow.

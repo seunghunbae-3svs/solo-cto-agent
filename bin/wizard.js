@@ -74,10 +74,30 @@ function detectPrisma(targetDir) {
  */
 function generateSkillMD(config) {
   const hasPrisma = config.hasPrisma ? '\nORM: Prisma' : '';
+  const modeLabel = config.mode === 'codex-main'
+    ? 'codex-main (full CI/CD automation)'
+    : 'cowork-main (local-first, manual sync)';
+
+  const autoSettings = config.mode === 'codex-main'
+    ? `
+# Automation Settings (codex-main)
+auto_sync: true
+auto_rework: true
+auto_merge_on_approve: false
+visual_check_on_pr: true
+agent_score_tracking: true`
+    : `
+# Automation Settings (cowork-main)
+auto_sync: false
+auto_rework: false
+visual_check_on_pr: false
+agent_score_tracking: false
+# Run manually: solo-cto-agent sync --org <org> --apply`;
 
   return `---
 name: solo-cto-agent
 description: "Project-specific CTO skill pack — auto-configured for ${config.framework}."
+mode: ${config.mode || 'codex-main'}
 user-invocable: true
 ---
 
@@ -85,6 +105,7 @@ user-invocable: true
 
 | Item | Value |
 |---|---|
+| Mode | ${modeLabel} |
 | OS | ${config.os} |
 | Editor | ${config.editor} |
 | Framework | ${config.framework} |
@@ -135,8 +156,11 @@ ${config.scripts.lint}
 # Notes
 
 This SKILL.md was auto-generated. Edit this file to customize commands, deployment settings, or add project-specific information.
+${autoSettings}
 
-For CI/CD pipeline setup, run: \`solo-cto-agent setup-pipeline\`
+${config.mode === 'codex-main'
+    ? 'For CI/CD pipeline setup, run: `solo-cto-agent setup-pipeline`'
+    : 'For manual sync, run: `solo-cto-agent sync --org <org> --apply`'}
 `;
 }
 
@@ -162,11 +186,20 @@ async function runWizard(targetDir, force = false) {
     console.log('\n╔══════════════════════════════════════════════════╗');
     console.log('║  solo-cto-agent — Interactive Setup              ║');
     console.log('╚══════════════════════════════════════════════════╝\n');
+    // Step 0: Mode selection
+    console.log('Choose your primary workflow mode:\n');
+    console.log('  [1] codex-main  — Full CI/CD automation (GitHub Actions, webhooks, auto-rework)');
+    console.log('  [2] cowork-main — Local-first with manual sync (stable, no webhook dependency)\n');
+    const modeChoice = await ask(rl, 'Mode (1 or 2)', '1');
+    const mode = modeChoice === '2' ? 'cowork-main' : 'codex-main';
+
+    console.log(`\nMode: ${mode}\n`);
     console.log("Let's configure your project stack.");
     console.log('Press Enter to accept defaults shown in [brackets].\n');
 
     // Collect configuration
     const config = {
+      mode,
       os: await ask(rl, 'OS', 'macOS'),
       editor: await ask(rl, 'Editor', 'Cursor'),
       framework: await ask(rl, 'Framework', 'Next.js'),
@@ -213,16 +246,24 @@ async function runWizard(targetDir, force = false) {
 
     console.log(`✅ Stack configured at ${skillMdPath}\n`);
 
-    // Optional CI/CD pipeline setup
-    const setupPipeline = await ask(rl, 'Would you also like to set up CI/CD pipeline?', 'n');
-    const wantsPipeline = setupPipeline.toLowerCase() === 'y' || setupPipeline.toLowerCase() === 'yes';
-
-    if (wantsPipeline) {
-      console.log('\n📋 Next step: Run the following command to configure CI/CD:\n');
-      console.log('  solo-cto-agent setup-pipeline\n');
+    // Next steps based on mode
+    if (mode === 'codex-main') {
+      const setupPipeline = await ask(rl, 'Set up CI/CD pipeline now?', 'y');
+      const wantsPipeline = setupPipeline.toLowerCase() === 'y' || setupPipeline.toLowerCase() === 'yes';
+      if (wantsPipeline) {
+        console.log('\nNext step: Run the following command to configure CI/CD:\n');
+        console.log('  solo-cto-agent setup-pipeline --org <your-org> --repos <repo1,repo2>\n');
+      }
+    } else {
+      console.log('\ncowork-main mode: No CI/CD setup needed.');
+      console.log('Use these commands as needed:\n');
+      console.log('  solo-cto-agent sync --org <org> --apply   # pull remote data');
+      console.log('  solo-cto-agent knowledge <project-dir>    # generate knowledge articles');
+      console.log('  solo-cto-agent local-review <pr-url>      # review a PR locally\n');
     }
 
-    console.log('✨ Setup complete! Your project is ready.\n');
+    const wantsPipeline = mode === 'codex-main';
+    console.log('Setup complete! Your project is ready.\n');
 
     rl.close();
 
