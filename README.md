@@ -179,6 +179,37 @@ solo-cto-agent learn
 
 This scans your failure catalog, agent scores, and sync history, then generates markdown articles grouped by category (deploy failures, database patterns, auth issues, etc.) at `~/.claude/skills/solo-cto-agent/knowledge/`. The articles include pattern frequencies, prevention checklists, and agent performance notes — making the accumulated data immediately useful to your AI agent.
 
+### Local Code Review (Both tiers)
+
+Run multi-agent code review locally without GitHub Actions:
+
+```bash
+# Claude review of staged changes
+ANTHROPIC_API_KEY=sk-xxx solo-cto-agent review --diff staged
+
+# Dual-agent review (Claude + GPT) of branch diff
+ANTHROPIC_API_KEY=sk-xxx OPENAI_API_KEY=sk-xxx solo-cto-agent review --diff branch
+
+# Output as markdown file
+solo-cto-agent review --diff staged --output markdown --file review.md
+```
+
+Works completely offline from CI/CD. Claude reviews the diff first. If an OpenAI key is also set, GPT provides a second opinion and the tool cross-compares both reviews — highlighting agreed issues (high confidence) vs. divergent findings. New error patterns found during review are automatically added to the local failure catalog.
+
+### Knowledge Article Generation (Both tiers)
+
+Auto-generates durable knowledge articles from accumulated session memory:
+
+```bash
+# Dry-run: show which articles would be generated
+solo-cto-agent knowledge
+
+# Generate articles
+solo-cto-agent knowledge --apply
+```
+
+Scans `memory/episodes/`, `CONTEXT_LOG.md`, and `error-patterns.md` for topics that appear 3+ times. When a recurring pattern is detected, it generates a structured knowledge article at `memory/knowledge/{topic}.md` and updates the index. This is the Layer 2 → Layer 3 compression that the memory skill describes but previously required manual effort.
+
 ### Local ↔ Remote Sync
 
 The `sync` command bridges the gap between your local skill files and remote CI/CD results. It runs in dry-run mode by default — fetches and displays data without modifying local files. Add `--apply` to merge remote data into local:

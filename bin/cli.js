@@ -8,8 +8,8 @@ const { execSync } = require("child_process");
 
 const { syncCommand } = require("./sync");
 const { runWizard, hasWizardFlag } = require("./wizard");
-const { learnCommand } = require("./knowledge");
-const { reviewCommand } = require("./review");
+const { generateKnowledge } = require("./knowledge-gen");
+const { localReview } = require("./local-review");
 
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CATALOG = path.join(ROOT, "failure-catalog.json");
@@ -36,8 +36,8 @@ Usage:
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent upgrade --org <github-org> [--repos <repo1,repo2,...>]
   solo-cto-agent sync --org <github-org> [--apply] [--repos <repo1,repo2,...>]
-  solo-cto-agent review [--diff HEAD~1] [--agent claude] [--dry-run]
-  solo-cto-agent learn [--force] [--category <name>]
+  solo-cto-agent review [--diff staged|unstaged|branch|commit:SHA] [--output terminal|markdown|json] [--file report.md]
+  solo-cto-agent knowledge [--apply] [--force] [--min <N>] [--verbose]
   solo-cto-agent status
   solo-cto-agent lint [path]
   solo-cto-agent --help
@@ -48,8 +48,8 @@ Commands:
   setup-repo        Install dual-agent workflows to a single product repo
   upgrade           Upgrade Builder (Lv4) → CTO (Lv5+6): add multi-agent workflows + config
   sync              Fetch CI/CD results from GitHub (dry-run by default, --apply to write)
-  review            Run local code review via Claude API (no CI/CD required)
-  learn             Generate knowledge articles from accumulated CI/CD data
+  review            Local multi-agent code review via Claude/OpenAI API (no CI/CD required)
+  knowledge         Auto-generate knowledge articles from accumulated memory data
   status            Check skill health, error catalog, sync status (local only, no network)
   lint              Check skill files for size and structure issues
 
@@ -67,9 +67,10 @@ Examples:
   npx solo-cto-agent setup-repo ./my-project --org myorg
   npx solo-cto-agent sync --org myorg --repos app1,app2   # dry-run: fetch + display
   npx solo-cto-agent sync --org myorg --apply              # apply: merge remote data into local
-  npx solo-cto-agent review                                # local Claude review of last commit
-  npx solo-cto-agent review --diff main..feature --dry-run # preview review prompt
-  npx solo-cto-agent learn                                 # generate knowledge articles
+  npx solo-cto-agent review --diff staged                  # Claude review of staged changes
+  npx solo-cto-agent review --diff branch --output md      # review branch diff, markdown output
+  npx solo-cto-agent knowledge                             # dry-run: show what articles would generate
+  npx solo-cto-agent knowledge --apply                     # generate knowledge articles
 `);
 }
 
@@ -1177,22 +1178,25 @@ async function main() {
 
   if (cmd === "review") {
     const diffIndex = args.indexOf("--diff");
-    const diff = diffIndex >= 0 ? args[diffIndex + 1] : "HEAD~1";
-    const agentIndex = args.indexOf("--agent");
-    const agent = agentIndex >= 0 ? args[agentIndex + 1] : "claude";
-    const pathIndex = args.indexOf("--path");
-    const reviewPath = pathIndex >= 0 ? args[pathIndex + 1] : ".";
-    const dryRun = args.includes("--dry-run");
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    await reviewCommand({ path: reviewPath, agent, diff, apiKey, dryRun });
+    const diffSource = diffIndex >= 0 ? args[diffIndex + 1] : "staged";
+    const outputIndex = args.indexOf("--output");
+    const outputFormat = outputIndex >= 0 ? args[outputIndex + 1] : "terminal";
+    const fileIndex = args.indexOf("--file");
+    const outputFile = fileIndex >= 0 ? args[fileIndex + 1] : null;
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    const openaiKey = process.env.OPENAI_API_KEY;
+    await localReview({ diffSource, anthropicKey, openaiKey, outputFormat, outputFile });
     return;
   }
 
-  if (cmd === "learn") {
-    const forceLearn = args.includes("--force");
-    const catIndex = args.indexOf("--category");
-    const category = catIndex >= 0 ? args[catIndex + 1] : null;
-    await learnCommand({ force: forceLearn, category });
+  if (cmd === "knowledge") {
+    const projectDir = process.cwd();
+    const apply = args.includes("--apply");
+    const forceKnowledge = args.includes("--force");
+    const minIndex = args.indexOf("--min");
+    const minOccurrences = minIndex >= 0 ? parseInt(args[minIndex + 1], 10) : 3;
+    const verbose = args.includes("--verbose");
+    await generateKnowledge(projectDir, { dryRun: !apply, force: forceKnowledge, minOccurrences, verbose });
     return;
   }
 
