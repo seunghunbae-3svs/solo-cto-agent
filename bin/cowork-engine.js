@@ -253,33 +253,103 @@ function personalizationContext() {
  * Semi-auto mode 에서는 desktop runtime 의 환경 또는 사용자 SKILL.md 의 mcp 필드를 본다.
  * 환경변수 힌트: MCP_VERCEL=1, MCP_SUPABASE=1, MCP_GITHUB=1 등.
  */
+/**
+ * Detect MCP live sources with provenance.
+ *
+ * Returns: { confirmed: [...], inferred: [...], all: [...] }
+ *   - confirmed: probed from ~/.claude/mcp.json or claude_desktop_config.json (Claude Desktop)
+ *                or solo-cto-agent SKILL.md `mcp:` field
+ *   - inferred:  env vars only (token presence ≠ MCP installed; only suggests credentials exist)
+ *
+ * Heuristic note: env-var detection used to claim "connected" — that's wrong because
+ * a token can exist without the MCP server being registered. Now downgraded to [추정].
+ */
 function detectLiveSources() {
-  const sources = [];
-  if (process.env.MCP_GITHUB || process.env.GITHUB_TOKEN) sources.push("github");
-  if (process.env.MCP_VERCEL || process.env.VERCEL_TOKEN) sources.push("vercel");
-  if (process.env.MCP_SUPABASE || process.env.SUPABASE_ACCESS_TOKEN) sources.push("supabase");
-  if (process.env.MCP_FIGMA || process.env.FIGMA_TOKEN) sources.push("figma");
+  const confirmed = new Set();
+  const inferred = new Set();
 
-  // SKILL.md 에 mcp: 항목이 명시되어 있으면 그것도 포함
+  // Probe 1: Claude Desktop MCP config (most authoritative on Cowork)
+  const desktopConfigPaths = [
+    process.env.CLAUDE_DESKTOP_CONFIG,
+    path.join(os.homedir(), ".claude", "mcp.json"),
+    path.join(os.homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json"),
+    path.join(os.homedir(), "AppData", "Roaming", "Claude", "claude_desktop_config.json"),
+    path.join(os.homedir(), ".config", "Claude", "claude_desktop_config.json"),
+  ].filter(Boolean);
+  for (const p of desktopConfigPaths) {
+    try {
+      if (!fs.existsSync(p)) continue;
+      const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
+      const servers = cfg.mcpServers || cfg.mcp_servers || cfg.mcp || {};
+      Object.keys(servers).forEach((name) => {
+        const norm = name.toLowerCase();
+        if (norm.includes("github")) confirmed.add("github");
+        else if (norm.includes("vercel")) confirmed.add("vercel");
+        else if (norm.includes("supabase")) confirmed.add("supabase");
+        else if (norm.includes("figma")) confirmed.add("figma");
+        else if (norm.includes("gdrive") || norm.includes("google-drive") || norm.includes("google_drive")) confirmed.add("gdrive");
+        else if (norm.includes("gcal") || norm.includes("calendar")) confirmed.add("gcal");
+        else if (norm.includes("slack")) confirmed.add("slack");
+        else if (norm.includes("notion")) confirmed.add("notion");
+        else confirmed.add(norm);
+      });
+      break; // first found wins
+    } catch (_) { /* ignore parse error, try next */ }
+  }
+
+  // Probe 2: solo-cto-agent SKILL.md `mcp:` field (user-declared)
   try {
     const text = fs.readFileSync(path.join(CONFIG.skillDir, "SKILL.md"), "utf8");
     const m = text.match(/^mcp:\s*\[([^\]]+)\]/im);
     if (m) {
       m[1].split(",").map((s) => s.trim().replace(/['"]/g, "")).forEach((s) => {
-        if (s && !sources.includes(s)) sources.push(s);
+        if (s) confirmed.add(s.toLowerCase());
       });
     }
   } catch (_) {}
 
-  return sources;
+  // Inferred: env-var hints (credentials exist, not the same as MCP being wired)
+  if (process.env.MCP_GITHUB || process.env.GITHUB_TOKEN) inferred.add("github");
+  if (process.env.MCP_VERCEL || process.env.VERCEL_TOKEN) inferred.add("vercel");
+  if (process.env.MCP_SUPABASE || process.env.SUPABASE_ACCESS_TOKEN) inferred.add("supabase");
+  if (process.env.MCP_FIGMA || process.env.FIGMA_TOKEN) inferred.add("figma");
+
+  // Drop inferred entries that are already confirmed
+  confirmed.forEach((c) => inferred.delete(c));
+
+  // Backward compat: flat array contains both (test suites + existing callers).
+  // Provenance attached as non-enumerable .confirmed / .inferred for context-aware printers.
+  const result = [...confirmed, ...inferred];
+  Object.defineProperty(result, "confirmed", { value: Array.from(confirmed), enumerable: false });
+  Object.defineProperty(result, "inferred", { value: Array.from(inferred), enumerable: false });
+  return result;
 }
 
 function liveSourceContext() {
   const sources = detectLiveSources();
-  if (!sources.length) {
-    return `\n## 라이브 소스\n현재 연결된 MCP 라이브 소스 없음. 모든 외부 상태는 [추정] 또는 [미검증] 으로 표기.\n오프라인 폴백: 캐시된 failure-catalog 와 personalization 만 사용.\n`;
+  const confirmed = sources.confirmed || sources;
+  const inferred = sources.inferred || [];
+
+  if (!confirmed.length && !inferred.length) {
+    return `\n## 라이브 소스\nMCP 라이브 소스 없음 (Claude Desktop mcp.json 미발견 + env 힌트 없음).\n모든 외부 상태는 [추정] 또는 [미검증] 으로 표기.\n오프라인 폴백: 캐시된 failure-catalog 와 personalization 만 사용.\n`;
   }
-  return `\n## 라이브 소스 (우선 인용 — [확정] 자료)\n연결된 MCP: ${sources.join(", ")}\n- 배포 상태: ${sources.includes("vercel") ? "Vercel API 직접 조회" : "라이브 소스 없음 → [추정]"}\n- DB 상태: ${sources.includes("supabase") ? "Supabase 직접 조회" : "라이브 소스 없음 → [추정]"}\n- 코드 상태: ${sources.includes("github") ? "GitHub API 직접 조회" : "로컬 git 만 → [캐시]"}\n문서/이전 기억보다 위 라이브 소스를 우선한다.\n`;
+
+  const lines = [`\n## 라이브 소스`];
+  if (confirmed.length) {
+    lines.push(`확정 MCP (Claude Desktop config 또는 SKILL.md mcp: 명시) — [확정] 자료로 인용 가능:`);
+    lines.push(`  ${confirmed.join(", ")}`);
+  }
+  if (inferred.length) {
+    lines.push(`추정 MCP (env 토큰만 존재 — MCP 서버 등록 여부 미확인) — [추정] 으로만 인용:`);
+    lines.push(`  ${inferred.join(", ")}`);
+  }
+  const has = (n) => confirmed.includes(n);
+  lines.push(``);
+  lines.push(`- 배포 상태: ${has("vercel") ? "Vercel MCP 직접 조회 가능 [확정]" : "라이브 MCP 없음 → [추정]"}`);
+  lines.push(`- DB 상태:   ${has("supabase") ? "Supabase MCP 직접 조회 가능 [확정]" : "라이브 MCP 없음 → [추정]"}`);
+  lines.push(`- 코드 상태: ${has("github") ? "GitHub MCP 직접 조회 가능 [확정]" : "로컬 git 만 → [캐시]"}`);
+  lines.push(`문서/이전 기억보다 위 라이브 소스를 우선한다. 추정 항목은 단정 표현 금지.`);
+  return lines.join("\n") + "\n";
 }
 
 /**
@@ -470,19 +540,21 @@ function _anthropicOnce(prompt, systemPrompt, model) {
   });
 }
 
-// 3-retry with rate-limit backoff (mirrors codex-main/claude-worker.js claude())
-async function callAnthropic(prompt, systemPrompt, model) {
+// Tier-aware retry with rate-limit backoff (mirrors codex-main/claude-worker.js claude()).
+// maxRetries is wired from CONFIG.tierLimits[tier].maxRetries by callers; defaults to 3.
+async function callAnthropic(prompt, systemPrompt, model, opts = {}) {
+  const maxRetries = Math.max(1, Math.min(6, opts.maxRetries || 3));
   let lastErr;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       return await _anthropicOnce(prompt, systemPrompt, model);
     } catch (e) {
       lastErr = e;
       const body = (e.body || e.message || "").toLowerCase();
       const isRateLimit = body.includes("rate_limit") || body.includes("overloaded") || e.statusCode === 429 || e.statusCode === 529;
-      if (attempt === 2) break;
+      if (attempt === maxRetries - 1) break;
       const waitMs = isRateLimit ? (attempt + 1) * 30000 : (attempt + 1) * 15000;
-      logWarn(`Anthropic ${isRateLimit ? "rate limited" : "error"}, waiting ${waitMs / 1000}s (attempt ${attempt + 1}/3)...`);
+      logWarn(`Anthropic ${isRateLimit ? "rate limited" : "error"}, waiting ${waitMs / 1000}s (attempt ${attempt + 1}/${maxRetries})...`);
       await new Promise((r) => setTimeout(r, waitMs));
     }
   }
@@ -814,10 +886,10 @@ ${diff}
     return null;
   }
 
-  logInfo("Calling Anthropic API...");
+  logInfo(`Calling Anthropic API (maxRetries=${tierLimits.maxRetries})...`);
 
   try {
-    const response = await callAnthropic(userPrompt, systemPrompt, model);
+    const response = await callAnthropic(userPrompt, systemPrompt, model, { maxRetries: tierLimits.maxRetries });
     const review = parseReviewResponse(response.text);
 
     // Estimate tokens
@@ -863,6 +935,7 @@ ${diff}
           firstPassRaw: response.text,
           systemPromptBase: identity,
           model,
+          maxRetries: tierLimits.maxRetries,
         });
         reviewData.crossCheck = cross;
         // 합의 BLOCKER 가 있으면 verdict 강화
@@ -926,7 +999,7 @@ ${diff}
  * 두 패스의 합의·불일치를 정리해 단일 시점 의견의 한계를 보완.
  * Cowork+Codex 가 없을 때 가장 큰 가치를 만든다.
  */
-async function selfCrossReview({ diff, firstPass, firstPassRaw, systemPromptBase, model }) {
+async function selfCrossReview({ diff, firstPass, firstPassRaw, systemPromptBase, model, maxRetries }) {
   const advocateSystem = `${systemPromptBase}
 
 당신은 동일 diff 의 1차 리뷰 결과를 검증하는 **devil's advocate 리뷰어** 다.
@@ -985,7 +1058,7 @@ ${diff}
 
 위 출력 형식 그대로, devil's advocate 시각에서 검증하라.`;
 
-  const response = await callAnthropic(advocateUser, advocateSystem, model);
+  const response = await callAnthropic(advocateUser, advocateSystem, model, { maxRetries: maxRetries || 3 });
   const text = response.text;
 
   // Parse cross-check response

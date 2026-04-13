@@ -168,13 +168,25 @@ describe("cowork-engine: live source detection", () => {
     expect(ctx).toContain("MCP 라이브 소스 없음");
   });
 
-  it("liveSourceContext lists connected MCPs as priority", () => {
+  it("liveSourceContext shows env-only MCPs as inferred (추정), not confirmed", () => {
+    // env tokens alone are NOT proof an MCP server is wired — must be [추정] only.
     process.env.GITHUB_TOKEN = "x";
     process.env.VERCEL_TOKEN = "y";
     const ctx = engine.liveSourceContext();
-    expect(ctx).toContain("우선 인용");
+    expect(ctx).toContain("추정 MCP");
     expect(ctx).toContain("github");
     expect(ctx).toContain("vercel");
+    // Critical: env-only must NOT claim "확정" priority
+    expect(ctx).not.toContain("확정 MCP");
+  });
+
+  it("detectLiveSources separates confirmed (mcp.json/SKILL.md) from inferred (env)", () => {
+    process.env.GITHUB_TOKEN = "x";
+    const sources = engine.detectLiveSources();
+    expect(sources.confirmed).toEqual([]);
+    expect(sources.inferred).toContain("github");
+    // Backward compat: flat array still includes everything
+    expect(sources).toContain("github");
   });
 });
 
