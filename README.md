@@ -331,6 +331,57 @@ bash setup.sh --org myorg --tier cto --repos myapp1,myapp2
 
 ![CLI demo](docs/demo.svg)
 
+## Cowork Working Model
+
+The system supports two working models depending on your API keys and workflow preference.
+
+### Mode A: Cowork Solo (Claude only)
+
+Everything runs locally via the Anthropic API. No GitHub Actions required.
+
+```text
+You write code
+  → solo-cto-agent review          # Claude reviews your staged changes
+  → solo-cto-agent knowledge       # extracts decisions into knowledge articles
+  → solo-cto-agent sync --org X    # fetches remote CI data (dry-run by default)
+  → git push                       # GitHub Actions (if set up) handles the rest
+```
+
+Requirements: `ANTHROPIC_API_KEY` only. This mode is ideal for Cowork Desktop users who want local review + memory without CI/CD infrastructure.
+
+What you get locally without CI/CD: code review, error pattern matching against failure catalog, session decision capture, knowledge article generation. What requires CI/CD: cross-repo dispatch, automated rework cycles, visual regression, agent score tracking.
+
+### Mode B: Cowork + Codex Dual
+
+Both Claude and OpenAI review your code independently, then the system cross-compares.
+
+```text
+You write code
+  → solo-cto-agent review          # auto-detects both keys, runs dual review
+  → Claude reviews                 # via Anthropic API
+  → OpenAI reviews                 # via OpenAI API
+  → Cross-comparison report        # agreements, disagreements, final verdict
+```
+
+Requirements: `ANTHROPIC_API_KEY` + `OPENAI_API_KEY`. Use `--solo` flag to force Claude-only mode even when both keys are set.
+
+The dual mode surfaces issues that one agent misses — Claude tends to catch architectural concerns while OpenAI tends to catch implementation bugs. Disagreements between agents are the most valuable signal.
+
+### Semi-Automatic Sync
+
+The `sync` command solves the local↔remote gap without requiring webhooks:
+
+```text
+Local (Cowork)                         Remote (GitHub Actions)
+─────────────────                      ──────────────────────
+failure-catalog.json  ← sync --apply → failure-catalog.json
+agent-scores-local.json  ← sync ────→ agent-scores.json
+reviews/ (local)         ← sync ────→ workflow runs, PR reviews
+knowledge/               (local only)  (no remote equivalent)
+```
+
+Sync is read-only by default (`dry-run`). Add `--apply` to merge remote error patterns into local. This is intentional — automatic merging without review is risky.
+
 ## Architecture
 
 ```mermaid

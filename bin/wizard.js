@@ -10,6 +10,7 @@ function hasWizardFlag(args) {
   return args.includes('--wizard') || args.includes('-w');
 }
 
+
 /**
  * Check if running in an interactive TTY environment
  */

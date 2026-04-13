@@ -8,8 +8,7 @@ const { execSync } = require("child_process");
 
 const { syncCommand } = require("./sync");
 const { runWizard, hasWizardFlag } = require("./wizard");
-const { generateKnowledge } = require("./knowledge-gen");
-const { localReview } = require("./local-review");
+const { localReview, knowledgeCapture, dualReview, detectMode } = require("./cowork-engine");
 
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CATALOG = path.join(ROOT, "failure-catalog.json");
@@ -36,8 +35,9 @@ Usage:
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent upgrade --org <github-org> [--repos <repo1,repo2,...>]
   solo-cto-agent sync --org <github-org> [--apply] [--repos <repo1,repo2,...>]
-  solo-cto-agent review [--diff staged|unstaged|branch|commit:SHA] [--output terminal|markdown|json] [--file report.md]
-  solo-cto-agent knowledge [--apply] [--force] [--min <N>] [--verbose]
+  solo-cto-agent review [--staged|--branch|--file <path>] [--dry-run] [--solo]
+  solo-cto-agent dual-review [--staged|--branch]
+  solo-cto-agent knowledge [--session|--file <path>|--manual] [--project <tag>]
   solo-cto-agent status
   solo-cto-agent lint [path]
   solo-cto-agent --help
@@ -48,8 +48,9 @@ Commands:
   setup-repo        Install dual-agent workflows to a single product repo
   upgrade           Upgrade Builder (Lv4) → CTO (Lv5+6): add multi-agent workflows + config
   sync              Fetch CI/CD results from GitHub (dry-run by default, --apply to write)
-  review            Local multi-agent code review via Claude/OpenAI API (no CI/CD required)
-  knowledge         Auto-generate knowledge articles from accumulated memory data
+  review            Local code review via Claude API (auto-detects dual mode if both keys set)
+  dual-review       Explicit dual-agent cross-review (Claude + OpenAI)
+  knowledge         Extract session decisions into knowledge articles via Claude API
   status            Check skill health, error catalog, sync status (local only, no network)
   lint              Check skill files for size and structure issues
 
@@ -67,10 +68,11 @@ Examples:
   npx solo-cto-agent setup-repo ./my-project --org myorg
   npx solo-cto-agent sync --org myorg --repos app1,app2   # dry-run: fetch + display
   npx solo-cto-agent sync --org myorg --apply              # apply: merge remote data into local
-  npx solo-cto-agent review --diff staged                  # Claude review of staged changes
-  npx solo-cto-agent review --diff branch --output md      # review branch diff, markdown output
-  npx solo-cto-agent knowledge                             # dry-run: show what articles would generate
-  npx solo-cto-agent knowledge --apply                     # generate knowledge articles
+  npx solo-cto-agent review                                # Claude review of staged changes
+  npx solo-cto-agent review --branch                       # review branch diff vs main
+  npx solo-cto-agent dual-review                           # Claude + OpenAI cross-review
+  npx solo-cto-agent knowledge                             # extract decisions from recent commits
+  npx solo-cto-agent knowledge --project tribo             # tag with project name
 `);
 }
 
@@ -1177,26 +1179,50 @@ async function main() {
   }
 
   if (cmd === "review") {
-    const diffIndex = args.indexOf("--diff");
-    const diffSource = diffIndex >= 0 ? args[diffIndex + 1] : "staged";
-    const outputIndex = args.indexOf("--output");
-    const outputFormat = outputIndex >= 0 ? args[outputIndex + 1] : "terminal";
+    const mode = detectMode();
+    if (mode === "none") {
+      console.error("❌ ANTHROPIC_API_KEY required for local review.");
+      console.error("   export ANTHROPIC_API_KEY=sk-ant-...");
+      process.exit(1);
+    }
+    const diffSource = args.includes("--branch") ? "branch" : args.includes("--file") ? "file" : "staged";
     const fileIndex = args.indexOf("--file");
-    const outputFile = fileIndex >= 0 ? args[fileIndex + 1] : null;
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
-    const openaiKey = process.env.OPENAI_API_KEY;
-    await localReview({ diffSource, anthropicKey, openaiKey, outputFormat, outputFile });
+    const target = fileIndex >= 0 ? args[fileIndex + 1] : null;
+    const dryRun = args.includes("--dry-run");
+    const outputFormat = args.includes("--json") ? "json" : args.includes("--markdown") ? "markdown" : "terminal";
+
+    if (mode === "dual" && !args.includes("--solo")) {
+      console.log("  Both API keys detected. Running dual review (Claude + OpenAI).");
+      console.log("  Use --solo to force Claude-only mode.\n");
+      await dualReview({ diffSource, target });
+    } else {
+      await localReview({ diffSource, target, dryRun, outputFormat });
+    }
+    return;
+  }
+
+  if (cmd === "dual-review") {
+    if (!process.env.ANTHROPIC_API_KEY || !process.env.OPENAI_API_KEY) {
+      console.error("❌ Both ANTHROPIC_API_KEY and OPENAI_API_KEY required for dual review.");
+      process.exit(1);
+    }
+    const diffSource = args.includes("--branch") ? "branch" : "staged";
+    await dualReview({ diffSource });
     return;
   }
 
   if (cmd === "knowledge") {
-    const projectDir = process.cwd();
-    const apply = args.includes("--apply");
-    const forceKnowledge = args.includes("--force");
-    const minIndex = args.indexOf("--min");
-    const minOccurrences = minIndex >= 0 ? parseInt(args[minIndex + 1], 10) : 3;
-    const verbose = args.includes("--verbose");
-    await generateKnowledge(projectDir, { dryRun: !apply, force: forceKnowledge, minOccurrences, verbose });
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error("❌ ANTHROPIC_API_KEY required for knowledge generation.");
+      process.exit(1);
+    }
+    const source = args.includes("--file") ? "file" : args.includes("--manual") ? "manual" : "session";
+    const fileIndex = args.indexOf("--file");
+    const inputIndex = args.indexOf("--input");
+    const projectIndex = args.indexOf("--project");
+    const input = fileIndex >= 0 ? args[fileIndex + 1] : inputIndex >= 0 ? args[inputIndex + 1] : null;
+    const projectTag = projectIndex >= 0 ? args[projectIndex + 1] : null;
+    await knowledgeCapture({ source, input, projectTag });
     return;
   }
 
