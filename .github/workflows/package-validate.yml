@@ -1,0 +1,24 @@
+name: Package Validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate package
+        run: node scripts/validate-package.js
+
+      - name: Validate setup.sh install
+        run: |
+          chmod +x setup.sh
+          export CLAUDE_DIR="$RUNNER_TEMP/claude"
+          bash setup.sh --install
