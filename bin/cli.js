@@ -8,7 +8,13 @@ const { execSync } = require("child_process");
 
 const { syncCommand } = require("./sync");
 const { runWizard, hasWizardFlag } = require("./wizard");
-const { localReview, knowledgeCapture, dualReview, detectMode, sessionSave, sessionRestore, sessionList } = require("./cowork-engine");
+const { localReview, knowledgeCapture, dualReview, detectMode, sessionSave, sessionRestore, sessionList, recordFeedback } = require("./cowork-engine");
+// Lazy-load optional modules so missing files don't break older installs.
+let uiux, rework, watch, notify;
+try { uiux = require("./uiux-engine"); } catch (_) { uiux = null; }
+try { rework = require("./rework"); } catch (_) { rework = null; }
+try { watch = require("./watch"); } catch (_) { watch = null; }
+try { notify = require("./notify"); } catch (_) { notify = null; }
 
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CATALOG = path.join(ROOT, "failure-catalog.json");
@@ -1494,6 +1500,161 @@ async function main() {
 
   if (cmd === "doctor") {
     doctorCommand();
+    return;
+  }
+
+  // ─── uiux-review (cowork: code + vision + cross-verify + suggest-fixes) ─
+  if (cmd === "uiux-review" || cmd === "uiux") {
+    if (!uiux) {
+      console.error("❌ uiux-engine module not installed. Reinstall solo-cto-agent.");
+      process.exit(1);
+    }
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error("❌ ANTHROPIC_API_KEY required for uiux-review.");
+      process.exit(1);
+    }
+    const sub = args[1] || "code";
+    const get = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : null; };
+    try {
+      if (sub === "code") {
+        const diffSource = args.includes("--branch") ? "branch" : args.includes("--file") ? "file" : "staged";
+        await uiux.uiuxCodeReview({ diffSource, target: get("--file"), projectDir: get("--cwd") || process.cwd() });
+      } else if (sub === "vision") {
+        await uiux.uiuxVisionReview({
+          screenshotPath: get("--screenshot"),
+          viewport: get("--viewport") || "desktop",
+          projectSlug: get("--project") || path.basename(process.cwd()),
+        });
+      } else if (sub === "cross-verify") {
+        await uiux.uiuxCrossVerify({
+          diffSource: args.includes("--branch") ? "branch" : "staged",
+          screenshotPath: get("--screenshot"),
+          viewport: get("--viewport") || "desktop",
+          projectSlug: get("--project") || path.basename(process.cwd()),
+          projectDir: get("--cwd") || process.cwd(),
+        });
+      } else if (sub === "suggest-fixes") {
+        await uiux.uiuxSuggestFixes({
+          reviewFile: get("--review"),
+          applyMode: args.includes("--apply") ? "apply" : "dry-run",
+        });
+      } else if (sub === "baseline") {
+        const action = args[2] || "save";
+        if (action === "save") uiux.baselineSave({ screenshotPath: get("--screenshot"), projectSlug: get("--project"), viewport: get("--viewport") || "desktop" });
+        else if (action === "diff") uiux.baselineDiff({ screenshotPath: get("--screenshot"), projectSlug: get("--project"), viewport: get("--viewport") || "desktop" });
+        else { console.error("❌ Use: uiux baseline save|diff"); process.exit(1); }
+      } else if (sub === "tokens" || sub === "extract-tokens") {
+        const tokens = uiux.extractDesignTokens(get("--cwd") || process.cwd());
+        console.log(uiux.summarizeTokens(tokens));
+      } else {
+        console.error(`❌ Unknown uiux subcommand: ${sub}`);
+        console.error(`   Use: uiux-review code|vision|cross-verify|suggest-fixes|baseline|tokens`);
+        process.exit(1);
+      }
+    } catch (e) {
+      console.error(`❌ uiux-review failed: ${e.message}`);
+      process.exit(1);
+    }
+    return;
+  }
+
+  // ─── apply-fixes (rework loop) ─────────────────────────────
+  if (cmd === "apply-fixes") {
+    if (!rework) {
+      console.error("❌ rework module not installed. Reinstall solo-cto-agent.");
+      process.exit(1);
+    }
+    const get = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : null; };
+    const reviewFile = get("--review");
+    if (!reviewFile) { console.error("❌ --review <file.json> required"); process.exit(1); }
+    const opts = {
+      reviewFile,
+      apply: args.includes("--apply"),
+      only: get("--only") ? get("--only").split(",").map((s) => s.trim().toUpperCase()) : ["BLOCKER", "SUGGESTION"],
+      maxFixes: get("--max-fixes") ? parseInt(get("--max-fixes"), 10) : 5,
+      cleanCheck: !args.includes("--no-clean-check"),
+      cwd: get("--cwd") || process.cwd(),
+      notifier: notify ? notify.notifyApplyResult : null,
+    };
+    try {
+      const result = await rework.applyFixes(opts);
+      console.log(JSON.stringify(result, null, 2));
+      process.exit(result.failed.length > 0 ? 1 : 0);
+    } catch (e) {
+      console.error(`❌ apply-fixes failed: ${e.message}`);
+      process.exit(1);
+    }
+  }
+
+  // ─── feedback (accept/reject for personalization) ─────────
+  if (cmd === "feedback") {
+    const sub = args[1];
+    if (!["accept", "reject", "show"].includes(sub)) {
+      console.error("❌ Use: feedback accept|reject --location <path> [--severity BLOCKER|SUGGESTION] [--note \"...\"]");
+      console.error("       feedback show");
+      process.exit(1);
+    }
+    const get = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : null; };
+    if (sub === "show") {
+      const { loadPersonalization } = require("./cowork-engine");
+      const p = loadPersonalization();
+      console.log(JSON.stringify({
+        reviewCount: p.reviewCount,
+        accepted: p.acceptedPatterns || [],
+        rejected: p.rejectedPatterns || [],
+      }, null, 2));
+      return;
+    }
+    const location = get("--location");
+    if (!location) { console.error("❌ --location <path[:line]> required"); process.exit(1); }
+    try {
+      const result = recordFeedback({
+        verdict: sub,
+        location,
+        severity: get("--severity") || "UNKNOWN",
+        note: get("--note") || "",
+      });
+      console.log(JSON.stringify(result, null, 2));
+    } catch (e) {
+      console.error(`❌ feedback failed: ${e.message}`);
+      process.exit(1);
+    }
+    return;
+  }
+
+  // ─── watch (file watcher with tier gate) ──────────────────
+  if (cmd === "watch") {
+    if (!watch) { console.error("❌ watch module not installed."); process.exit(1); }
+    const get = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : null; };
+    await watch.startWatch({
+      rootDir: get("--root") ? path.resolve(get("--root")) : process.cwd(),
+      auto: args.includes("--auto"),
+      force: args.includes("--force"),
+      debounceMs: get("--debounce-ms") ? parseInt(get("--debounce-ms"), 10) : 1500,
+      dryRun: args.includes("--dry-run"),
+    });
+    return;
+  }
+
+  // ─── notify (manual outbound message) ─────────────────────
+  if (cmd === "notify") {
+    if (!notify) { console.error("❌ notify module not installed."); process.exit(1); }
+    if (args.includes("--detect")) {
+      console.log(JSON.stringify({ detected: notify.detectChannels() }, null, 2));
+      return;
+    }
+    const get = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : null; };
+    const title = get("--title");
+    if (!title) { console.error("❌ --title required (or use --detect)"); process.exit(1); }
+    const channels = get("--channels") ? get("--channels").split(",") : undefined;
+    const meta = {};
+    args.forEach((a, i) => { if (a === "--meta" && args[i + 1]) { const eq = args[i + 1].indexOf("="); if (eq > 0) meta[args[i + 1].slice(0, eq)] = args[i + 1].slice(eq + 1); }});
+    const r = await notify.notify({
+      severity: get("--severity") || "info",
+      title, body: get("--body") || "", meta, channels,
+    });
+    const ok = r.results.filter((x) => x.ok).map((x) => x.channel).join(", ") || "(none)";
+    process.stderr.write(`sent: ${ok}\n`);
     return;
   }
 
