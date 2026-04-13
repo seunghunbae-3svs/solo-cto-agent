@@ -8,7 +8,7 @@ const { execSync } = require("child_process");
 
 const { syncCommand } = require("./sync");
 const { runWizard, hasWizardFlag } = require("./wizard");
-const { localReview, knowledgeCapture, dualReview, detectMode } = require("./cowork-engine");
+const { localReview, knowledgeCapture, dualReview, detectMode, sessionSave, sessionRestore, sessionList } = require("./cowork-engine");
 
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CATALOG = path.join(ROOT, "failure-catalog.json");
@@ -38,8 +38,10 @@ Usage:
   solo-cto-agent review [--staged|--branch|--file <path>] [--dry-run] [--solo]
   solo-cto-agent dual-review [--staged|--branch]
   solo-cto-agent knowledge [--session|--file <path>|--manual] [--project <tag>]
+  solo-cto-agent session save|restore|list [--project <tag>] [--session <file>] [--limit <n>]
   solo-cto-agent status
   solo-cto-agent lint [path]
+  solo-cto-agent doctor
   solo-cto-agent --help
 
 Commands:
@@ -51,8 +53,10 @@ Commands:
   review            Local code review via Claude API (auto-detects dual mode if both keys set)
   dual-review       Explicit dual-agent cross-review (Claude + OpenAI)
   knowledge         Extract session decisions into knowledge articles via Claude API
+  session           Save/restore/list session context (cowork-main mode)
   status            Check skill health, error catalog, sync status (local only, no network)
   lint              Check skill files for size and structure issues
+  doctor            Complete system health check (skills, engine, API keys, lint, sync, catalog)
 
 Presets / Tiers:
   maker       Spark + Review + Memory + Craft (idea validation only)
@@ -73,6 +77,9 @@ Examples:
   npx solo-cto-agent dual-review                           # Claude + OpenAI cross-review
   npx solo-cto-agent knowledge                             # extract decisions from recent commits
   npx solo-cto-agent knowledge --project tribo             # tag with project name
+  npx solo-cto-agent session save --project tribo          # save session context
+  npx solo-cto-agent session restore                       # load most recent session
+  npx solo-cto-agent session list --limit 5                # show 5 recent sessions
 `);
 }
 
@@ -962,6 +969,232 @@ function lintCommand(targetPath) {
   process.exit(errors.length > 0 ? 1 : 0);
 }
 
+// ─── doctor: System Health Check ─────────────────────────────
+
+function doctorCommand() {
+  const targetDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
+  const skillPath = path.join(targetDir, "SKILL.md");
+  const catalogPath = path.join(targetDir, "failure-catalog.json");
+  const syncStatusPath = path.join(targetDir, "sync-status.json");
+  const coworkEnginePath = path.join(ROOT, "bin", "cowork-engine.js");
+
+  const issues = [];
+  let criticalCount = 0;
+
+  console.log("");
+  console.log("solo-cto-agent doctor — health check");
+  console.log("─".repeat(40));
+  console.log("");
+
+  // ─── Skills Check ───────────────────────────────
+  console.log("📦 Skills");
+  const skillOk = fs.existsSync(skillPath);
+  if (skillOk) {
+    try {
+      const content = fs.readFileSync(skillPath, "utf8");
+      const wizardConfigured = content.includes("| Item | Value |") || !content.includes("{{YOUR_");
+      const hasMode = content.includes("mode:");
+      if (wizardConfigured) {
+        console.log("   ✅ SKILL.md installed & configured");
+        if (hasMode) {
+          const modeMatch = content.match(/mode:\s*([^\n]+)/);
+          const mode = modeMatch ? modeMatch[1].trim() : "unknown";
+          console.log(`   ✅ Mode detected: ${mode}`);
+        } else {
+          console.log("   ⚠️  No mode field in SKILL.md");
+          issues.push({ level: "warn", msg: "No mode: field in SKILL.md (cowork-main or codex-main)" });
+        }
+      } else {
+        console.log("   ⚠️  SKILL.md exists but not configured");
+        issues.push({ level: "warn", msg: "SKILL.md not configured (run: init --wizard)" });
+      }
+    } catch (err) {
+      console.log(`   ❌ Error reading SKILL.md: ${err.message}`);
+      issues.push({ level: "error", msg: `Error reading SKILL.md: ${err.message}` });
+      criticalCount++;
+    }
+  } else {
+    console.log("   ❌ SKILL.md not found");
+    issues.push({ level: "error", msg: "SKILL.md not found (run: init)" });
+    criticalCount++;
+  }
+
+  // ─── Cowork Engine Check ───────────────────────
+  console.log("");
+  console.log("⚙️  Engine");
+  if (fs.existsSync(coworkEnginePath)) {
+    console.log("   ✅ cowork-engine.js found");
+    try {
+      const engine = require(coworkEnginePath);
+      const hasLocalReview = typeof engine.localReview === "function";
+      const hasKnowledge = typeof engine.knowledgeCapture === "function";
+      const hasDualReview = typeof engine.dualReview === "function";
+      const sessionSave = typeof engine.sessionSave === "function";
+      const sessionRestore = typeof engine.sessionRestore === "function";
+      const sessionList = typeof engine.sessionList === "function";
+
+      if (hasLocalReview && hasKnowledge && hasDualReview) {
+        console.log("   ✅ Core functions available (localReview, knowledgeCapture, dualReview)");
+      } else {
+        console.log("   ⚠️  Some core functions missing");
+        issues.push({ level: "warn", msg: "Engine missing some core functions" });
+      }
+
+      if (sessionSave && sessionRestore && sessionList) {
+        console.log("   ✅ Session functions available (save, restore, list)");
+      } else {
+        console.log("   ⚠️  Session functions not available");
+        issues.push({ level: "warn", msg: "Engine missing session functions" });
+      }
+    } catch (err) {
+      console.log(`   ⚠️  Engine load failed: ${err.message}`);
+      issues.push({ level: "warn", msg: `Engine load failed: ${err.message}` });
+    }
+  } else {
+    console.log("   ❌ cowork-engine.js not found");
+    issues.push({ level: "error", msg: "cowork-engine.js not found" });
+    criticalCount++;
+  }
+
+  // ─── API Keys Check ─────────────────────────────
+  console.log("");
+  console.log("🔑 API Keys");
+  const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
+  const hasOpenAI = !!process.env.OPENAI_API_KEY;
+
+  if (hasAnthropic) {
+    console.log("   ✅ ANTHROPIC_API_KEY is set");
+  } else {
+    console.log("   ⚠️  ANTHROPIC_API_KEY not set");
+    issues.push({ level: "warn", msg: "ANTHROPIC_API_KEY not set (needed for local review)" });
+  }
+
+  if (hasOpenAI) {
+    console.log("   ✅ OPENAI_API_KEY is set");
+  } else {
+    console.log("   ℹ️  OPENAI_API_KEY not set (optional, only for dual-review)");
+  }
+
+  const detectedMode = hasAnthropic && hasOpenAI ? "dual" : hasAnthropic ? "solo" : "none";
+  console.log(`   ℹ️  Detected mode: ${detectedMode}`);
+
+  if (detectedMode === "none") {
+    issues.push({ level: "warn", msg: "No API keys found (set ANTHROPIC_API_KEY for local review)" });
+  }
+
+  // ─── Lint Check ─────────────────────────────────
+  console.log("");
+  console.log("📋 Lint");
+  const skillsDir = path.join(ROOT, "skills");
+  if (fs.existsSync(skillsDir)) {
+    const lintDir = skillsDir;
+    const MAX_LINES = 150;
+    const entries = fs.readdirSync(lintDir, { withFileTypes: true });
+    const skillDirs = entries.filter(e => e.isDirectory()).length;
+    let lintIssues = 0;
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const skillPath = path.join(lintDir, entry.name, "SKILL.md");
+      if (!fs.existsSync(skillPath)) {
+        lintIssues++;
+        continue;
+      }
+
+      const content = fs.readFileSync(skillPath, "utf8");
+      const lines = content.split("\n");
+
+      if (lines[0].trim() !== "---") {
+        lintIssues++;
+      }
+
+      if (lines.length > MAX_LINES) {
+        lintIssues++;
+      }
+    }
+
+    if (lintIssues === 0) {
+      console.log(`   ✅ ${skillDirs} skills clean`);
+    } else {
+      console.log(`   ⚠️  ${lintIssues} lint issue(s) found`);
+      issues.push({ level: "warn", msg: `${lintIssues} lint issues in skills/ directory` });
+    }
+  } else {
+    console.log("   ℹ️  No skills/ directory found (local development only)");
+  }
+
+  // ─── Sync Check ─────────────────────────────────
+  console.log("");
+  console.log("🔄 Sync");
+  if (fs.existsSync(syncStatusPath)) {
+    try {
+      const syncStatus = JSON.parse(fs.readFileSync(syncStatusPath, "utf8"));
+      const syncAge = Math.round((Date.now() - new Date(syncStatus.lastSync).getTime()) / 60000);
+      const syncLabel = syncAge < 60 ? `${syncAge}m ago` : syncAge < 1440 ? `${Math.round(syncAge / 60)}h ago` : `${Math.round(syncAge / 1440)}d ago`;
+      console.log(`   ✅ Last sync: ${syncLabel}`);
+      if (syncStatus.summary && syncStatus.summary.workflowRuns === "ok") {
+        console.log(`   ✅ CI data available`);
+      } else {
+        console.log(`   ⚠️  CI data not available`);
+        issues.push({ level: "warn", msg: "Sync CI data not available (run: sync --org <org>)" });
+      }
+    } catch (err) {
+      console.log(`   ⚠️  Sync status corrupted: ${err.message}`);
+      issues.push({ level: "warn", msg: "Sync status corrupted" });
+    }
+  } else {
+    console.log("   ℹ️  No sync data (run: sync --org <github-org>)");
+  }
+
+  // ─── Error Catalog Check ────────────────────────
+  console.log("");
+  console.log("📚 Error Catalog");
+  if (fs.existsSync(catalogPath)) {
+    try {
+      const count = readCatalogCount(catalogPath);
+      console.log(`   ✅ ${count} failure patterns loaded`);
+    } catch (err) {
+      console.log(`   ⚠️  Catalog corrupted: ${err.message}`);
+      issues.push({ level: "warn", msg: "Error catalog corrupted" });
+    }
+  } else {
+    console.log("   ⚠️  failure-catalog.json not found");
+    issues.push({ level: "warn", msg: "failure-catalog.json not found" });
+  }
+
+  // ─── Summary ─────────────────────────────────────
+  console.log("");
+  console.log("─".repeat(40));
+
+  const errors = issues.filter(i => i.level === "error");
+  const warns = issues.filter(i => i.level === "warn");
+
+  if (errors.length === 0 && warns.length === 0) {
+    console.log("✅ System healthy");
+    console.log("");
+    process.exit(0);
+  }
+
+  if (errors.length > 0) {
+    console.log("");
+    console.log("Critical Issues:");
+    for (const err of errors) {
+      console.log(`❌ ${err.msg}`);
+    }
+  }
+
+  if (warns.length > 0) {
+    console.log("");
+    console.log("Warnings:");
+    for (const warn of warns) {
+      console.log(`⚠️  ${warn.msg}`);
+    }
+  }
+
+  console.log("");
+  process.exit(errors.length > 0 ? 1 : 0);
+}
+
 // ─── upgrade: Builder → CTO ────────────────────────────────
 
 function upgradeCommand(org, repos, orchName) {
@@ -1119,7 +1352,26 @@ async function main() {
     return;
   }
 
+  // Check mode-aware guards for setup commands
+  function checkCoworkMainMode() {
+    const skillPath = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent", "SKILL.md");
+    try {
+      if (fs.existsSync(skillPath)) {
+        const content = fs.readFileSync(skillPath, "utf8");
+        const modeMatch = content.match(/mode:\s*([^\n]+)/);
+        if (modeMatch && modeMatch[1].trim() === "cowork-main") {
+          return true;
+        }
+      }
+    } catch {}
+    return false;
+  }
+
   if (cmd === "setup-pipeline") {
+    if (checkCoworkMainMode()) {
+      console.log("ℹ️  Not needed in cowork-main mode. Use `review`, `knowledge`, and `sync` commands instead.");
+      return;
+    }
     const tierIndex = args.indexOf("--tier");
     const tier = tierIndex >= 0 ? args[tierIndex + 1] : "builder";
     const orgIndex = args.indexOf("--org");
@@ -1133,6 +1385,10 @@ async function main() {
   }
 
   if (cmd === "setup-repo") {
+    if (checkCoworkMainMode()) {
+      console.log("ℹ️  Not needed in cowork-main mode. Use `review`, `knowledge`, and `sync` commands instead.");
+      return;
+    }
     const repoPath = args[1];
     if (!repoPath) {
       console.error("Usage: solo-cto-agent setup-repo <path> --org <github-org> [--tier builder|cto]");
@@ -1233,6 +1489,37 @@ async function main() {
 
   if (cmd === "lint") {
     lintCommand(args[1]);
+    return;
+  }
+
+  if (cmd === "doctor") {
+    doctorCommand();
+    return;
+  }
+
+  if (cmd === "session") {
+    const subcommand = args[1] || "list";
+
+    if (subcommand === "save") {
+      const projectIdx = args.indexOf("--project");
+      const projectTag = projectIdx >= 0 ? args[projectIdx + 1] : null;
+      sessionSave({ projectTag });
+    } else if (subcommand === "restore") {
+      const sessionIdx = args.indexOf("--session");
+      const sessionFile = sessionIdx >= 0 ? args[sessionIdx + 1] : null;
+      const data = sessionRestore({ sessionFile });
+      if (data) {
+        console.log(JSON.stringify(data, null, 2));
+      }
+    } else if (subcommand === "list") {
+      const limitIdx = args.indexOf("--limit");
+      const limit = limitIdx >= 0 ? parseInt(args[limitIdx + 1], 10) : 10;
+      sessionList({ limit });
+    } else {
+      console.error(`❌ Unknown session subcommand: ${subcommand}`);
+      console.error(`   Use: solo-cto-agent session save|restore|list`);
+      process.exit(1);
+    }
     return;
   }
 

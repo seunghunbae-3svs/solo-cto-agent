@@ -91,30 +91,96 @@ solo-cto-agent/
     └── context.md
 ```
 
-## Two Modes
+## Three Axes — Tier × Agent × Mode
 
-The CLI supports two workflow modes. Pick during `init --wizard`:
+`solo-cto-agent` 의 설정은 **서로 독립적인 세 축**의 조합이다. 하나만 고르는 게 아니라 셋을 각각 선택한다.
 
-| | codex-main | cowork-main |
+| 축 | 의미 | 값 |
 |---|---|---|
-| **Primary tool** | GitHub Actions + Codex | Claude Code / Cowork Desktop |
-| **Automation** | Full — webhooks, auto-rework, auto-score | Manual — `sync`, `local-review`, `knowledge` |
-| **CI/CD pipeline** | Required (setup-pipeline) | Optional |
-| **Network dependency** | Needs stable GitHub API access | Works offline, sync when convenient |
-| **Best for** | Teams with CI/CD infra, power users | Solo devs, unstable connections, local-first |
-| **Error patterns** | Auto-collected from CI failures | Manual sync with `--apply` flag |
-| **Agent scores** | Auto-updated per PR event | Synced on demand |
+| **Tier** (기능 레벨) | 어떤 스킬/기능 범위를 쓸 것인가 | `Maker` / `Builder` / `CTO` |
+| **Agent** (에이전트 구성) | 누가 작업/리뷰하는가 | `Cowork` (Claude 단독) / `Cowork + Codex` (Dual) |
+| **Mode** (자동화 모드) | 언제 어디서 자동으로 돌릴 것인가 | `Semi-auto` = cowork-main / `Full-auto` = codex-main |
 
-Both modes use the same skills and tiers. The difference is whether automation runs automatically (codex-main) or on-demand (cowork-main).
+판정 기준, 출력 포맷, 코드 리뷰 체크리스트, Circuit Breaker 정책은 **세 축 전체에서 공통이다.**
+차이는 축마다 하나씩 — 어떤 기능까지 쓰냐 (Tier), 누가 리뷰하냐 (Agent), 어디서 자동화되냐 (Mode).
+
+> 자세한 정의: `docs/tier-matrix.md` · `docs/tier-examples.md` · `docs/cto-policy.md` · `docs/cowork-main-install.md`
+
+### Mode 축 — Semi-auto vs Full-auto
+
+| | **Semi-auto** = `cowork-main` | **Full-auto** = `codex-main` |
+|---|---|---|
+| **포지션** | Claude Cowork desktop + cloud amplifiers | 풀 자동 CI/CD 파이프라인 |
+| **실행 위치** | Claude Cowork / 로컬 CLI | GitHub Actions |
+| **트리거** | 에이전트 판단, 사용자 호출, scheduled tasks | webhook, repository_dispatch |
+| **클라우드 활용** | API 다건 (Claude, OpenAI, GitHub, Vercel, Supabase, Figma, Drive, Slack…) | GitHub Actions 내부 완결 |
+| **에러 패턴** | `sync --apply` 로 수동 머지 (라이브 MCP 크로스체크) | CI 실패에서 자동 수집 |
+| **Agent scores** | 필요할 때 sync | PR 이벤트마다 자동 업데이트 |
+| **기본 권장 Tier** | Maker / Builder | Builder / CTO |
+| **가장 적합** | 솔로 파운더, 크리에이터, 멀티 프로젝트 운영자 | CI/CD 인프라 있는 팀 |
+
+**세 축 공통 (agent spec parity):**
+
+| 항목 | 모든 조합에서 동일 |
+|---|---|
+| 에이전트 정체성 | CTO 급 co-founder. 어시스턴트 아님. |
+| 판정 분류 | `APPROVE` / `REQUEST_CHANGES` / `COMMENT` (한글: 승인/수정요청/보류) |
+| 심각도 | `BLOCKER` ⛔ / `SUGGESTION` ⚠️ / `NIT` 💡 |
+| 팩트 태깅 | `[확정]` / `[추정]` / `[미검증]` |
+| 임베드 컨텍스트 | Ship-Zero Protocol + Project Dev Guide + 코딩 규칙 |
+| 리뷰 체크리스트 | 10항목 (import, Prisma, NextAuth, Supabase, TS, 에러, 보안, 배포, Next 버전, Tailwind 버전) |
+| Circuit Breaker | 3회 재시도, rate-limit 30s/60s/90s 백오프 |
+| 출력 포맷 | `[VERDICT]` / `[ISSUES]` / `[SUMMARY]` / `[NEXT ACTION]` |
+
+> 표준 명세: `skills/_shared/agent-spec.md`
+> 임베드 컨텍스트: `skills/_shared/skill-context.md`
 
 ```bash
 npx solo-cto-agent init --wizard
 # Prompts: Choose mode → [1] codex-main  [2] cowork-main
 ```
 
-## Tiers
+### Semi-auto mode (`cowork-main`) — Desktop-Native AI CTO
 
-Two tiers, one CLI. Pick what fits your workflow.
+Semi-auto mode runs **inside Claude Cowork** as a self-contained AI CTO. Cowork agent 루프 자체가 자동화 엔진이고, MCP 커넥터·web search·scheduled tasks 같은 cloud amplifier 를 엮어 품질을 완성한다. CI, webhook 필요 없음.
+
+Agent 축은 Mode 와 독립이다 — Semi-auto 안에서도 Cowork 단독 / Cowork+Codex 둘 다 가능 (키 유무로 자동 감지).
+
+> **Full guide:** [`docs/cowork-main-install.md`](docs/cowork-main-install.md) — 3축 설명, install, daily workflow, cloud amplifiers, 개인화, env vars, troubleshooting.
+
+**Default posture:** remote side-effects OFF. In-session agent automation ON. Every remote operation (`sync --apply`, PR push) is opt-in.
+
+| Command | Behavior |
+|---|---|
+| `solo-cto-agent review` | Local Claude review of `git diff` (staged / branch / file). No GitHub required. |
+| `solo-cto-agent dual-review` | Claude + OpenAI cross-review locally. Auto-enabled when both keys present. |
+| `solo-cto-agent knowledge` | Extract decisions / error patterns from recent commits into local knowledge articles. |
+| `solo-cto-agent sync --org <org>` | **Dry-run by default.** Fetch agent-scores / error-patterns from orchestrator repo and display. |
+| `solo-cto-agent sync --org <org> --apply` | Merge remote data into local cache. |
+| `solo-cto-agent session save/restore/list` | Local session context — survives across Claude Code / Cowork sessions. |
+| `solo-cto-agent doctor` | One-pass health check: skills, engine, API keys, lint, sync, catalog. |
+| `solo-cto-agent status` | Local cache only — no network calls. |
+
+#### Phase roadmap
+
+| Phase | Scope | Status |
+|---|---|---|
+| **Phase 1** | Manual pull (`sync` dry-run default), local-cache `status`, `doctor`, session context | ✅ current |
+| **Phase 2** | CI/CD post-run auto-commits `agent-scores.json` + error patterns to orchestrator repo → manual `sync` always gets fresh data | planned |
+| **Phase 3** | Opt-in auto-sync at session start (`auto_sync: true` in SKILL.md) for power users | planned |
+
+## Tier 축 — Maker / Builder / CTO
+
+Tier 는 **어떤 기능/스킬 범위를 쓸 것인가** 를 결정하는 축이다. Agent 구성 · Mode 와는 독립적으로 선택한다.
+상세 정의는 `docs/tier-matrix.md` 참조.
+
+| Tier | 포함 스킬 | 기본 Agent 권장 | Mode 권장 |
+|---|---|---|---|
+| **Maker** | spark / review / memory / craft | Cowork 단독 | Semi-auto |
+| **Builder** (default) | Maker + build + ship | Cowork 단독 또는 Cowork+Codex | Semi-auto 또는 Full-auto |
+| **CTO** | Builder + orchestrate | Cowork+Codex (정책) | Full-auto (정책, `docs/cto-policy.md`) |
+
+아래는 Builder / CTO Tier 의 풀 스펙 — Maker 는 가이드 워크플로우 중심이라 별도 인프라 요구 없음.
 
 ### Builder (Lv4) — Single-Agent, Default
 

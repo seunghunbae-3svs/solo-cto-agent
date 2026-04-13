@@ -29,11 +29,61 @@ const CONFIG = {
   skillDir: path.join(os.homedir(), ".claude", "skills", "solo-cto-agent"),
   reviewsDir: path.join(os.homedir(), ".claude", "skills", "solo-cto-agent", "reviews"),
   knowledgeDir: path.join(os.homedir(), ".claude", "skills", "solo-cto-agent", "knowledge"),
+  sessionsDir: path.join(os.homedir(), ".claude", "skills", "solo-cto-agent", "sessions"),
   defaultModel: {
     claude: "claude-sonnet-4-20250514",
     codex: "codex-mini-latest",
   },
 };
+
+// ============================================================================
+// EMBEDDED SKILL CONTEXT (mirrors codex-main/claude-worker.js)
+// Keep in sync with skills/_shared/skill-context.md
+// ============================================================================
+
+const SKILL_CONTEXT = `
+## Ship-Zero Protocol (배포 전 체크리스트)
+- Prisma: schema validate, generate 타이밍, postinstall 스크립트
+- NextAuth: import 경로(@/lib/), 콜백 로직, 세션 설정
+- Vercel 빌드: env 변수 존재 확인, build command, output directory
+- TypeScript: strict 모드, any 타입 제거, 타입 누락
+- Supabase: RLS 정책, service_role vs anon key 구분, N+1 쿼리
+
+## Project Dev Guide 에러 패턴
+- import 경로 에러: ./relative → @/absolute 변환 필수
+- Prisma + Drizzle 동시 사용 금지: 하나만 선택
+- NextAuth 콜백에서 session.user 확장 시 next-auth.d.ts types 파일 필요
+- Vercel 배포 실패 상위 원인: env 누락, prisma generate 타이밍, build command 불일치
+- Next.js 14/15 혼용 금지: params 동기/비동기 처리 규칙 다름
+- Tailwind v3/v4 문법 혼용 금지: PostCSS 설정과 import 방식 다름
+
+## 코딩 규칙
+- 최소 안전 수정: 요청 범위 밖 리팩토링 금지
+- 에러 처리: 조용한 실패 금지, 구조화된 에러 반환
+- PR 본문 필수: 변경 요약, 리스크 레벨, 롤백 방법, Preview 링크
+- 팩트 기반: 추정과 확정 구분 [확정] / [추정] / [미검증]
+- Circuit Breaker: 같은 에러 3회 재시도 실패 시 정지 후 보고
+`;
+
+const SKILL_REVIEW_CRITERIA = `
+## 리뷰 기준 (Ship-Zero Protocol + Project Dev Guide)
+1. Import 경로: ./relative 대신 @/ 절대경로 사용했는지
+2. Prisma/Drizzle: 혼재 사용 없는지, generate 타이밍 맞는지
+3. NextAuth: 콜백 로직, 세션 확장 시 types 파일 있는지
+4. Supabase: RLS 정책, service_role vs anon 구분, N+1 쿼리
+5. TypeScript: any 타입, 타입 누락, strict 모드 위반
+6. 에러 처리: try-catch 누락, 조용한 실패, 구조화 안 된 에러
+7. 보안: SQL injection, auth bypass, secret 노출
+8. 배포: env 변수 누락, build command, Vercel 설정
+9. Next.js 버전: 14는 params 동기, 15는 params Promise — 혼용 금지
+10. Tailwind 버전: v3/v4 문법 혼용 금지, PostCSS 설정 일치
+`;
+
+const AGENT_IDENTITY = `당신은 어시스턴트가 아니다. CTO급 co-founder다.
+- 코드를 지키는 사람이지, 추가만 하는 사람이 아니다.
+- 유저가 신난다고 해도 틀린 아이디어는 막아선다.
+- 배포되는 것은 전부 본인 책임이라는 전제에서 움직인다.
+- 깨질 것을 먼저 보고, 만들 것을 나중에 본다.`;
 
 const COLORS = {
   reset: "\x1b[0m",
@@ -164,7 +214,7 @@ function estimateCost(inputTokens, outputTokens, model) {
 // API CALL FUNCTIONS
 // ============================================================================
 
-function callAnthropic(prompt, systemPrompt, model) {
+function _anthropicOnce(prompt, systemPrompt, model) {
   return new Promise((resolve, reject) => {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -195,11 +245,12 @@ function callAnthropic(prompt, systemPrompt, model) {
       res.on("data", (chunk) => (data += chunk));
       res.on("end", () => {
         if (res.statusCode >= 400) {
-          return reject(
-            new Error(
-              `Anthropic API error ${res.statusCode}: ${data.slice(0, 300)}`
-            )
+          const err = new Error(
+            `Anthropic API error ${res.statusCode}: ${data.slice(0, 300)}`
           );
+          err.statusCode = res.statusCode;
+          err.body = data;
+          return reject(err);
         }
         try {
           const parsed = JSON.parse(data);
@@ -220,7 +271,26 @@ function callAnthropic(prompt, systemPrompt, model) {
   });
 }
 
-function callOpenAI(prompt, systemPrompt, model) {
+// 3-retry with rate-limit backoff (mirrors codex-main/claude-worker.js claude())
+async function callAnthropic(prompt, systemPrompt, model) {
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await _anthropicOnce(prompt, systemPrompt, model);
+    } catch (e) {
+      lastErr = e;
+      const body = (e.body || e.message || "").toLowerCase();
+      const isRateLimit = body.includes("rate_limit") || body.includes("overloaded") || e.statusCode === 429 || e.statusCode === 529;
+      if (attempt === 2) break;
+      const waitMs = isRateLimit ? (attempt + 1) * 30000 : (attempt + 1) * 15000;
+      logWarn(`Anthropic ${isRateLimit ? "rate limited" : "error"}, waiting ${waitMs / 1000}s (attempt ${attempt + 1}/3)...`);
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
+  }
+  throw lastErr;
+}
+
+function _openaiOnce(prompt, systemPrompt, model) {
   return new Promise((resolve, reject) => {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -252,11 +322,12 @@ function callOpenAI(prompt, systemPrompt, model) {
       res.on("data", (chunk) => (data += chunk));
       res.on("end", () => {
         if (res.statusCode >= 400) {
-          return reject(
-            new Error(
-              `OpenAI API error ${res.statusCode}: ${data.slice(0, 300)}`
-            )
+          const err = new Error(
+            `OpenAI API error ${res.statusCode}: ${data.slice(0, 300)}`
           );
+          err.statusCode = res.statusCode;
+          err.body = data;
+          return reject(err);
         }
         try {
           const parsed = JSON.parse(data);
@@ -280,48 +351,89 @@ function callOpenAI(prompt, systemPrompt, model) {
   });
 }
 
+async function callOpenAI(prompt, systemPrompt, model) {
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await _openaiOnce(prompt, systemPrompt, model);
+    } catch (e) {
+      lastErr = e;
+      const body = (e.body || e.message || "").toLowerCase();
+      const isRateLimit = body.includes("rate_limit") || e.statusCode === 429;
+      if (attempt === 2) break;
+      const waitMs = isRateLimit ? (attempt + 1) * 30000 : (attempt + 1) * 15000;
+      logWarn(`OpenAI ${isRateLimit ? "rate limited" : "error"}, waiting ${waitMs / 1000}s (attempt ${attempt + 1}/3)...`);
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
+  }
+  throw lastErr;
+}
+
 // ============================================================================
 // REVIEW LOGIC & PARSING
 // ============================================================================
 
-function parseReviewResponse(text) {
-  const verdict = text.includes("APPROVE")
-    ? "APPROVE"
-    : text.includes("CHANGES_REQUESTED")
-    ? "CHANGES_REQUESTED"
-    : "COMMENT";
+// Normalize verdict to canonical taxonomy: APPROVE | REQUEST_CHANGES | COMMENT
+function normalizeVerdict(raw) {
+  if (!raw) return "COMMENT";
+  const up = raw.toUpperCase();
+  if (up.includes("REQUEST_CHANGES") || up.includes("CHANGES_REQUESTED") || up.includes("REQUEST CHANGES") || up.includes("CHANGES REQUESTED")) {
+    return "REQUEST_CHANGES";
+  }
+  if (raw.includes("수정요청") || raw.includes("변경요청")) return "REQUEST_CHANGES";
+  if (up.includes("APPROVE")) return "APPROVE";
+  if (raw.includes("승인")) return "APPROVE";
+  if (up.includes("COMMENT")) return "COMMENT";
+  if (raw.includes("보류")) return "COMMENT";
+  return "COMMENT";
+}
 
+// Korean label for verdict
+function verdictLabel(v) {
+  return v === "APPROVE" ? "승인" : v === "REQUEST_CHANGES" ? "수정요청" : "보류";
+}
+
+// Severity: BLOCKER | SUGGESTION | NIT (with backwards-compat aliases)
+function normalizeSeverity(raw) {
+  if (!raw) return "NIT";
+  const up = raw.toUpperCase();
+  if (up.includes("BLOCKER") || up === "CRITICAL") return "BLOCKER";
+  if (up.includes("SUGGEST") || up === "WARNING" || up === "WARN") return "SUGGESTION";
+  return "NIT";
+}
+
+function parseReviewResponse(text) {
+  // Verdict: prefer [VERDICT] header, fall back to scanning entire text
+  const verdictHeader = text.match(/\[VERDICT\][:\s]*([A-Za-z_\s가-힣]+)/i);
+  const verdict = normalizeVerdict(verdictHeader ? verdictHeader[1] : text);
+
+  // Parse issues: look for ⛔/⚠️/💡 markers followed by [location] then description+arrow+fix
   const issues = [];
   const issuePattern =
-    /(?:⛔|⚠️|💡)?\s*\[([^\]]+)\]\s*\n\s*([^\n]+)\n\s*(?:→|→|=>)\s*([^\n]+)/gm;
+    /(⛔|⚠️|💡)\s*\[([^\]]+)\]\s*\n\s*([^\n]+)\n\s*(?:→|->|=>)\s*([^\n]+)/g;
 
   let match;
   while ((match = issuePattern.exec(text)) !== null) {
-    const location = match[1];
-    const issue = match[2];
-    const suggestion = match[3];
-
-    const severity = text.includes(location)
-      ? text.substring(0, text.indexOf(location)).includes("⛔")
-        ? "critical"
-        : text.substring(0, text.indexOf(location)).includes("⚠️")
-        ? "warning"
-        : "nit"
-      : "nit";
-
+    const icon = match[1];
+    const location = match[2].trim();
+    const issue = match[3].trim();
+    const suggestion = match[4].trim();
+    const severity = icon === "⛔" ? "BLOCKER" : icon === "⚠️" ? "SUGGESTION" : "NIT";
     issues.push({ location, issue, suggestion, severity });
   }
 
-  const summary = (text.match(/\[SUMMARY\]:\s*([^\n]+)/i) || ["", ""])[1];
+  // Summary + optional next action
+  const summary = (text.match(/\[SUMMARY\][:\s]*([^\n]+(?:\n(?!\[)[^\n]+)*)/i) || ["", ""])[1].trim();
+  const nextAction = (text.match(/\[NEXT[_\s]ACTION\][:\s]*([\s\S]*?)(?=\n\[|$)/i) || ["", ""])[1].trim();
 
-  return { verdict, issues, summary };
+  return { verdict, verdictKo: verdictLabel(verdict), issues, summary, nextAction };
 }
 
 function formatTerminalOutput(review, sourceInfo, costInfo) {
   const issueCounts = {
-    critical: review.issues.filter((i) => i.severity === "critical").length,
-    warning: review.issues.filter((i) => i.severity === "warning").length,
-    nit: review.issues.filter((i) => i.severity === "nit").length,
+    BLOCKER: review.issues.filter((i) => i.severity === "BLOCKER").length,
+    SUGGESTION: review.issues.filter((i) => i.severity === "SUGGESTION").length,
+    NIT: review.issues.filter((i) => i.severity === "NIT").length,
   };
 
   const totalIssues = review.issues.length;
@@ -329,58 +441,37 @@ function formatTerminalOutput(review, sourceInfo, costInfo) {
   const verdictColor =
     review.verdict === "APPROVE"
       ? COLORS.green
-      : review.verdict === "CHANGES_REQUESTED"
+      : review.verdict === "REQUEST_CHANGES"
       ? COLORS.red
       : COLORS.blue;
 
+  const header = `VERDICT: ${review.verdict} (${review.verdictKo})`;
   let output = "\n";
-  output += `${COLORS.bold}┌─────────────────────────────────────┐${COLORS.reset}\n`;
-  output += `${COLORS.bold}│${COLORS.reset} ${verdictColor}${COLORS.bold}VERDICT: ${review.verdict}${COLORS.reset}${" ".repeat(
-    28 - review.verdict.length
-  )} ${COLORS.bold}│${COLORS.reset}\n`;
-  output += `${COLORS.bold}│${COLORS.reset}${" ".repeat(37)} ${COLORS.bold}│${COLORS.reset}\n`;
-  output += `${COLORS.bold}│${COLORS.reset} Issues found: ${totalIssues}${" ".repeat(
-    19 - String(totalIssues).length
-  )} ${COLORS.bold}│${COLORS.reset}\n`;
-
-  if (issueCounts.critical > 0) {
-    output += `${COLORS.bold}│${COLORS.reset}   ${COLORS.red}⛔${COLORS.reset} ${issueCounts.critical} critical${" ".repeat(
-      24 - String(issueCounts.critical).length
-    )} ${COLORS.bold}│${COLORS.reset}\n`;
-  }
-  if (issueCounts.warning > 0) {
-    output += `${COLORS.bold}│${COLORS.reset}   ${COLORS.yellow}⚠️${COLORS.reset}  ${issueCounts.warning} warning${" ".repeat(
-      25 - String(issueCounts.warning).length
-    )} ${COLORS.bold}│${COLORS.reset}\n`;
-  }
-  if (issueCounts.nit > 0) {
-    output += `${COLORS.bold}│${COLORS.reset}   ${COLORS.blue}💡${COLORS.reset} ${issueCounts.nit} nit${" ".repeat(
-      29 - String(issueCounts.nit).length
-    )} ${COLORS.bold}│${COLORS.reset}\n`;
-  }
-
-  if (totalIssues > 0) {
-    output += `${COLORS.bold}│${COLORS.reset}${" ".repeat(37)} ${COLORS.bold}│${COLORS.reset}\n`;
-  }
+  output += `${COLORS.bold}${verdictColor}${header}${COLORS.reset}\n`;
+  output += `${COLORS.gray}${"─".repeat(header.length)}${COLORS.reset}\n`;
+  output += `Issues: ${totalIssues}`;
+  if (issueCounts.BLOCKER) output += `  ${COLORS.red}⛔ ${issueCounts.BLOCKER} BLOCKER${COLORS.reset}`;
+  if (issueCounts.SUGGESTION) output += `  ${COLORS.yellow}⚠️  ${issueCounts.SUGGESTION} SUGGESTION${COLORS.reset}`;
+  if (issueCounts.NIT) output += `  ${COLORS.blue}💡 ${issueCounts.NIT} NIT${COLORS.reset}`;
+  output += `\n\n`;
 
   for (const issue of review.issues) {
     const icon =
-      issue.severity === "critical"
+      issue.severity === "BLOCKER"
         ? `${COLORS.red}⛔${COLORS.reset}`
-        : issue.severity === "warning"
+        : issue.severity === "SUGGESTION"
         ? `${COLORS.yellow}⚠️${COLORS.reset}`
         : `${COLORS.blue}💡${COLORS.reset}`;
-
-    output += `${COLORS.bold}│${COLORS.reset} ${icon} [${issue.location}]\n`;
-    output += `${COLORS.bold}│${COLORS.reset}   ${issue.issue}\n`;
-    output += `${COLORS.bold}│${COLORS.reset}   → ${issue.suggestion}\n`;
-    output += `${COLORS.bold}│${COLORS.reset}\n`;
+    output += `${icon} [${issue.location}]\n`;
+    output += `   ${issue.issue}\n`;
+    output += `   → ${issue.suggestion}\n\n`;
   }
 
-  output += `${COLORS.bold}└─────────────────────────────────────┘${COLORS.reset}\n`;
-
   if (review.summary) {
-    output += `\n${COLORS.gray}Summary: ${review.summary}${COLORS.reset}\n`;
+    output += `${COLORS.bold}[SUMMARY]${COLORS.reset}\n${review.summary}\n`;
+  }
+  if (review.nextAction) {
+    output += `\n${COLORS.bold}[NEXT ACTION]${COLORS.reset}\n${review.nextAction}\n`;
   }
 
   output += `\n${COLORS.gray}Cost: $${costInfo.total} (${costInfo.inputTokens}K input, ${costInfo.outputTokens}K output)${COLORS.reset}\n`;
@@ -424,46 +515,62 @@ async function localReview(options = {}) {
     ?.map((p) => `- ${p.pattern}: ${p.fix}`)
     .join("\n") || "No patterns loaded";
 
-  // Build review prompt
-  const systemPrompt = `You are a senior code reviewer for a software startup. Review this diff carefully.
+  // Build review prompt (Korean, codex-main parity)
+  const systemPrompt = `${AGENT_IDENTITY}
 
-Focus on:
-1. Bugs, logic errors, security issues (critical)
-2. Missing error handling, edge cases (warning)
-3. Known error patterns from the failure catalog (critical)
-4. Performance concerns (warning)
-5. Style/consistency issues (nit)
+당신은 Claude, 팀의 시니어 코드 리뷰어다. 아래 diff를 리뷰한다.
 
-Known error patterns to watch for:
+${SKILL_CONTEXT}
+${SKILL_REVIEW_CRITERIA}
+
+## 심각도 분류
+- ⛔ BLOCKER  — 머지/배포 차단. 치명 버그, 보안, 데이터 손실 위험.
+- ⚠️ SUGGESTION — 강하게 권하는 개선. 에러 처리 누락, 성능, 구조.
+- 💡 NIT — 취향 수준. 스타일, 일관성.
+
+## 사용자 프로젝트의 기존 에러 패턴
 ${errorPatterns}
 
-Format your response exactly as:
-[VERDICT]: APPROVE | CHANGES_REQUESTED | COMMENT
+## 출력 형식 (이 포맷을 정확히 따른다)
 
-[ISSUES]:
-⛔ [file:line]
-  Issue description here
-  → Suggested fix here
+[VERDICT] APPROVE | REQUEST_CHANGES | COMMENT
 
-⚠️  [file:line]
-  Issue description here
-  → Suggested fix here
+[ISSUES]
+⛔ [path/to/file.ts:42]
+  이슈 설명 한 줄.
+  → 구체적 수정 방법.
 
-💡 [file:line]
-  Issue description here
-  → Suggested fix here
+⚠️ [path/to/file.ts:17]
+  이슈 설명 한 줄.
+  → 구체적 수정 방법.
 
-[SUMMARY]: 1-2 sentence overall assessment`;
+💡 [path/to/file.ts:3]
+  이슈 설명 한 줄.
+  → 구체적 수정 방법.
 
-  const userPrompt = `Project Context (from SKILL.md):
+[SUMMARY]
+전체 평가 1~2문장. 수치는 [확정]/[추정]/[미검증] 태그 사용.
+
+[NEXT ACTION]
+- 수정할 항목 1
+- 수정할 항목 2
+
+## 규칙
+- 한국어 존댓말 없이 간결하게. 기술 용어는 영어 그대로.
+- "좋습니다", "훌륭합니다" 같은 칭찬 금지.
+- BLOCKER가 0개면 REQUEST_CHANGES 쓰지 않는다. APPROVE 또는 COMMENT.
+- BLOCKER가 1개라도 있으면 REQUEST_CHANGES.
+- diff 범위 밖 파일은 언급하지 않는다.`;
+
+  const userPrompt = `## 프로젝트 컨텍스트 (SKILL.md)
 ${skillContext}
 
-Code Diff to Review:
-\`\`\`
+## 리뷰 대상 diff
+\`\`\`diff
 ${diff}
 \`\`\`
 
-Please review this diff thoroughly.`;
+위 출력 형식 그대로 리뷰하라.`;
 
   if (dryRun) {
     log("\n[DRY RUN] Would call Anthropic API with:");
@@ -572,29 +679,35 @@ async function knowledgeCapture(options = {}) {
     content = input;
   }
 
-  const systemPrompt = `Extract structured knowledge from the provided session data.
+  const systemPrompt = `${AGENT_IDENTITY}
 
-Format your response as:
+세션 데이터에서 재사용 가능한 지식을 추출한다.
+나중에 같은 실수를 반복하지 않기 위한 자료다. 추측 금지, 실제 발생한 것만 적는다.
 
-[TITLE]: {Single line topic}
+## 출력 형식
+
+[TITLE]: 한 줄 주제
 
 [DECISIONS]:
-- {decision}: {rationale}
-- {decision}: {rationale}
+- {결정}: {근거}
+- {결정}: {근거}
 
 [ERROR_PATTERNS]:
-- {pattern}: {fix}
-- {pattern}: {fix}
+- {에러 패턴}: {수정 방법}
+- {에러 패턴}: {수정 방법}
 
 [PREFERENCES]:
-- {preference}
-- {preference}
+- {유저 선호 / 코딩 스타일 / 워크플로우 규칙}
 
 [OPEN_THREADS]:
-- {unresolved item}
-- {unresolved item}`;
+- {미해결 항목}
 
-  const userPrompt = `Extract knowledge from:
+## 규칙
+- 한국어. 간결하게. 일반론 금지, 이 세션에서 실제로 나온 것만.
+- 수치는 [확정] / [추정] / [미검증] 태그.
+- 동일한 항목 반복 금지.`;
+
+  const userPrompt = `## 분석 대상
 
 ${content}`;
 
@@ -727,32 +840,54 @@ async function dualReview(options = {}) {
     ?.map((p) => `- ${p.pattern}: ${p.fix}`)
     .join("\n") || "No patterns loaded";
 
-  const systemPrompt = `You are a code reviewer. Review this diff.
+  // Dual-review prompt (identical spec for Claude + OpenAI — codex-main parity)
+  const systemPrompt = `${AGENT_IDENTITY}
 
-Focus on:
-1. Bugs, logic errors, security issues
-2. Missing error handling, edge cases
-3. Known error patterns
-4. Performance concerns
-5. Style/consistency issues
+팀의 시니어 코드 리뷰어다. 아래 diff를 리뷰한다.
 
-Known patterns:
+${SKILL_CONTEXT}
+${SKILL_REVIEW_CRITERIA}
+
+## 심각도
+- ⛔ BLOCKER  머지 차단 (치명 버그, 보안, 데이터 손실)
+- ⚠️ SUGGESTION 강한 개선 권고
+- 💡 NIT 취향 수준
+
+## 기존 에러 패턴
 ${errorPatterns}
 
-Format:
-[VERDICT]: APPROVE | CHANGES_REQUESTED | COMMENT
-[ISSUES]:
-⛔ [location]
-  Description
-  → Fix
+## 출력 형식
+[VERDICT] APPROVE | REQUEST_CHANGES | COMMENT
 
-[SUMMARY]: Assessment`;
+[ISSUES]
+⛔ [path:line]
+  설명.
+  → 수정.
 
-  const userPrompt = `Project:
+⚠️ [path:line]
+  설명.
+  → 수정.
+
+💡 [path:line]
+  설명.
+  → 수정.
+
+[SUMMARY]
+1~2문장. 수치는 [확정]/[추정]/[미검증].
+
+[NEXT ACTION]
+- 항목
+
+## 규칙
+- 한국어. 칭찬 금지. 간결하게.
+- BLOCKER 1개 이상이면 REQUEST_CHANGES.
+- diff 밖 파일 언급 금지.`;
+
+  const userPrompt = `## 프로젝트 컨텍스트
 ${skillContext}
 
-Diff:
-\`\`\`
+## diff
+\`\`\`diff
 ${diff}
 \`\`\``;
 
@@ -874,6 +1009,123 @@ ${diff}
   return dualReviewData;
 }
 
+function sessionSave(options = {}) {
+  const {
+    projectTag = null,
+    decisions = [],
+    errors = [],
+    reviews = [],
+    threads = [],
+  } = options;
+
+  ensureDir(CONFIG.sessionsDir);
+
+  const ts = new Date().toISOString();
+  const sessionData = {
+    timestamp: ts,
+    projectTag,
+    decisions,
+    errors,
+    reviews,
+    threads,
+  };
+
+  const filename = `${timestamp()}-session.json`;
+  const sessionFile = path.join(CONFIG.sessionsDir, filename);
+
+  fs.writeFileSync(sessionFile, JSON.stringify(sessionData, null, 2));
+  logSuccess(`Session saved to ${sessionFile}`);
+
+  // Update latest.json symlink/copy
+  const latestFile = path.join(CONFIG.sessionsDir, "latest.json");
+  fs.writeFileSync(latestFile, JSON.stringify(sessionData, null, 2));
+  logSuccess(`Latest session pointer updated`);
+
+  return sessionFile;
+}
+
+function sessionRestore(options = {}) {
+  const { sessionFile = null } = options;
+
+  const latestFile = path.join(CONFIG.sessionsDir, "latest.json");
+
+  if (!fs.existsSync(latestFile) && !sessionFile) {
+    logWarn("No sessions found");
+    return null;
+  }
+
+  try {
+    const targetFile = sessionFile || latestFile;
+    if (!fs.existsSync(targetFile)) {
+      logError(`Session file not found: ${targetFile}`);
+      return null;
+    }
+
+    const sessionData = JSON.parse(fs.readFileSync(targetFile, "utf8"));
+    logSuccess(`Session restored from ${targetFile}`);
+    return sessionData;
+  } catch (err) {
+    logError(`Failed to restore session: ${err.message}`);
+    return null;
+  }
+}
+
+function sessionList(options = {}) {
+  const { limit = 10 } = options;
+
+  if (!fs.existsSync(CONFIG.sessionsDir)) {
+    logWarn("No sessions directory found");
+    return [];
+  }
+
+  const files = fs.readdirSync(CONFIG.sessionsDir)
+    .filter(f => f.endsWith("-session.json"))
+    .sort()
+    .reverse()
+    .slice(0, limit);
+
+  if (files.length === 0) {
+    logWarn("No sessions found");
+    return [];
+  }
+
+  logSection("Recent Sessions");
+
+  const sessions = [];
+  for (const file of files) {
+    try {
+      const filePath = path.join(CONFIG.sessionsDir, file);
+      const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      const ts = new Date(data.timestamp);
+      const projectLabel = data.projectTag ? ` (${data.projectTag})` : "";
+      const decisionCount = (data.decisions || []).length;
+      const errorCount = (data.errors || []).length;
+      const reviewCount = (data.reviews || []).length;
+
+      log(
+        `${COLORS.blue}${file}${COLORS.reset}${projectLabel}`
+      );
+      log(
+        `  ${ts.toLocaleString()} — ` +
+        `${decisionCount} decisions, ${errorCount} errors, ${reviewCount} reviews`
+      );
+
+      sessions.push({
+        file,
+        timestamp: data.timestamp,
+        projectTag: data.projectTag,
+        decisionCount,
+        errorCount,
+        reviewCount,
+      });
+    } catch (err) {
+      logError(`Failed to parse ${file}: ${err.message}`);
+    }
+  }
+
+  return sessions;
+}
+
 function detectMode() {
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
@@ -945,6 +1197,29 @@ async function main() {
       logInfo(`Current mode: ${mode}`);
       log(`  ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "set" : "missing"}`);
       log(`  OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? "set" : "missing"}`);
+    } else if (command === "session") {
+      const subcommand = args[1] || "list";
+
+      if (subcommand === "save") {
+        const projectIdx = args.indexOf("--project");
+        const projectTag = projectIdx >= 0 ? args[projectIdx + 1] : null;
+        sessionSave({ projectTag });
+      } else if (subcommand === "restore") {
+        const sessionIdx = args.indexOf("--session");
+        const sessionFile = sessionIdx >= 0 ? args[sessionIdx + 1] : null;
+        const data = sessionRestore({ sessionFile });
+        if (data) {
+          log(JSON.stringify(data, null, 2));
+        }
+      } else if (subcommand === "list") {
+        const limitIdx = args.indexOf("--limit");
+        const limit = limitIdx >= 0 ? parseInt(args[limitIdx + 1], 10) : 10;
+        sessionList({ limit });
+      } else {
+        logError(`Unknown session subcommand: ${subcommand}`);
+        log(`Use: session save|restore|list`);
+        process.exit(1);
+      }
     } else if (command === "help" || command === "-h" || command === "--help") {
       log(`
 ${COLORS.bold}cowork-engine.js — Local Cowork Mode${COLORS.reset}
@@ -957,6 +1232,9 @@ ${COLORS.bold}Commands:${COLORS.reset}
   knowledge-capture  Extract session decisions into knowledge articles
   dual-review        Run Claude + OpenAI cross-review
   detect-mode        Check which API keys are configured
+  session save       Save current session context
+  session restore    Load most recent session context
+  session list       List recent sessions
   help               Show this message
 
 ${COLORS.bold}Options:${COLORS.reset}
@@ -1025,6 +1303,9 @@ module.exports = {
   knowledgeCapture,
   dualReview,
   detectMode,
+  sessionSave,
+  sessionRestore,
+  sessionList,
   // Utilities for testing
   parseReviewResponse,
   getDiff,

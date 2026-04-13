@@ -21,4 +21,4 @@ jobs:
         run: |
           chmod +x setup.sh
           export CLAUDE_DIR="$RUNNER_TEMP/claude"
-          bash setup.sh --install
+          bash setup.sh --install --org ci --tier builder --repos demo-app
