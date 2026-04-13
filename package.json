@@ -1,13 +1,27 @@
 {
   "name": "solo-cto-agent",
-  "version": "0.4.0",
-  "private": true,
+  "version": "0.5.0",
+  "private": false,
   "description": "Opinionated skill pack for AI coding agents with CTO-grade operating rules.",
+  "bin": {
+    "solo-cto-agent": "./bin/cli.js"
+  },
   "scripts": {
     "test": "vitest run",
     "lint": "node scripts/validate-package.js",
     "validate": "bash scripts/validate.sh"
   },
+  "files": [
+    "bin",
+    "templates",
+    "skills",
+    "docs",
+    "failure-catalog.json",
+    "failure-catalog.schema.json",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG"
+  ],
   "devDependencies": {
     "ajv": "^8.12.0",
     "vitest": "^1.6.0"

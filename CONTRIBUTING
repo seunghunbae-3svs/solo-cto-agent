@@ -1,4 +1,4 @@
-# Contributing
+﻿# Contributing
 
 Thanks for taking a look.
 
@@ -42,7 +42,7 @@ Please ask:
 
 ## Good contribution examples
 
-* make `setup.sh` safer to rerun
+* make setup.sh safer to rerun
 * improve placeholder instructions
 * add examples that show real usage
 * clarify when a skill should ask first vs act first
@@ -59,12 +59,40 @@ If you think something feels too aggressive, too vague, too optimistic, or too A
 That is useful feedback here.
 
 ## Contributing checklist (minimum)
-- Run `setup.sh --update` to validate install flow
+- Run setup.sh --update to validate install flow
 - Ensure all SKILL.md files have valid frontmatter
 - Avoid breaking repo-level instructions (CLAUDE.md / templates)
 - Keep README claims aligned with actual files
 
+## Pull request template
+
+PRs should include:
+- what changed
+- why it changed
+- testing done
+- breaking changes (if any)
+
+## Skill addition guide
+
+### Add a new error pattern
+1. Edit failure-catalog.json and add a new ERR-### entry
+2. Keep category in: build | deploy | runtime
+3. Run:
+   - npm run lint
+   - npm test
+
+### Create a custom SKILL.md
+1. Copy an existing skill folder as a starting point
+2. Keep valid frontmatter (name + description)
+3. Add at least 2 execution examples
+4. Run npm test to validate frontmatter
+
+## Code style guide (brief)
+- TypeScript: prefer explicit types for public APIs
+- Formatting: keep changes minimal; avoid reformatting unrelated lines
+- Lint/format config: align with repo defaults
 
 ## CI checks
 - package-validate workflow must pass
 - changelog auto-update must stay clean
+- test workflow must pass
