@@ -91,25 +91,37 @@ solo-cto-agent/
     └── context.md
 ```
 
-## Two Modes — Twin Offerings, One Agent
+## Three Axes — Tier × Agent × Mode
 
-`codex-main` 과 `cowork-main` 은 같은 에이전트의 두 얼굴이다.
-판정 기준, 출력 포맷, 코드 리뷰 체크리스트, Circuit Breaker 정책은 **양쪽 모드에서 동일하다.**
-차이는 단 하나 — **언제 실행되느냐.**
+`solo-cto-agent` 의 설정은 **서로 독립적인 세 축**의 조합이다. 하나만 고르는 게 아니라 셋을 각각 선택한다.
 
-| | **codex-main** (자동) | **cowork-main** (반자동) |
+| 축 | 의미 | 값 |
 |---|---|---|
-| **포지션** | 풀 자동 CI/CD 파이프라인 | 로컬 우선, 수동 sync |
-| **실행 위치** | GitHub Actions | Claude Code / Cowork Desktop / 로컬 CLI |
-| **트리거** | webhook, repository_dispatch | 사용자가 직접 호출 |
-| **네트워크 의존** | 안정적 GitHub API 필수 | 오프라인 동작 가능, 편할 때 sync |
-| **가장 적합** | CI/CD 인프라 있는 팀, 파워 유저 | 솔로 파운더, 불안정 연결, 로컬 우선 |
-| **에러 패턴** | CI 실패에서 자동 수집 | `sync --apply` 로 수동 머지 |
-| **Agent scores** | PR 이벤트마다 자동 업데이트 | 필요할 때 sync |
+| **Tier** (기능 레벨) | 어떤 스킬/기능 범위를 쓸 것인가 | `Maker` / `Builder` / `CTO` |
+| **Agent** (에이전트 구성) | 누가 작업/리뷰하는가 | `Cowork` (Claude 단독) / `Cowork + Codex` (Dual) |
+| **Mode** (자동화 모드) | 언제 어디서 자동으로 돌릴 것인가 | `Semi-auto` = cowork-main / `Full-auto` = codex-main |
 
-**공통 (twin parity):**
+판정 기준, 출력 포맷, 코드 리뷰 체크리스트, Circuit Breaker 정책은 **세 축 전체에서 공통이다.**
+차이는 축마다 하나씩 — 어떤 기능까지 쓰냐 (Tier), 누가 리뷰하냐 (Agent), 어디서 자동화되냐 (Mode).
 
-| 항목 | 양쪽 동일 |
+> 자세한 정의: `docs/tier-matrix.md` · `docs/tier-examples.md` · `docs/cto-policy.md` · `docs/cowork-main-install.md`
+
+### Mode 축 — Semi-auto vs Full-auto
+
+| | **Semi-auto** = `cowork-main` | **Full-auto** = `codex-main` |
+|---|---|---|
+| **포지션** | Claude Cowork desktop + cloud amplifiers | 풀 자동 CI/CD 파이프라인 |
+| **실행 위치** | Claude Cowork / 로컬 CLI | GitHub Actions |
+| **트리거** | 에이전트 판단, 사용자 호출, scheduled tasks | webhook, repository_dispatch |
+| **클라우드 활용** | API 다건 (Claude, OpenAI, GitHub, Vercel, Supabase, Figma, Drive, Slack…) | GitHub Actions 내부 완결 |
+| **에러 패턴** | `sync --apply` 로 수동 머지 (라이브 MCP 크로스체크) | CI 실패에서 자동 수집 |
+| **Agent scores** | 필요할 때 sync | PR 이벤트마다 자동 업데이트 |
+| **기본 권장 Tier** | Maker / Builder | Builder / CTO |
+| **가장 적합** | 솔로 파운더, 크리에이터, 멀티 프로젝트 운영자 | CI/CD 인프라 있는 팀 |
+
+**세 축 공통 (agent spec parity):**
+
+| 항목 | 모든 조합에서 동일 |
 |---|---|
 | 에이전트 정체성 | CTO 급 co-founder. 어시스턴트 아님. |
 | 판정 분류 | `APPROVE` / `REQUEST_CHANGES` / `COMMENT` (한글: 승인/수정요청/보류) |
@@ -128,16 +140,13 @@ npx solo-cto-agent init --wizard
 # Prompts: Choose mode → [1] codex-main  [2] cowork-main
 ```
 
-### cowork-main — Desktop-Native AI CTO
+### Semi-auto mode (`cowork-main`) — Desktop-Native AI CTO
 
-`cowork-main` runs **inside Claude Cowork** as a self-contained AI CTO. The Claude agent loop itself is the automation engine — no CI, no webhooks required. Works in two patterns:
+Semi-auto mode runs **inside Claude Cowork** as a self-contained AI CTO. Cowork agent 루프 자체가 자동화 엔진이고, MCP 커넥터·web search·scheduled tasks 같은 cloud amplifier 를 엮어 품질을 완성한다. CI, webhook 필요 없음.
 
-- **Solo** — Claude Cowork alone (only `ANTHROPIC_API_KEY`)
-- **Dual** — Claude Cowork + Codex cross-review (adds `OPENAI_API_KEY`, auto-detected)
+Agent 축은 Mode 와 독립이다 — Semi-auto 안에서도 Cowork 단독 / Cowork+Codex 둘 다 가능 (키 유무로 자동 감지).
 
-Three preset tiers (Maker / Builder / CTO) scale scope from guided workflows to full multi-agent judgment.
-
-> **Full guide:** [`docs/cowork-main-install.md`](docs/cowork-main-install.md) — install, daily workflow, personalization, env vars, troubleshooting.
+> **Full guide:** [`docs/cowork-main-install.md`](docs/cowork-main-install.md) — 3축 설명, install, daily workflow, cloud amplifiers, 개인화, env vars, troubleshooting.
 
 **Default posture:** remote side-effects OFF. In-session agent automation ON. Every remote operation (`sync --apply`, PR push) is opt-in.
 
@@ -160,9 +169,18 @@ Three preset tiers (Maker / Builder / CTO) scale scope from guided workflows to 
 | **Phase 2** | CI/CD post-run auto-commits `agent-scores.json` + error patterns to orchestrator repo → manual `sync` always gets fresh data | planned |
 | **Phase 3** | Opt-in auto-sync at session start (`auto_sync: true` in SKILL.md) for power users | planned |
 
-## Tiers
+## Tier 축 — Maker / Builder / CTO
 
-Two tiers, one CLI. Pick what fits your workflow.
+Tier 는 **어떤 기능/스킬 범위를 쓸 것인가** 를 결정하는 축이다. Agent 구성 · Mode 와는 독립적으로 선택한다.
+상세 정의는 `docs/tier-matrix.md` 참조.
+
+| Tier | 포함 스킬 | 기본 Agent 권장 | Mode 권장 |
+|---|---|---|---|
+| **Maker** | spark / review / memory / craft | Cowork 단독 | Semi-auto |
+| **Builder** (default) | Maker + build + ship | Cowork 단독 또는 Cowork+Codex | Semi-auto 또는 Full-auto |
+| **CTO** | Builder + orchestrate | Cowork+Codex (정책) | Full-auto (정책, `docs/cto-policy.md`) |
+
+아래는 Builder / CTO Tier 의 풀 스펙 — Maker 는 가이드 워크플로우 중심이라 별도 인프라 요구 없음.
 
 ### Builder (Lv4) — Single-Agent, Default
 
