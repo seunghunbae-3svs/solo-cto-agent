@@ -368,6 +368,7 @@ async function startWatch(opts = {}) {
             severity: code === 0 ? "info" : "warn",
             title: `watch auto-review exited ${code}`,
             body: `Changes: ${head}${more}`,
+            meta: { event: code === 0 ? "ci.success" : "ci.failure" },
           }).catch(() => {});
         }
       });
