@@ -1780,6 +1780,26 @@ async function main() {
       return;
     }
     const get = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : null; };
+
+    // PR-G9-ship-emit — deploy-event convenience subcommands. The ship
+    // skill (skills/ship/SKILL.md) hooks these after a preview/production
+    // deploy so users get a tagged event that the notify-config filter
+    // can mute or surface per channel.
+    const sub = args[1];
+    if (sub === "deploy-ready" || sub === "deploy-error") {
+      const status = sub === "deploy-ready" ? "success" : "failed";
+      const r = await notify.notifyDeployResult({
+        target: get("--target") || "preview",
+        status,
+        url: get("--url") || "",
+        commit: get("--commit") || "",
+        summary: get("--body") || "",
+      });
+      const ok = r.results.filter((x) => x.ok).map((x) => x.channel).join(", ") || "(none)";
+      process.stderr.write(`sent: ${ok}\n`);
+      return;
+    }
+
     const title = get("--title");
     if (!title) { console.error("❌ --title required (or use --detect)"); process.exit(1); }
     const channels = get("--channels") ? get("--channels").split(",") : undefined;

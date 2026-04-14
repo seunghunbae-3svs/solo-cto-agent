@@ -273,6 +273,57 @@ async function notifyReviewResult(reviewData) {
   });
 }
 
+// PR-G9-ship-emit — deploy event helper.
+//
+// Status taxonomy:
+//   success   → event=deploy.ready,  severity=info
+//   partial   → event=deploy.error,  severity=warn
+//   failed    → event=deploy.error,  severity=error
+//
+// The ship skill (skills/ship/SKILL.md) invokes this via the CLI wrapper
+// `solo-cto-agent notify deploy-ready|deploy-error`. Preview-first rule
+// still applies: production status=success MUST be gated on preview
+// success upstream. This helper does no policy, just emission + routing.
+async function notifyDeployResult(deployData = {}) {
+  const target = deployData.target || "unknown";
+  const status = deployData.status || "unknown";
+  const url = deployData.url || "";
+  const commit = deployData.commit || "";
+  const summary = deployData.summary || deployData.body || "";
+
+  let event;
+  let severity;
+  if (status === "success") {
+    event = "deploy.ready";
+    severity = "info";
+  } else if (status === "partial") {
+    event = "deploy.error";
+    severity = "warn";
+  } else {
+    // "failed" and any unknown status err on the side of notifying.
+    event = "deploy.error";
+    severity = "error";
+  }
+
+  const title = `Deploy ${target} — ${status.toUpperCase()}`;
+  const body = [summary, url && `URL: ${url}`, commit && `commit: ${commit}`]
+    .filter(Boolean)
+    .join("\n");
+
+  return notify({
+    severity,
+    title,
+    body,
+    meta: {
+      event,
+      target,
+      status,
+      url: url || undefined,
+      commit: commit || undefined,
+    },
+  });
+}
+
 async function notifyApplyResult(applyData) {
   const applied = (applyData.applied || []).length;
   const failed = (applyData.failed || []).length;
@@ -354,6 +405,7 @@ module.exports = {
   detectChannels,
   notifyReviewResult,
   notifyApplyResult,
+  notifyDeployResult,
   // Test hooks
   _formatPlain: formatPlain,
   _severityIcon: severityIcon,
