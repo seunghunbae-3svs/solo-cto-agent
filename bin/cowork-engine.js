@@ -834,6 +834,227 @@ function formatPartialSignalHint(signals) {
   return `\n${COLORS.gray}ℹ️  Active external signals: ${signals.activeCount}/3. Missing: ${missing.join(", ")}.${COLORS.reset}\n`;
 }
 
+// ============================================================================
+// T3 Ground Truth — real runtime signals (PR-E1)
+// ============================================================================
+// Fetches actual deployment/runtime state from external services so the review
+// prompt can be grounded in what's actually shipped, not what the model
+// thinks is probably shipped. Currently: Vercel deployments. Supabase wiring
+// is stubbed (project-ref resolution only — full log API is follow-up).
+
+/**
+ * Resolve Vercel project identifier for the current working dir.
+ * Order:
+ *   1. .vercel/project.json (created by `vercel link` — most reliable)
+ *   2. VERCEL_PROJECT_ID env var
+ *   3. VERCEL_PROJECT env var (name, requires list lookup — we return as-is)
+ * Returns { projectId, orgId, source } or null.
+ */
+function resolveVercelProject(opts = {}) {
+  const cwd = opts.cwd || process.cwd();
+  const env = opts.env || process.env;
+  try {
+    const p = path.join(cwd, ".vercel", "project.json");
+    if (fs.existsSync(p)) {
+      const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
+      if (cfg.projectId) {
+        return {
+          projectId: cfg.projectId,
+          orgId: cfg.orgId || null,
+          source: ".vercel/project.json",
+        };
+      }
+    }
+  } catch (_) { /* ignore */ }
+  if (env.VERCEL_PROJECT_ID) {
+    return {
+      projectId: env.VERCEL_PROJECT_ID,
+      orgId: env.VERCEL_TEAM_ID || env.VERCEL_ORG_ID || null,
+      source: "VERCEL_PROJECT_ID env",
+    };
+  }
+  if (env.VERCEL_PROJECT) {
+    return {
+      projectId: env.VERCEL_PROJECT,
+      orgId: env.VERCEL_TEAM_ID || env.VERCEL_ORG_ID || null,
+      source: "VERCEL_PROJECT env (name)",
+    };
+  }
+  return null;
+}
+
+function resolveSupabaseProject(opts = {}) {
+  const env = opts.env || process.env;
+  if (env.SUPABASE_PROJECT_REF) {
+    return { projectRef: env.SUPABASE_PROJECT_REF, source: "SUPABASE_PROJECT_REF env" };
+  }
+  return null;
+}
+
+/**
+ * Fetch last N deployments from Vercel REST API.
+ * Returns { ok: true, deployments: [...], summary: {...} } or { ok: false, error }.
+ * Network failures, timeouts, and auth errors are all soft — they return
+ * ok:false with a reason string so the review can proceed without GT.
+ */
+async function fetchVercelGroundTruth(opts) {
+  const { token, projectId, orgId = null, limit = 10, timeoutMs = 8000, fetchImpl } = opts;
+  if (!token || !projectId) return { ok: false, error: "missing token or projectId" };
+  const qs = new URLSearchParams({ projectId, limit: String(limit) });
+  if (orgId) qs.set("teamId", orgId);
+  const url = `https://api.vercel.com/v6/deployments?${qs.toString()}`;
+  const f = fetchImpl || (typeof fetch !== "undefined" ? fetch : null);
+  if (!f) return { ok: false, error: "fetch not available" };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await f(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      return { ok: false, error: `vercel http ${res.status}` };
+    }
+    const data = await res.json();
+    const deployments = (data.deployments || []).map((d) => ({
+      uid: d.uid,
+      state: d.state || d.readyState || "UNKNOWN",
+      url: d.url,
+      target: d.target || null,
+      createdAt: d.created || d.createdAt,
+      ready: d.ready,
+      aliasError: d.aliasError || null,
+    }));
+    return { ok: true, deployments, summary: summarizeVercelDeployments(deployments) };
+  } catch (e) {
+    clearTimeout(timer);
+    return { ok: false, error: e.name === "AbortError" ? "timeout" : String(e.message || e) };
+  }
+}
+
+function summarizeVercelDeployments(deployments) {
+  const total = deployments.length;
+  const byState = {};
+  for (const d of deployments) {
+    byState[d.state] = (byState[d.state] || 0) + 1;
+  }
+  const production = deployments.filter((d) => d.target === "production");
+  const latestProduction = production[0] || null;
+  const latestError = deployments.find((d) => d.state === "ERROR") || null;
+  return {
+    total,
+    byState,
+    latestProduction,
+    latestError,
+    errorCount: byState.ERROR || 0,
+  };
+}
+
+/**
+ * Top-level orchestrator. Runs all available GT fetchers in parallel with a
+ * shared deadline. Returns a normalized payload that the review prompt
+ * formatter can consume. Never throws — failures are captured per-source.
+ */
+async function fetchGroundTruth(opts = {}) {
+  const env = opts.env || process.env;
+  const cwd = opts.cwd || process.cwd();
+  const timeoutMs = opts.timeoutMs || 8000;
+  const fetchImpl = opts.fetchImpl;
+  const result = {
+    fetchedAt: new Date().toISOString(),
+    vercel: null,
+    supabase: null,
+    hasData: false,
+  };
+  const jobs = [];
+
+  if (env.VERCEL_TOKEN) {
+    const proj = resolveVercelProject({ cwd, env });
+    if (proj) {
+      jobs.push(
+        fetchVercelGroundTruth({
+          token: env.VERCEL_TOKEN,
+          projectId: proj.projectId,
+          orgId: proj.orgId,
+          timeoutMs,
+          fetchImpl,
+        }).then((r) => {
+          result.vercel = { ...r, resolved: proj };
+        }),
+      );
+    } else {
+      result.vercel = { ok: false, error: "project not identified (no .vercel/project.json, no VERCEL_PROJECT_ID)" };
+    }
+  }
+
+  if (env.SUPABASE_ACCESS_TOKEN) {
+    const proj = resolveSupabaseProject({ env });
+    if (proj) {
+      result.supabase = { ok: false, error: "supabase log fetch not implemented yet (PR-E1.5)", resolved: proj };
+    } else {
+      result.supabase = { ok: false, error: "project not identified (set SUPABASE_PROJECT_REF)" };
+    }
+  }
+
+  if (jobs.length) await Promise.allSettled(jobs);
+  result.hasData = !!(result.vercel && result.vercel.ok && result.vercel.deployments && result.vercel.deployments.length);
+  return result;
+}
+
+/**
+ * Render ground-truth payload as a Korean markdown section for injection
+ * into the review system prompt. Empty string if no data — the review still
+ * runs, it just lacks the grounding section.
+ */
+function formatGroundTruthContext(gt) {
+  if (!gt) return "";
+  const lines = [];
+  const vercel = gt.vercel;
+  const supabase = gt.supabase;
+
+  const hasAnything = (vercel && (vercel.ok || vercel.error)) || (supabase && (supabase.ok || supabase.error));
+  if (!hasAnything) return "";
+
+  lines.push(`\n## 최근 프로덕션 신호 (T3 Ground Truth)`);
+  lines.push(`> 실제 배포/런타임 상태. [확정] 자료로 인용 가능. 아래 내용과 diff 가 충돌하면 diff 쪽을 의심한다.`);
+
+  if (vercel) {
+    lines.push(`\n### Vercel`);
+    if (!vercel.ok) {
+      lines.push(`- 조회 실패: ${vercel.error}. 배포 상태는 [미검증].`);
+    } else {
+      const s = vercel.summary || {};
+      const stateStr = Object.entries(s.byState || {})
+        .map(([k, v]) => `${k}=${v}`)
+        .join(", ") || "(없음)";
+      lines.push(`- 최근 ${s.total} 개 배포 상태: ${stateStr}`);
+      if (s.latestProduction) {
+        const lp = s.latestProduction;
+        lines.push(`- 최신 production: \`${lp.state}\` · ${lp.url || "(no url)"} · ${lp.createdAt ? new Date(lp.createdAt).toISOString() : "n/a"}`);
+      } else {
+        lines.push(`- 최신 production 배포 없음 (preview 만 존재).`);
+      }
+      if (s.errorCount > 0 && s.latestError) {
+        lines.push(`- 최근 ERROR 배포 있음: \`${s.latestError.uid}\` @ ${s.latestError.createdAt ? new Date(s.latestError.createdAt).toISOString() : "n/a"}. 이 diff 가 그 에러와 관련될 가능성 의심.`);
+      } else if (s.errorCount === 0) {
+        lines.push(`- 최근 ${s.total} 개 중 ERROR 없음.`);
+      }
+    }
+  }
+
+  if (supabase) {
+    lines.push(`\n### Supabase`);
+    if (!supabase.ok) {
+      lines.push(`- ${supabase.error}`);
+    }
+  }
+
+  lines.push(``);
+  lines.push(`위 Ground Truth 를 review 의 근거로 삼아라. diff 가 production 에러 근처를 건드리면 반드시 언급한다.`);
+  return lines.join("\n") + "\n";
+}
+
 function formatCrossCheck(cc) {
   if (!cc) return "";
   let out = `\n${COLORS.bold}[CROSS-CHECK]${COLORS.reset} ${cc.crossVerdict}\n`;
@@ -950,6 +1171,21 @@ async function localReview(options = {}) {
   const liveCtx = liveSourceContext();
   const identity = buildIdentity(tier, agent);
 
+  // T3 Ground Truth — fetch real runtime state (Vercel/Supabase) in parallel.
+  // Never blocks the review on failure; an empty/error payload just yields an
+  // empty GT context section so the review runs with whatever we have.
+  let groundTruth = null;
+  try {
+    groundTruth = await fetchGroundTruth();
+    if (groundTruth && groundTruth.hasData) {
+      const n = groundTruth.vercel && groundTruth.vercel.deployments ? groundTruth.vercel.deployments.length : 0;
+      logInfo(`T3 ground truth: ${n} Vercel deployment${n === 1 ? "" : "s"} fetched`);
+    }
+  } catch (e) {
+    logWarn(`Ground truth fetch failed: ${e.message} — review proceeds without T3`);
+  }
+  const groundTruthCtx = formatGroundTruthContext(groundTruth);
+
   const errorPatterns = failureCatalog.patterns
     ?.map((p) => `- ${p.pattern}: ${p.fix}`)
     .join("\n") || "No patterns loaded";
@@ -962,7 +1198,7 @@ async function localReview(options = {}) {
 ${OPERATING_PRINCIPLES}
 ${COMMON_STACK_PATTERNS}
 ${REVIEW_PRIORITY}
-${liveCtx}${personalCtx}
+${liveCtx}${groundTruthCtx}${personalCtx}
 
 ## 심각도 분류
 - ⛔ BLOCKER  — 머지/배포 차단. 치명 버그, 보안, 데이터 손실 위험.
@@ -1096,6 +1332,8 @@ ${diff}
     // non-self-loop backing (peer model / external knowledge / ground truth).
     const externalSignals = assessExternalSignals();
     reviewData.externalSignals = externalSignals;
+    // T3 payload — raw fetched data for audit / downstream use.
+    if (groundTruth) reviewData.groundTruth = groundTruth;
 
     fs.writeFileSync(reviewFile, JSON.stringify(reviewData, null, 2));
 
@@ -1459,6 +1697,20 @@ async function dualReview(options = {}) {
     ?.map((p) => `- ${p.pattern}: ${p.fix}`)
     .join("\n") || "No patterns loaded";
 
+  // T3 Ground Truth — same parallel fetch as localReview. Both review passes
+  // (Claude + OpenAI) get the same grounded context for consistent cross-check.
+  let groundTruth = null;
+  try {
+    groundTruth = await fetchGroundTruth();
+    if (groundTruth && groundTruth.hasData) {
+      const n = groundTruth.vercel && groundTruth.vercel.deployments ? groundTruth.vercel.deployments.length : 0;
+      logInfo(`T3 ground truth: ${n} Vercel deployment${n === 1 ? "" : "s"} fetched`);
+    }
+  } catch (e) {
+    logWarn(`Ground truth fetch failed: ${e.message} — dual-review proceeds without T3`);
+  }
+  const groundTruthCtx = formatGroundTruthContext(groundTruth);
+
   // Dual-review prompt (identical spec for Claude + OpenAI — codex-main parity)
   const systemPrompt = `${AGENT_IDENTITY}
 
@@ -1466,7 +1718,7 @@ async function dualReview(options = {}) {
 
 ${SKILL_CONTEXT}
 ${SKILL_REVIEW_CRITERIA}
-
+${groundTruthCtx}
 ## 심각도
 - ⛔ BLOCKER  머지 차단 (치명 버그, 보안, 데이터 손실)
 - ⚠️ SUGGESTION 강한 개선 권고
@@ -1600,6 +1852,7 @@ ${diff}
   // so this mostly surfaces whether T2/T3 are also present for full coverage.
   const externalSignals = assessExternalSignals();
   dualReviewData.externalSignals = externalSignals;
+  if (groundTruth) dualReviewData.groundTruth = groundTruth;
 
   fs.writeFileSync(reviewFile, JSON.stringify(dualReviewData, null, 2));
   logSuccess(`Dual review saved to ${reviewFile}`);
@@ -1979,6 +2232,13 @@ module.exports = {
   assessExternalSignals,
   formatSelfLoopWarning,
   formatPartialSignalHint,
+  // T3 Ground Truth (PR-E1)
+  resolveVercelProject,
+  resolveSupabaseProject,
+  fetchVercelGroundTruth,
+  summarizeVercelDeployments,
+  fetchGroundTruth,
+  formatGroundTruthContext,
   detectLiveSources,
   liveSourceContext,
   buildIdentity,

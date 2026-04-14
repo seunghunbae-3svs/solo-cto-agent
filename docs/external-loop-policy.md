@@ -46,7 +46,23 @@
 - prior session 에서 합성된 `knowledge` article — 같은 loop, 롤업일 뿐
 - 자기 orchestrator repo 에서 `sync --apply` — 자기 CI · 자기 agent · 자기 닫힌 loop
 
-**로드맵**: PR-E3 (이 문서 주제, 경고 라벨) ✅ shipped. PR-E1 (T3 Vercel 배포 + runtime log) · PR-E2 (T2 package registry + web) · PR-E5 (`watch` 주기 dual-review) · PR-E4 (Slack 버튼 → `feedback`) 순서로 planned.
+**로드맵**: PR-E3 (경고 라벨) ✅ shipped. **PR-E1 (T3 Vercel 배포 + runtime 신호) ✅ shipped — `## 최근 프로덕션 신호` 블록이 review 프롬프트에 주입됨.** PR-E2 (T2 package registry + web) · PR-E5 (`watch` 주기 dual-review) · PR-E4 (Slack 버튼 → `feedback`) 순서로 planned.
+
+**T3 활성화 방법** (PR-E1):
+
+```bash
+# 필수: Vercel 토큰
+export VERCEL_TOKEN=xxx
+
+# 권장: 프로젝트 연결 — 아래 중 하나
+vercel link                                # .vercel/project.json 생성 (가장 안정적)
+export VERCEL_PROJECT_ID=prj_xxx           # 수동 설정
+export VERCEL_TEAM_ID=team_xxx             # team repo 인 경우
+
+# 이후 `solo-cto-agent review` 실행 → 리뷰 프롬프트에 최근 10 개 배포 상태가 자동 주입됨
+```
+
+`VERCEL_TOKEN` 만 있고 프로젝트 식별 불가 → self-loop 상태 유지 + "project not identified" 에러 로그. 토큰도 프로젝트도 있으면 T3 flag 가 활성화되고 리뷰에 실제 runtime 신호가 포함됩니다.
 
 ---
 
@@ -120,7 +136,31 @@ To close the loop, enable any of:
 | T2 | `COWORK_EXTERNAL_KNOWLEDGE=1` or `COWORK_WEB_SEARCH` / `COWORK_PACKAGE_REGISTRY` set |
 | T3 | `VERCEL_TOKEN`, `SUPABASE_ACCESS_TOKEN`, or `COWORK_GROUND_TRUTH=1` set |
 
-> Note: the current release of `solo-cto-agent` implements only T1 fully. T2 and T3 integrations land in subsequent PRs (PR-E1, PR-E2). The env-var flags already gate the UI so users can opt in as those integrations ship.
+> As of PR-E1: **T1 and T3 (Vercel) are fully implemented**. T3 via Supabase is stubbed (project-ref resolution wired, log API is a follow-up — PR-E1.5). T2 lands in PR-E2. The env-var flags gate both the warning UI and the actual fetch, so users can opt in as integrations ship.
+
+### T3 — what actually lands in the review prompt (PR-E1)
+
+When `VERCEL_TOKEN` is set and a project is resolvable (via `.vercel/project.json`, `VERCEL_PROJECT_ID`, or `VERCEL_PROJECT`), every `review` / `dual-review` fetches the last 10 deployments from the Vercel REST API (`/v6/deployments`) with an 8 s timeout. The payload is injected into the system prompt as:
+
+```
+## 최근 프로덕션 신호 (T3 Ground Truth)
+> 실제 배포/런타임 상태. [확정] 자료로 인용 가능. 아래 내용과 diff 가 충돌하면 diff 쪽을 의심한다.
+
+### Vercel
+- 최근 N 개 배포 상태: READY=x, ERROR=y, BUILDING=z
+- 최신 production: READY · app.vercel.app · 2026-04-14T…
+- 최근 ERROR 배포 있음: d_xxx @ 2026-04-14T… — 이 diff 가 그 에러와 관련될 가능성 의심.
+```
+
+The review model is instructed to treat this as ground truth and flag the diff when it touches files likely related to a recent ERROR deployment.
+
+**Failure modes** (never block the review):
+
+- No `VERCEL_TOKEN` → section omitted entirely.
+- Token set but no project resolvable → "project not identified" line; section notes the tier is inactive.
+- Network timeout / 4xx / 5xx → "조회 실패: …" line; section notes the state is [미검증].
+
+Raw fetch payload is persisted to `reviewData.groundTruth` in the saved review JSON for audit.
 
 ---
 
@@ -174,9 +214,10 @@ These layers are useful for personalization and continuity, but they do not add 
 | PR | Scope | Status |
 |---|---|---|
 | **PR-E3** | Self-loop warning label (this doc's subject) | ✅ shipped |
-| **PR-E1** | T3 injection — Vercel deploy status + runtime logs | planned |
+| **PR-E1** | T3 injection — Vercel deploy status + runtime logs | ✅ shipped |
+| **PR-E1.5** | T3 Supabase log API integration | planned |
 | **PR-E2** | T2 injection — package-registry + web-search for stack |  planned |
 | **PR-E5** | `watch` schedules periodic dual-review + T2 refresh | planned |
 | **PR-E4** | Inbound feedback channel (Slack button → `feedback`) | planned |
 
-After PR-E1+E2, "fully externally grounded" becomes achievable for any user with tokens. Before that, T1 via dual-review is the main escape hatch from the self-loop.
+After PR-E2, "fully externally grounded" becomes achievable for any user with tokens. PR-E1 already covers the highest-signal tier (runtime truth beats model opinion), so users with `VERCEL_TOKEN` are already meaningfully out of the self-loop even before PR-E2 ships.

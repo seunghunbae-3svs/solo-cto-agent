@@ -338,6 +338,8 @@ solo-cto-agent review --diff staged --output markdown --file review.md
 
 Works completely offline from CI/CD. Claude reviews the diff first. If an OpenAI key is also set, GPT provides a second opinion and the tool cross-compares both reviews — highlighting agreed issues (high confidence) vs. divergent findings. New error patterns found during review are automatically added to the local failure catalog.
 
+**Ground-truth grounding (T3 — PR-E1).** If `VERCEL_TOKEN` is set and the repo has a `.vercel/project.json` (from `vercel link`) or `VERCEL_PROJECT_ID` is exported, every `review` and `dual-review` automatically fetches the last 10 deployments and injects a `## 최근 프로덕션 신호 (T3 Ground Truth)` block into the system prompt. The review model uses this as [확정] evidence — for example, if there's a recent `ERROR` deployment, the review explicitly cross-checks whether the current diff might be related. This is the cheapest way to escape the pure self-loop described in [`docs/external-loop-policy.md`](docs/external-loop-policy.md) — runtime behavior beats model opinion. Failures (missing token, unreachable API, timeout) never block the review; the section is simply omitted or marked `[미검증]`.
+
 ### Knowledge Article Generation (Both tiers)
 
 Auto-generates durable knowledge articles from accumulated session memory:
