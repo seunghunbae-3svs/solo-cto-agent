@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.1.0 — Tier-aware reviews, security signals, plugins & telegram
+
+**Theme**: closing the last gaps around signal quality and agent
+extensibility. The review loop now reasons about Haiku/Sonnet/Opus
+tier-appropriately, surfaces live CVE/GHSA advisories via OSV.dev,
+captures screenshots without Playwright, and gains a first-cut
+plugin system + experimental telegram setup wizard.
+
+### External signals (PR-G4)
+* **T2 Security Advisories (OSV.dev)** — CVE + GHSA scan across
+  `dependencies` + `devDependencies`. Severity normalized (DB-specific
+  > CVSS numeric > UNKNOWN) and merged into the external-knowledge
+  context block. Gate: `COWORK_EXTERNAL_KNOWLEDGE_SECURITY=0` to skip.
+
+### Review tiering (PR-G2)
+* **Per-tier Claude model resolution** — Haiku (cheap triage) / Sonnet
+  (default) / Opus (deep review) selected automatically based on watch
+  tier. Overridable via `ANTHROPIC_MODEL_HAIKU|SONNET|OPUS`.
+
+### UI/UX loop (PR-G5)
+* **Playwright-free screenshot capture** — `uiux vision-review --url`
+  and `uiux capture --url` now fall back to thum.io when Playwright is
+  unavailable. Viewports: mobile 375x812 / tablet 768x1024 / desktop
+  1280x800.
+
+### Plugins & integrations (PR-G6 / G7)
+* **`docs/plugin-api-v2.md`** — capability manifest spec
+  (env/net/fs/cli/hook/schedule prefixes), contribution points, agent
+  targeting (`claude` / `codex` / `cowork` / `headless`).
+* **`plugin` subcommand** — filesystem-only manager:
+  `solo-cto-agent plugin list|show|add --path <dir>|remove`. Records
+  metadata only; does NOT execute plugin code. Runtime loader lands
+  in a follow-up behind the capability gate.
+* **`telegram wizard`** (experimental — `SOLO_CTO_EXPERIMENTAL=1`)
+  — one-command bot token + chat_id capture + `.env` / shell profile
+  / GitHub secret writeback + live sendMessage verification.
+* **`docs/telegram-wizard-spec.md`** — full spec including failure
+  modes and i18n hooks.
+
+### Developer experience
+* **375 tests** (up from 247 in 1.0.0) across 28 files — all offline,
+  all network calls stubbed via injected `fetchImpl`.
+* **Shared `prompt-utils.js`** — `ask` / `askYesNo` / `askChoice` /
+  `isTTY` / `createRl` extracted from `wizard.js` for future wizards.
+* **npm publish automation** — tag `v*` now triggers full CI +
+  `npm publish` + GitHub Release in one workflow.
+
+### Upgrade notes
+* No breaking changes. All new features are additive and gated on
+  env vars (`COWORK_EXTERNAL_KNOWLEDGE_SECURITY`,
+  `SOLO_CTO_EXPERIMENTAL`).
+* `solo-cto-agent plugin` and `solo-cto-agent telegram` are new
+  commands — existing commands are unchanged.
+
 ## 1.0.0 — First stable release
 
 **Why 1.0**: the loop is now closable end-to-end. Previous 0.x releases were

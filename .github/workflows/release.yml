@@ -7,14 +7,19 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (e.g. v0.5.1)"
+        description: "Tag to release (e.g. v1.1.0)"
         required: true
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Determine tag
         id: tag
@@ -24,6 +29,32 @@ jobs:
           else
             echo "value=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify version matches tag
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${{ steps.tag.outputs.value }}"
+          TAG_VERSION_STRIPPED="${TAG_VERSION#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION_STRIPPED" ]; then
+            echo "::error::package.json version ($PKG_VERSION) != tag ($TAG_VERSION_STRIPPED)"
+            exit 1
+          fi
+
+      - name: Run tests
+        run: npm test
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
