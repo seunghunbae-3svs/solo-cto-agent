@@ -177,7 +177,79 @@ solo-cto-agent knowledge --project tribo
 
 저장 위치: 홈 디렉토리 지식 아티클 + 프로젝트 STATE.md. 다음 세션에서 자동 로드됨.
 
-### 5.4. 세션 종료
+### 5.4. UI/UX 리뷰 — 코드 + 비전 교차검증
+
+디자인/프론트엔드 작업 시 코드 레벨과 비전(스크린샷) 레벨을 동시에 점검한다.
+
+```bash
+solo-cto-agent uiux-review code                    # diff 기반 UI 코드 리뷰 (토큰 일관성 / a11y / 반응형)
+solo-cto-agent uiux-review vision --screenshot shot.png
+                                                   # 6축 점수 (layout/typography/spacing/color/a11y/polish)
+solo-cto-agent uiux-review cross-verify --screenshot shot.png
+                                                   # 코드 ↔ 비전 교차 검증 (한쪽만 놓치는 이슈 잡음)
+solo-cto-agent uiux-review baseline save --screenshot shot.png --project <slug>
+solo-cto-agent uiux-review baseline diff --screenshot shot.png --project <slug>
+solo-cto-agent uiux-review tokens                  # 코드에서 디자인 토큰 추출 / 요약
+```
+
+Vision 리뷰는 비용 가드레일상 기본 manual 전용 (watch 자동 트리거 대상 아님).
+
+### 5.5. Rework — 리뷰 결과를 자동 적용
+
+`review --json` 으로 떨어진 `[FIX]` 블록을 `git apply --check` 로 검증 후 선택적 적용한다.
+
+```bash
+solo-cto-agent review --json > review.json         # 리뷰 JSON 저장
+solo-cto-agent apply-fixes --review review.json    # dry-run (기본) — 패치만 검증
+solo-cto-agent apply-fixes --review review.json --apply
+                                                   # 실제 적용 (git working tree clean 필수)
+solo-cto-agent apply-fixes --review review.json --apply --only BLOCKER
+                                                   # BLOCKER 만 자동 적용, SUGGESTION 은 수동 검토
+solo-cto-agent apply-fixes --review review.json --apply --max-fixes 3
+                                                   # circuit-breaker: 최대 N개까지만 적용
+solo-cto-agent apply-fixes --review review.json --apply --no-clean-check
+                                                   # working tree dirty 상태에서도 강행 (비권장)
+```
+
+### 5.6. Feedback — 리뷰 정확도 학습
+
+에이전트가 잘못 짚은 이슈는 `reject`, 정확히 짚은 이슈는 `accept` 로 기록. 다음 리뷰부터 personalization 가중치에 반영된다 (80/20 anti-bias rotation 포함).
+
+```bash
+solo-cto-agent feedback accept --location src/Btn.tsx:42 --severity BLOCKER
+solo-cto-agent feedback reject --location src/Nav.tsx:12 --severity SUGGESTION \
+  --note "false positive — already memoized"
+solo-cto-agent feedback show                       # 누적 accept/reject 패턴 조회
+```
+
+### 5.7. Watch — 파일 변경 감지 후 자동 리뷰
+
+저장하면 반자동으로 리뷰를 돌리는 파일 watcher. **비용 가드레일**: CTO tier + cowork+codex 조합만 `--auto` 허용. 나머지는 신호만 표시, 수동 `review` 호출 필요.
+
+```bash
+solo-cto-agent watch                               # manual signal mode (변경만 표시)
+solo-cto-agent watch --auto                        # tier gate 통과 시만 자동 review 스폰
+solo-cto-agent watch --auto --force                # gate 우회 (사용자 책임, 비용 주의)
+solo-cto-agent watch --debounce-ms 3000            # 변경 flush 간격 (기본 1500ms)
+solo-cto-agent watch --dry-run                     # gate 결정만 리턴, 실제 watch 시작 안 함
+```
+
+scheduled-tasks manifest(`~/.claude/skills/solo-cto-agent/scheduled-tasks.yaml`)를 자동 emit — Cowork 의 scheduled-tasks MCP 가 등록하면 주기 실행도 가능.
+
+### 5.8. Notify — 외부 채널 알림
+
+리뷰/rework 결과를 Slack/Telegram/Discord/파일로 전송. 환경변수로 채널 자동 감지.
+
+```bash
+solo-cto-agent notify --detect                     # 감지된 채널 목록
+solo-cto-agent notify --title "Review done" --severity info --body "0 blockers"
+solo-cto-agent notify --title "Build failed" --severity error --body "..." \
+  --channels slack,telegram --meta project=tribo
+```
+
+감지 환경변수: `SLACK_WEBHOOK_URL` / `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` / `DISCORD_WEBHOOK_URL` / `NOTIFY_LOG_FILE`. 모두 없으면 console(stderr)로 fallback.
+
+### 5.9. 세션 종료
 
 ```bash
 solo-cto-agent session save             # 현재 컨텍스트 스냅샷
@@ -363,6 +435,34 @@ solo-cto-agent review --file <path>
 solo-cto-agent review --solo          # Cowork+Codex 구성 감지되어도 Cowork 단독으로 강제
 solo-cto-agent review --json          # 파싱용 JSON 출력
 solo-cto-agent review --dry-run       # 프롬프트만 확인, API 호출 없음
+
+# UI/UX 리뷰 (코드 + 비전 교차검증)
+solo-cto-agent uiux-review code
+solo-cto-agent uiux-review vision --screenshot <img>
+solo-cto-agent uiux-review cross-verify --screenshot <img>
+solo-cto-agent uiux-review baseline save --screenshot <img> --project <slug>
+solo-cto-agent uiux-review baseline diff --screenshot <img> --project <slug>
+solo-cto-agent uiux-review tokens
+
+# Rework (review 결과 자동 적용)
+solo-cto-agent apply-fixes --review review.json              # dry-run
+solo-cto-agent apply-fixes --review review.json --apply
+solo-cto-agent apply-fixes --review review.json --apply --only BLOCKER
+solo-cto-agent apply-fixes --review review.json --apply --max-fixes 5
+
+# Feedback (리뷰 정확도 학습)
+solo-cto-agent feedback accept --location <path[:line]> --severity <S>
+solo-cto-agent feedback reject --location <path[:line]> --severity <S> --note "..."
+solo-cto-agent feedback show
+
+# Watch (파일 변경 감지 → 반자동 review)
+solo-cto-agent watch                  # manual signal mode
+solo-cto-agent watch --auto           # tier gate 통과 시만 자동
+solo-cto-agent watch --dry-run        # gate 결정만 확인
+
+# Notify (외부 채널 알림)
+solo-cto-agent notify --detect
+solo-cto-agent notify --title "..." --severity info --body "..." --channels slack
 
 # 지식 누적
 solo-cto-agent knowledge

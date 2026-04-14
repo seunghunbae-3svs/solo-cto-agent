@@ -195,3 +195,22 @@ import 경로 / Prisma·Drizzle / NextAuth / Supabase RLS / TypeScript / 에러 
 - 임베드 리뷰 컨텍스트: `skills/_shared/skill-context.md`
 
 > 사용 패턴 → references/usage-patterns.md
+
+---
+
+## CLI Hooks (cowork-main)
+
+```bash
+solo-cto-agent review                              # staged diff 리뷰
+solo-cto-agent review --branch                     # 브랜치 전체
+solo-cto-agent review --json > review.json         # rework 체인용 JSON
+solo-cto-agent uiux-review cross-verify \
+  --screenshot shot.png                            # 코드 ↔ 비전 교차검증
+solo-cto-agent feedback accept --location path:42 --severity BLOCKER
+solo-cto-agent feedback reject --location path:12 --severity SUGGESTION \
+  --note "false positive"
+```
+
+리뷰 결과를 다음 세션의 personalization 가중치로 쓰려면 `feedback accept|reject` 로 명시 기록. 80/20 anti-bias rotation 으로 과거 패턴 과적합을 방지한다.
+
+상세: `docs/cowork-main-install.md` §5.4–5.6 및 `docs/feedback-guide.md`.

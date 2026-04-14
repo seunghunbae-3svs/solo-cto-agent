@@ -180,3 +180,17 @@ CB_RATE_LIMIT  = 3   API rate_limit/overloaded → 30s/60s/90s 백오프
 - 임베드 컨텍스트 (Ship-Zero, Dev Guide, 코딩 규칙): `skills/_shared/skill-context.md`
 
 > 실행 예시 → references/execution-examples.md
+
+---
+
+## CLI Hooks — review → rework 자동 루프
+
+```bash
+solo-cto-agent review --branch --json > review.json
+solo-cto-agent apply-fixes --review review.json                      # dry-run 검증
+solo-cto-agent apply-fixes --review review.json --apply --only BLOCKER
+                                                                     # BLOCKER 만 자동 패치
+solo-cto-agent watch --auto                                          # 파일 변경 시 자동 리뷰 (tier gate 적용)
+```
+
+`apply-fixes` 는 `git apply --check` 로 사전 검증 후 적용. working tree clean 필수, circuit-breaker `--max-fixes 5` 로 과도한 자동 수정 방지.

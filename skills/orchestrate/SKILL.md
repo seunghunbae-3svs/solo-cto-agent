@@ -139,3 +139,23 @@ Each workflow should:
 - "Use orchestrate to run a dual-agent review for Issue #42."
 - "Use orchestrate to compare Codex and Claude outputs and recommend a winner."
 - "Use orchestrate to prepare a Telegram-ready decision summary."
+
+---
+
+## CLI Hooks — Semi-auto 오케스트레이션 (cowork-main)
+
+```bash
+solo-cto-agent watch                                         # manual signal mode
+solo-cto-agent watch --auto                                  # CTO tier + cowork+codex 만 자동 허용
+solo-cto-agent watch --auto --force                          # gate 우회 (사용자 책임)
+solo-cto-agent watch --dry-run                               # gate 결정만 리턴
+solo-cto-agent notify --title "..." --severity error \
+  --channels slack,telegram --meta project=tribo
+```
+
+**Tier Gate (비용 가드레일, 2026-04-14 정책)**
+- `maker` / `builder` → `--auto` 거부 (manual only)
+- `cto` + `cowork` (single-agent) → `--force` 필요
+- `cto` + `cowork+codex` (dual) → 기본 허용
+
+Watch 는 `~/.claude/skills/solo-cto-agent/scheduled-tasks.yaml` 을 자동 emit. Cowork 의 scheduled-tasks MCP 가 등록하면 interval 실행도 가능.
