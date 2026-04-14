@@ -109,7 +109,8 @@ describe("watch.emitScheduledTasksManifest", () => {
     // Manifest path is fixed under ~/.claude — we just verify it returns a path or null
     const out = watch.emitScheduledTasksManifest({ rootDir: tmp, intervalSec: 60, autoApply: false });
     if (out) {
-      const content = fs.readFileSync(out, "utf8");
+      const filePath = typeof out === "string" ? out : out.path;
+      const content = fs.readFileSync(filePath, "utf8");
       expect(content).toMatch(/cowork-review-watch/);
       expect(content).toMatch(/interval_seconds: 60/);
       expect(content).toMatch(/auto: false/);
