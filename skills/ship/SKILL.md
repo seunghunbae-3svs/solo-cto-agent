@@ -67,7 +67,7 @@ user-invocable: true
 □ 런타임 로그에 새 에러가 없는가 (최소 5분 감시)
 □ 이전 버전으로 rollback 가능한 상태인가
 □ preview URL을 PR에 기록했는가
-□ 팀/채널에 배포 결과를 알렸는가 (notify hook 또는 수동)
+□ **[필수] 배포 결과를 notify 훅으로 알렸는가** — 성공 시 `solo-cto-agent notify deploy-ready …`, 실패 시 `solo-cto-agent notify deploy-error …`. 이 호출은 "완료 선언"의 필요조건이다 (§5 event taxonomy: `deploy.ready` / `deploy.error`). 채널이 하나도 설정되지 않았으면 stderr 로 fallback 되므로 어떤 환경에서도 호출 자체를 스킵하지 않는다.
 ```
 
 체크리스트가 통과 안 되면 "나중에"가 아니라 지금 해결한다. 배포 후 이슈 수습 비용이 배포 전 체크 비용의 10배다.

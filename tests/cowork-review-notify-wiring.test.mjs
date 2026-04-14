@@ -32,9 +32,19 @@ describe("cowork-engine → notify wiring (PR-G8)", () => {
   });
 
   it("dual-review adapter forces crossVerdict sentinel when verdictMatch is false", () => {
-    // The adapter must convert !verdictMatch into a DISAGREE sentinel so
-    // notifyReviewResult routes to review.dual-disagree deterministically.
-    expect(engineSrc).toMatch(/!comparison\.verdictMatch/);
-    expect(engineSrc).toMatch(/crossVerdict:\s*dualDisagreed\s*\?\s*["']DISAGREE["']/);
+    // PR-G11 — the adapter must route disagreement to a DISAGREE sentinel
+    // AND handle the partial/undefined cases (missing verdict, missing
+    // comparison field) without silently collapsing into a false-agree.
+    expect(engineSrc).toMatch(/comparison\.verdictMatch\s*===\s*true/);
+    expect(engineSrc).toMatch(/comparison\.verdictMatch\s*===\s*false/);
+    expect(engineSrc).toMatch(/crossVerdict\s*=\s*["']DISAGREE["']/);
+  });
+
+  it("dual-review adapter treats missing verdicts as DISAGREE (conservative)", () => {
+    // PR-G11 — if either reviewer failed to produce a verdict, the adapter
+    // must NOT pretend they agreed. The guard string stays in the source
+    // so future refactors can't quietly flip the behavior.
+    expect(engineSrc).toMatch(/missing verdict/);
+    expect(engineSrc).toMatch(/if\s*\(\s*!cv\s*\|\|\s*!xv\s*\)/);
   });
 });
