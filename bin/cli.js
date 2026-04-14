@@ -19,6 +19,8 @@ try { notify = require("./notify"); } catch (_) { notify = null; }
 try { inboundFeedback = require("./inbound-feedback"); } catch (_) { inboundFeedback = null; }
 let pluginManager;
 try { pluginManager = require("./plugin-manager"); } catch (_) { pluginManager = null; }
+let telegramWizard;
+try { telegramWizard = require("./telegram-wizard"); } catch (_) { telegramWizard = null; }
 
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CATALOG = path.join(ROOT, "failure-catalog.json");
@@ -1815,6 +1817,33 @@ async function main() {
       console.error(`   Use: solo-cto-agent session save|restore|list`);
       process.exit(1);
     }
+    return;
+  }
+
+  if (cmd === "telegram") {
+    if (!telegramWizard) {
+      console.error("❌ telegram-wizard module not available in this install.");
+      process.exit(1);
+    }
+    const sub = args[1] || "wizard";
+    if (sub !== "wizard") {
+      console.error(`❌ Unknown telegram subcommand: ${sub}`);
+      console.error(`   Use: solo-cto-agent telegram wizard`);
+      process.exit(1);
+    }
+    const opts = {};
+    const tokIdx = args.indexOf("--token");      if (tokIdx >= 0) opts.token = args[tokIdx + 1];
+    const chatIdx = args.indexOf("--chat");      if (chatIdx >= 0) opts.chat = args[chatIdx + 1];
+    const stoIdx = args.indexOf("--storage");    if (stoIdx >= 0) opts.storage = parseInt(args[stoIdx + 1], 10);
+    const toutIdx = args.indexOf("--timeout");   if (toutIdx >= 0) opts.timeout = parseInt(args[toutIdx + 1], 10);
+    if (args.includes("--non-interactive")) opts.nonInteractive = true;
+    if (args.includes("--force")) opts.force = true;
+    telegramWizard.runWizard(opts).then((res) => {
+      if (!res || !res.ok) process.exit(1);
+    }).catch((e) => {
+      console.error(`❌ ${e.message}`);
+      process.exit(1);
+    });
     return;
   }
 
