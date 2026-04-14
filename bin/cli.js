@@ -1591,13 +1591,26 @@ async function main() {
       } else if (sub === "vision") {
         await uiux.uiuxVisionReview({
           screenshotPath: get("--screenshot"),
+          url: get("--url"),
           viewport: get("--viewport") || "desktop",
           projectSlug: get("--project") || path.basename(process.cwd()),
         });
+      } else if (sub === "capture") {
+        // PR-G5 — standalone URL→screenshot capture (no Playwright)
+        const url = get("--url");
+        if (!url) { console.error("❌ --url required for 'uiux capture'"); process.exit(1); }
+        const out = get("--out") || null;
+        const cap = await uiux.captureScreenshotFromUrl(url, {
+          viewport: get("--viewport") || "desktop",
+          outPath: out,
+        });
+        if (!cap.ok) { console.error(`❌ capture failed: ${cap.error}`); process.exit(1); }
+        console.log(`✓ captured ${(cap.bytes / 1024).toFixed(1)} KB via ${cap.source} → ${cap.path}`);
       } else if (sub === "cross-verify") {
         await uiux.uiuxCrossVerify({
           diffSource: args.includes("--branch") ? "branch" : "staged",
           screenshotPath: get("--screenshot"),
+          url: get("--url"),
           viewport: get("--viewport") || "desktop",
           projectSlug: get("--project") || path.basename(process.cwd()),
           projectDir: get("--cwd") || process.cwd(),
