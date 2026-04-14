@@ -1,6 +1,6 @@
-# Pre-deploy env var lint
+﻿# Pre-deploy env var lint
 
-Tier: Builder · Agent: Cowork · Mode: Semi-auto
+Tier: Builder - Agent: Cowork - Mode: Semi-auto
 
 ## Input
 
@@ -19,11 +19,11 @@ solo-cto-agent ship --target vercel --dry-run
 
      ```text
      DETECTED SERVICES
-       next-auth    → NEXTAUTH_URL, NEXTAUTH_SECRET
-       supabase     → NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
-       prisma       → DATABASE_URL, DIRECT_URL
-       stripe       → STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-       resend       → RESEND_API_KEY
+       next-auth    ->NEXTAUTH_URL, NEXTAUTH_SECRET
+       supabase     ->NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+       prisma       ->DATABASE_URL, DIRECT_URL
+       stripe       ->STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+       resend       ->RESEND_API_KEY
      ```
 2. Queries Vercel for the current project's env (via `vercel env ls --environment=production`):
    - Finds `NEXTAUTH_*`, `NEXT_PUBLIC_SUPABASE_*`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `DIRECT_URL` already present.
@@ -32,10 +32,10 @@ solo-cto-agent ship --target vercel --dry-run
 
    ```text
    STATUS
-     ✓ 5 required vars present
-     ✗ 4 required vars missing
+     ->5 required vars present
+     ->4 required vars missing
 
-   MISSING — paste-ready commands:
+   MISSING ->paste-ready commands:
 
      # Stripe
      vercel env add STRIPE_SECRET_KEY production
@@ -86,8 +86,9 @@ Also written: `.env.example` updated to include the 4 new vars with inline `# fr
 
 ## Pain reduced
 
-**The production deploy that fails at runtime because a single secret was not set.** The classic sequence is: push → Vercel builds fine (build-time doesn't need the key) → first real request hits `/api/webhooks/stripe` → 500 → 15 minutes of dashboard hunting to figure out which of 14 env vars was missing.
+**The production deploy that fails at runtime because a single secret was not set.** The classic sequence is: push ->Vercel builds fine (build-time doesn't need the key) ->first real request hits `/api/webhooks/stripe` ->500 ->15 minutes of dashboard hunting to figure out which of 14 env vars was missing.
 
 Here every missing secret is named before the deploy, with a command you can paste. If the deploy is fully green on env, the dry-run says so and the real run is a single `vercel --prod` call.
 
 Secondary pain: `.env.example` drift. When a service gets added (`npm install stripe`), `.env.example` usually does not get updated, so the next engineer or the next machine has to reverse-engineer the list. This pass keeps `.env.example` in sync automatically.
+

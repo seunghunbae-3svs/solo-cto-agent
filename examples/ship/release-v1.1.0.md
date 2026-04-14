@@ -1,6 +1,6 @@
-# Release tag v1.1.0 (automated publish)
+﻿# Release tag v1.1.0 (automated publish)
 
-Tier: Builder / CTO — Agent: Cowork + Codex — Mode: Full-auto
+Tier: Builder / CTO - Agent: Cowork + Codex - Mode: Full-auto
 
 ## Input
 
@@ -27,4 +27,5 @@ release: v1.1.0 + automated npm publish via release.yml (#61)
 
 ## Pain reduced
 
-**Manual release drift.** The tag drives a single, repeatable pipeline instead of ad‑hoc local publish steps.
+**Manual release drift.** The tag drives a single, repeatable pipeline instead of ad-hoc local publish steps.
+

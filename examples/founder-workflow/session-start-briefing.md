@@ -1,15 +1,15 @@
-# Session start briefing
+﻿# Session start briefing
 
-Tier: Maker / Builder / CTO · Agent: Cowork · Mode: Semi-auto
+Tier: Maker / Builder / CTO - Agent: Cowork - Mode: Semi-auto
 
 ## Input
 
-You open Cowork in the morning. You say nothing yet — just open the workspace.
+You open Cowork in the morning. You say nothing yet ->just open the workspace.
 
 Alternatively:
 
 ```text
-업무 시작
+start session
 ```
 
 (or: "what's on my plate", "start session", etc.)
@@ -20,29 +20,29 @@ Alternatively:
    - Loads `references/businesses.md` (portfolio state)
    - Loads `references/decision-patterns.md` (past decisions)
    - Loads `CONTEXT_LOG.md` last 5 session summaries
-   - Loads today's date → reads `LOGS/YYYY-MM-DD.md` if present
+   - Loads today's date ->reads `LOGS/YYYY-MM-DD.md` if present
    - Scans `states/*.md` for `status: active` projects
-   - Reads `memory/index.md` — skims last 14 days of episodes
+   - Reads `memory/index.md` ->skims last 14 days of episodes
 2. **`spark` skill** reconciles:
    - Which projects moved yesterday?
    - Which action items are past due?
    - Which open questions were escalated but not resolved?
-3. Agent produces a **7-line brief** (hard cap — if it is longer, something is wrong):
+3. Agent produces a **7-line brief** (hard cap ->if it is longer, something is wrong):
 
    ```text
-   Brief — 2026-04-14 (Tue)
+   Brief ->2026-04-14 (Tue)
 
    In-progress
-     • Tribo        seller page DB migration (Phase 3, 2 of 5 steps done)
-     • 3Stripe      voucher proposal draft — need legal review before send
-     • solo-cto-agent  PR-G7 telegram wizard subcommands in progress
+     ->Tribo        seller page DB migration (Phase 3, 2 of 5 steps done)
+     ->3Stripe      voucher proposal draft ->need legal review before send
+     ->solo-cto-agent  PR-G7 telegram wizard subcommands in progress
 
    Due today
-     • 3Stripe voucher proposal to Konvy — waiting on Bae confirm
-     • Tribo Supabase RLS policy review — blocker for step 3
+     ->3Stripe voucher proposal to Konvy ->waiting on Bae confirm
+     ->Tribo Supabase RLS policy review ->blocker for step 3
 
    Unresolved (carry-over)
-     • PISTA  EMI licence check — still pending lawyer reply from last Thursday
+     ->PISTA  EMI licence check ->still pending lawyer reply from last Thursday
    ```
 4. Stops. Does not start working on anything yet. Waits for your direction.
 5. If you then say "start on 3Stripe voucher", the agent jumps to the 3Stripe state, loads the draft, and starts from where yesterday ended. No re-explanation of what 3Stripe is.
@@ -64,7 +64,8 @@ Tertiary pain: **agent over-eagerness.** A common failure mode is the agent read
 Everything in the brief traces back to a file. If the brief says "blocker for step 3" you can ask the agent for the line in `states/tribo.md` it came from and it will quote the row. Nothing hallucinates.
 
 ```text
-states/tribo.md#L18  — "blocker for step 3: Supabase RLS policy review"
-states/3stripe.md#L11 — "Konvy proposal ready — needs Bae confirm"
-memory/index.md#L47  — "2026-04-10: PISTA EMI licence — await lawyer reply"
+states/tribo.md#L18  ->"blocker for step 3: Supabase RLS policy review"
+states/3stripe.md#L11 ->"Konvy proposal ready ->needs Bae confirm"
+memory/index.md#L47  ->"2026-04-10: PISTA EMI licence ->await lawyer reply"
 ```
+

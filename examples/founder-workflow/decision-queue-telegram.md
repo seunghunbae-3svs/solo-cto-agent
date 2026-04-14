@@ -1,4 +1,4 @@
-# Decision queue via Telegram (approve/revise/hold)
+﻿# Decision queue via Telegram (approve/revise/hold)
 
 Tier: Builder / CTO - Agent: Cowork + Codex - Mode: Full-auto (CI) or Semi-auto (manual trigger)
 
@@ -69,3 +69,4 @@ https://github.com/.../pull/42
 Secondary pain: **missing preview links.** The bot surfaces the preview URL (or a clear "pending" state) so you never have to search the PR timeline.
 
 Tertiary pain: **approve-but-don't-merge surprises.** The auto-merge gate checks CI/labels and tells you exactly why merge was skipped if it could not proceed.
+

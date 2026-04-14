@@ -1,13 +1,13 @@
-# PR #64 toolkit upgrade (real PR summary)
+﻿# PR #64 toolkit upgrade (real PR summary)
 
-Tier: Builder / CTO — Agent: Cowork + Codex — Mode: Full-auto
+Tier: Builder / CTO - Agent: Cowork + Codex - Mode: Full-auto
 
 ## Input (real)
 
 PR #64 in `seunghunbae-3svs/solo-cto-agent`:
 
 ```
-docs: toolkit upgrade — per-tool entry points + examples/
+docs: toolkit upgrade ->per-tool entry points + examples/
 ```
 
 ## Agent behavior
@@ -45,3 +45,4 @@ Merged: 2026-04-14T11:48:40Z
 ## Pain reduced
 
 **Decision blindness on doc-heavy PRs.** When a PR is mostly docs, it is easy to skip review depth or miss scope creep. The agent surfaces exact file scope + size so you can decide fast without opening each file.
+

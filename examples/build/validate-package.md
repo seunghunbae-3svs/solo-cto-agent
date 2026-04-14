@@ -1,6 +1,6 @@
-# Package validation before publish
+﻿# Package validation before publish
 
-Tier: Builder / CTO — Agent: Cowork — Mode: Semi-auto
+Tier: Builder / CTO - Agent: Cowork - Mode: Semi-auto
 
 ## Input
 
@@ -26,3 +26,4 @@ Validation passed.
 ## Pain reduced
 
 **Shipping a broken toolkit.** This check prevents publishing a package that is missing the files users actually need to run the workflow.
+

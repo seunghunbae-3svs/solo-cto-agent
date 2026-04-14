@@ -1,6 +1,6 @@
-# Break out of a recurring build error
+﻿# Break out of a recurring build error
 
-Tier: Builder · Agent: Cowork · Mode: Semi-auto
+Tier: Builder - Agent: Cowork - Mode: Semi-auto
 
 ## Input
 
@@ -13,14 +13,14 @@ Type error: Property 'id' does not exist on type 'Session["user"]'.
 
 You have already tried three fixes in this session:
 
-1. Added `// @ts-expect-error` — the error moved to a different call site.
-2. Widened the param to `any` — `next build` still fails because two other consumers now mismatch.
-3. Imported `Session` from a different module — no-op, same error.
+1. Added `// @ts-expect-error` ->the error moved to a different call site.
+2. Widened the param to `any` ->`next build` still fails because two other consumers now mismatch.
+3. Imported `Session` from a different module ->no-op, same error.
 
 You ask the agent one more time:
 
 ```text
-같은 에러 계속 난다. 다시 시도해줘.
+Same error keeps coming back. Try again.
 ```
 
 ## Agent behavior
@@ -28,16 +28,16 @@ You ask the agent one more time:
 1. **Circuit breaker (`build` skill, Principle 5)** detects:
    - Same error signature (`'id' does not exist on type 'Session["user"]'`) has appeared 3 times in the rolling session buffer.
    - Three distinct patches were applied and none reduced the error scope.
-   - Threshold reached → **loop halt**. No 4th patch is attempted.
+   - Threshold reached ->**loop halt**. No 4th patch is attempted.
 2. Instead of patching, the agent runs **root-cause triage**:
-   - `grep -rn "next-auth"` — finds `next-auth@5.0.0-beta`.
-   - `grep -rn "session.user.id"` — finds 6 call sites across 4 files.
-   - Reads `types/next-auth.d.ts` — file does not exist.
-   - Cross-checks against the `review` skill's NextAuth checklist → matches known pattern: "v5 + no module augmentation".
+   - `grep -rn "next-auth"` ->finds `next-auth@5.0.0-beta`.
+   - `grep -rn "session.user.id"` ->finds 6 call sites across 4 files.
+   - Reads `types/next-auth.d.ts` ->file does not exist.
+   - Cross-checks against the `review` skill's NextAuth checklist ->matches known pattern: "v5 + no module augmentation".
 3. Reports:
 
    ```text
-   [CIRCUIT BREAKER] TS2339 'id on Session.user' — 3 attempts, 0 progress.
+   [CIRCUIT BREAKER] TS2339 'id on Session.user' ->3 attempts, 0 progress.
 
    Root cause (single):
      next-auth v5 removes session.user.id from the default Session type.
@@ -73,10 +73,11 @@ because v5 removed the field from the default Session type. Module
 augmentation restores it for the custom Supabase adapter path.
 ```
 
-`npm run build` → exit 0.
+`npm run build` ->exit 0.
 
 ## Pain reduced
 
-**30 minutes lost to whack-a-mole patches where each fix creates two new errors.** The circuit breaker is the part that matters — it does not keep patching. It stops, diagnoses once, and applies the root-cause fix instead of the symptomatic one. On a typical day that is the difference between shipping and not shipping.
+**30 minutes lost to whack-a-mole patches where each fix creates two new errors.** The circuit breaker is the part that matters ->it does not keep patching. It stops, diagnoses once, and applies the root-cause fix instead of the symptomatic one. On a typical day that is the difference between shipping and not shipping.
 
 The second pain reduced: the three band-aid patches are **reverted in the same commit**, so `git log` stays clean and the next person (or the next session) does not inherit confusion about why `// @ts-expect-error` is scattered through the codebase.
+
