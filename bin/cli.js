@@ -8,6 +8,7 @@ const { execSync } = require("child_process");
 
 const { syncCommand } = require("./sync");
 const { runWizard, hasWizardFlag } = require("./wizard");
+const i18n = require("./i18n");
 const { localReview, knowledgeCapture, dualReview, detectMode, sessionSave, sessionRestore, sessionList, recordFeedback, setLogChannel } = require("./cowork-engine");
 // Lazy-load optional modules so missing files don't break older installs.
 let uiux, rework, watch, notify, inboundFeedback;
@@ -34,7 +35,7 @@ const DEFAULT_PRESET = "builder";
 // ─── Helpers ────────────────────────────────────────────────
 
 function printHelp() {
-  console.log(`solo-cto-agent — Dual-Agent CI/CD Orchestrator
+  console.log(`solo-cto-agent — ${i18n.t("cli.tagline")}
 
 Usage:
   solo-cto-agent init [--force] [--preset maker|builder|cto] [--wizard]
@@ -50,6 +51,7 @@ Usage:
   solo-cto-agent lint [path]
   solo-cto-agent doctor
   solo-cto-agent --help
+  solo-cto-agent --lang <en|ko> <command>      # override CLI locale (or SOLO_CTO_LANG env)
 
 Commands:
   init              Install skills to ~/.claude/skills/ (add --wizard for interactive setup)
@@ -1378,6 +1380,11 @@ function upgradeCommand(org, repos, orchName) {
 
 async function main() {
   const args = process.argv.slice(2);
+
+  // i18n: resolve locale from --lang flag, env, or default. Must happen before
+  // any user-facing output so printHelp() and error messages respect the choice.
+  i18n.setLocale(i18n.parseLangFlag(args));
+
   const cmd = args[0];
 
   if (!cmd || cmd === "--help" || cmd === "-h" || cmd === "help") {
