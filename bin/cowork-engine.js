@@ -440,13 +440,18 @@ function buildIdentity(tier, agent) {
 // UTILITY FUNCTIONS
 // ============================================================================
 
-let LOG_TARGET = "stdout";
-function setLogTarget(target) {
-  LOG_TARGET = target === "stderr" ? "stderr" : "stdout";
+// When a caller wants stdout reserved for machine-readable output (--json),
+// all ANSI banner / info / success / error lines must go to stderr instead.
+// Set with setLogChannel("stderr") for the duration of a command.
+let LOG_CHANNEL = "stdout"; // "stdout" | "stderr"
+function setLogChannel(ch) {
+  LOG_CHANNEL = ch === "stderr" ? "stderr" : "stdout";
 }
-
+function getLogChannel() {
+  return LOG_CHANNEL;
+}
 function log(...args) {
-  if (LOG_TARGET === "stderr") console.error(...args);
+  if (LOG_CHANNEL === "stderr") console.error(...args);
   else console.log(...args);
 }
 
@@ -485,39 +490,53 @@ function ensureDir(dir) {
   }
 }
 
-function getDefaultBranch() {
+// Detect the repository's default branch dynamically. Order of preference:
+//   1. `git symbolic-ref refs/remotes/origin/HEAD` (authoritative — what origin says is default)
+//   2. Presence of `origin/main`, `origin/master`, `origin/develop`
+//   3. Fallback: "main"
+// Returns just the short name (e.g. "master"), never the `origin/` prefix.
+function detectDefaultBranch(opts = {}) {
+  const cwd = opts.cwd || process.cwd();
   try {
     const ref = execSync("git symbolic-ref refs/remotes/origin/HEAD", {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      cwd,
     }).trim();
+    // Form: "refs/remotes/origin/<branch>"
     const m = ref.match(/refs\/remotes\/origin\/(.+)$/);
-    if (m && m[1]) return m[1];
-  } catch (_) { /* noop */ }
+    if (m) return m[1];
+  } catch {
+    // symbolic-ref may not be set on shallow clones — fall through
+  }
   try {
-    const out = execSync("git remote show origin", {
+    const branches = execSync("git branch -r", {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      cwd,
     });
-    const m = out.match(/HEAD branch:\s*(.+)\s*/);
-    if (m && m[1]) return m[1].trim();
-  } catch (_) { /* noop */ }
+    if (/\borigin\/main\b/.test(branches)) return "main";
+    if (/\borigin\/master\b/.test(branches)) return "master";
+    if (/\borigin\/develop\b/.test(branches)) return "develop";
+  } catch {
+    // not a git repo or no remotes
+  }
   return "main";
 }
 
-function getDiff(source, target) {
+function getDiff(source, target, opts = {}) {
+  const cwd = opts.cwd || process.cwd();
   try {
     let cmd;
     switch (source) {
       case "staged":
         cmd = "git diff --staged";
         break;
-      case "branch":
-        {
-          const base = target || getDefaultBranch();
-          cmd = `git diff ${base}...HEAD`;
-        }
+      case "branch": {
+        const base = target || detectDefaultBranch({ cwd });
+        cmd = `git diff ${base}...HEAD`;
         break;
+      }
       case "file":
         if (!target) throw new Error("--file requires target path");
         cmd = `git diff -- ${target}`;
@@ -525,7 +544,7 @@ function getDiff(source, target) {
       default:
         cmd = "git diff --staged";
     }
-    return execSync(cmd, { encoding: "utf8", maxBuffer: 1024 * 1024 * 5 });
+    return execSync(cmd, { encoding: "utf8", maxBuffer: 1024 * 1024 * 5, cwd });
   } catch (e) {
     const stderr = e && e.stderr ? e.stderr.toString() : "";
     const msg = `${e && e.message ? e.message : ""} ${stderr}`.toLowerCase();
@@ -1433,8 +1452,6 @@ async function localReview(options = {}) {
   const agent = process.env.OPENAI_API_KEY ? "cowork+codex" : "cowork";
   const tierLimits = CONFIG.tierLimits[tier] || CONFIG.tierLimits.builder;
   const useCrossCheck = crossCheck !== null ? crossCheck : tierLimits.selfCrossReview;
-  const jsonMode = outputFormat === "json";
-  if (jsonMode) setLogTarget("stderr");
 
   logSection("solo-cto-agent review");
   logInfo(`Mode: ${mode} | Agent: ${agent} | Tier: ${tier}`);
@@ -1480,7 +1497,6 @@ async function localReview(options = {}) {
   }
   const groundTruthCtx = formatGroundTruthContext(groundTruth);
   const externalKnowledgeCtx = formatExternalKnowledgeContext(externalKnowledge);
-  const externalSignals = assessExternalSignals();
 
   const errorPatterns = failureCatalog.patterns
     ?.map((p) => `- ${p.pattern}: ${p.fix}`)
@@ -1549,13 +1565,17 @@ ${diff}
     log("\n[DRY RUN] Would call Anthropic API with:");
     log(`System prompt length: ${systemPrompt.length} chars`);
     log(`User prompt length: ${userPrompt.length} chars`);
-    const warning = formatSelfLoopWarning(externalSignals);
-    if (warning) log(warning);
-    else {
-      const hint = formatPartialSignalHint(externalSignals);
-      if (hint) log(hint);
-    }
-    if (jsonMode) setLogTarget("stdout");
+    // B3: Self-loop warning is free to compute — surface it on --dry-run too so
+    // operators can audit their external-signal config without paying for an API call.
+    try {
+      const signals = assessExternalSignals();
+      const warning = formatSelfLoopWarning(signals);
+      if (warning) log(warning);
+      else {
+        const hint = formatPartialSignalHint(signals);
+        if (hint) log(hint);
+      }
+    } catch (_) { /* never block dry-run on signal inspection */ }
     return null;
   }
 
@@ -1633,6 +1653,7 @@ ${diff}
 
     // External-signal assessment — tells the user whether this review had any
     // non-self-loop backing (peer model / external knowledge / ground truth).
+    const externalSignals = assessExternalSignals();
     reviewData.externalSignals = externalSignals;
     // T3 payload — raw fetched data for audit / downstream use.
     if (groundTruth) reviewData.groundTruth = groundTruth;
@@ -1643,7 +1664,10 @@ ${diff}
 
     // Output based on format
     if (outputFormat === "json") {
-      process.stdout.write(`${JSON.stringify(reviewData, null, 2)}\n`);
+      // B5: JSON body always goes to stdout verbatim regardless of LOG_CHANNEL
+      // (banner / info / success lines went to stderr via the log channel switch
+      // set by the caller). This keeps `review --json | jq` valid.
+      process.stdout.write(JSON.stringify(reviewData, null, 2) + "\n");
     } else if (outputFormat === "markdown") {
       log(response.text);
       if (externalSignals.isSelfLoop) {
@@ -1672,7 +1696,6 @@ ${diff}
     }
 
     logSuccess(`Review saved to ${reviewFile}`);
-    if (jsonMode) setLogTarget("stdout");
     return reviewData;
   } catch (err) {
     logError(`API call failed: ${err.message}`);
@@ -2350,11 +2373,12 @@ async function main() {
 
       const fileIdx = args.indexOf("--file");
       const targetIdx = args.indexOf("--target");
-      const target = fileIdx >= 0
-        ? args[fileIdx + 1]
-        : targetIdx >= 0
-        ? args[targetIdx + 1]
-        : null;
+      let target = null;
+      if (diffSource === "branch") {
+        target = targetIdx >= 0 ? args[targetIdx + 1] : null;
+      } else if (diffSource === "file") {
+        target = fileIdx >= 0 ? args[fileIdx + 1] : null;
+      }
 
       const dryRun = args.includes("--dry-run");
       const outputFormat = args.includes("--json")
@@ -2362,6 +2386,7 @@ async function main() {
         : args.includes("--markdown")
         ? "markdown"
         : "terminal";
+      if (outputFormat === "json") setLogChannel("stderr");
 
       // Self cross-review override flags
       let crossCheck = null;
@@ -2375,6 +2400,7 @@ async function main() {
         outputFormat,
         crossCheck,
       });
+      if (outputFormat === "json") setLogChannel("stdout");
     } else if (command === "knowledge-capture") {
       const source = args.includes("--file")
         ? "file"
@@ -2398,7 +2424,7 @@ async function main() {
     } else if (command === "dual-review") {
       const diffSource = args.includes("--branch") ? "branch" : "staged";
       const targetIdx = args.indexOf("--target");
-      const target = targetIdx >= 0 ? args[targetIdx + 1] : null;
+      const target = diffSource === "branch" && targetIdx >= 0 ? args[targetIdx + 1] : null;
 
       await dualReview({ diffSource, target });
     } else if (command === "detect-mode") {
@@ -2578,6 +2604,9 @@ module.exports = {
   // Utilities for testing
   parseReviewResponse,
   getDiff,
+  detectDefaultBranch,
+  setLogChannel,
+  getLogChannel,
   readSkillContext,
   readFailureCatalog,
   _setSkillDirOverride,
