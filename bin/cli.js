@@ -42,8 +42,8 @@ Usage:
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent upgrade --org <github-org> [--repos <repo1,repo2,...>]
   solo-cto-agent sync --org <github-org> [--apply] [--repos <repo1,repo2,...>]
-  solo-cto-agent review [--staged|--branch|--file <path>] [--dry-run] [--solo]
-  solo-cto-agent dual-review [--staged|--branch]
+  solo-cto-agent review [--staged|--branch|--file <path>] [--target <branch>] [--dry-run] [--solo]
+  solo-cto-agent dual-review [--staged|--branch] [--target <branch>]
   solo-cto-agent knowledge [--session|--file <path>|--manual] [--project <tag>]
   solo-cto-agent session save|restore|list [--project <tag>] [--session <file>] [--limit <n>]
   solo-cto-agent status
@@ -80,7 +80,8 @@ Examples:
   npx solo-cto-agent sync --org myorg --repos app1,app2   # dry-run: fetch + display
   npx solo-cto-agent sync --org myorg --apply              # apply: merge remote data into local
   npx solo-cto-agent review                                # Claude review of staged changes
-  npx solo-cto-agent review --branch                       # review branch diff vs main
+  npx solo-cto-agent review --branch                       # review branch diff vs base (origin/HEAD or main)
+  npx solo-cto-agent review --branch --target master       # override base branch
   npx solo-cto-agent dual-review                           # Claude + OpenAI cross-review
   npx solo-cto-agent knowledge                             # extract decisions from recent commits
   npx solo-cto-agent knowledge --project tribo             # tag with project name
@@ -1476,7 +1477,12 @@ async function main() {
     }
     const diffSource = args.includes("--branch") ? "branch" : args.includes("--file") ? "file" : "staged";
     const fileIndex = args.indexOf("--file");
-    const target = fileIndex >= 0 ? args[fileIndex + 1] : null;
+    const targetIndex = args.indexOf("--target");
+    const target = fileIndex >= 0
+      ? args[fileIndex + 1]
+      : targetIndex >= 0
+      ? args[targetIndex + 1]
+      : null;
     const dryRun = args.includes("--dry-run");
     const outputFormat = args.includes("--json") ? "json" : args.includes("--markdown") ? "markdown" : "terminal";
 
@@ -1496,7 +1502,9 @@ async function main() {
       process.exit(1);
     }
     const diffSource = args.includes("--branch") ? "branch" : "staged";
-    await dualReview({ diffSource });
+    const targetIndex = args.indexOf("--target");
+    const target = targetIndex >= 0 ? args[targetIndex + 1] : null;
+    await dualReview({ diffSource, target });
     return;
   }
 

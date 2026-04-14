@@ -9,9 +9,9 @@
  *   - Mode B: Cowork+Codex Dual (Claude + Codex cross-review)
  *
  * Usage:
- *   node bin/cowork-engine.js local-review [--staged|--branch|--file <path>] [--dry-run] [--json]
+ *   node bin/cowork-engine.js local-review [--staged|--branch|--file <path>] [--target <branch>] [--dry-run] [--json]
  *   node bin/cowork-engine.js knowledge-capture [--session|--file <path>] [--project <tag>]
- *   node bin/cowork-engine.js dual-review [--staged|--branch] [--json]
+ *   node bin/cowork-engine.js dual-review [--staged|--branch] [--target <branch>] [--json]
  *   node bin/cowork-engine.js detect-mode
  */
 
@@ -440,8 +440,14 @@ function buildIdentity(tier, agent) {
 // UTILITY FUNCTIONS
 // ============================================================================
 
+let LOG_TARGET = "stdout";
+function setLogTarget(target) {
+  LOG_TARGET = target === "stderr" ? "stderr" : "stdout";
+}
+
 function log(...args) {
-  console.log(...args);
+  if (LOG_TARGET === "stderr") console.error(...args);
+  else console.log(...args);
 }
 
 function logSection(title) {
@@ -479,6 +485,26 @@ function ensureDir(dir) {
   }
 }
 
+function getDefaultBranch() {
+  try {
+    const ref = execSync("git symbolic-ref refs/remotes/origin/HEAD", {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    const m = ref.match(/refs\/remotes\/origin\/(.+)$/);
+    if (m && m[1]) return m[1];
+  } catch (_) { /* noop */ }
+  try {
+    const out = execSync("git remote show origin", {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const m = out.match(/HEAD branch:\s*(.+)\s*/);
+    if (m && m[1]) return m[1].trim();
+  } catch (_) { /* noop */ }
+  return "main";
+}
+
 function getDiff(source, target) {
   try {
     let cmd;
@@ -487,7 +513,10 @@ function getDiff(source, target) {
         cmd = "git diff --staged";
         break;
       case "branch":
-        cmd = `git diff ${target || "main"}...HEAD`;
+        {
+          const base = target || getDefaultBranch();
+          cmd = `git diff ${base}...HEAD`;
+        }
         break;
       case "file":
         if (!target) throw new Error("--file requires target path");
@@ -498,8 +527,14 @@ function getDiff(source, target) {
     }
     return execSync(cmd, { encoding: "utf8", maxBuffer: 1024 * 1024 * 5 });
   } catch (e) {
-    if (e.status === 128) {
+    const stderr = e && e.stderr ? e.stderr.toString() : "";
+    const msg = `${e && e.message ? e.message : ""} ${stderr}`.toLowerCase();
+    if (msg.includes("not a git repository")) {
       logError("Not a git repository");
+      return "";
+    }
+    if (msg.includes("ambiguous argument") || msg.includes("bad revision") || msg.includes("unknown revision")) {
+      logError("Base branch not found. Try --target <branch> (e.g., master) or ensure origin/HEAD is set.");
       return "";
     }
     return "";
@@ -1398,6 +1433,8 @@ async function localReview(options = {}) {
   const agent = process.env.OPENAI_API_KEY ? "cowork+codex" : "cowork";
   const tierLimits = CONFIG.tierLimits[tier] || CONFIG.tierLimits.builder;
   const useCrossCheck = crossCheck !== null ? crossCheck : tierLimits.selfCrossReview;
+  const jsonMode = outputFormat === "json";
+  if (jsonMode) setLogTarget("stderr");
 
   logSection("solo-cto-agent review");
   logInfo(`Mode: ${mode} | Agent: ${agent} | Tier: ${tier}`);
@@ -1443,6 +1480,7 @@ async function localReview(options = {}) {
   }
   const groundTruthCtx = formatGroundTruthContext(groundTruth);
   const externalKnowledgeCtx = formatExternalKnowledgeContext(externalKnowledge);
+  const externalSignals = assessExternalSignals();
 
   const errorPatterns = failureCatalog.patterns
     ?.map((p) => `- ${p.pattern}: ${p.fix}`)
@@ -1511,6 +1549,13 @@ ${diff}
     log("\n[DRY RUN] Would call Anthropic API with:");
     log(`System prompt length: ${systemPrompt.length} chars`);
     log(`User prompt length: ${userPrompt.length} chars`);
+    const warning = formatSelfLoopWarning(externalSignals);
+    if (warning) log(warning);
+    else {
+      const hint = formatPartialSignalHint(externalSignals);
+      if (hint) log(hint);
+    }
+    if (jsonMode) setLogTarget("stdout");
     return null;
   }
 
@@ -1588,7 +1633,6 @@ ${diff}
 
     // External-signal assessment — tells the user whether this review had any
     // non-self-loop backing (peer model / external knowledge / ground truth).
-    const externalSignals = assessExternalSignals();
     reviewData.externalSignals = externalSignals;
     // T3 payload — raw fetched data for audit / downstream use.
     if (groundTruth) reviewData.groundTruth = groundTruth;
@@ -1599,7 +1643,7 @@ ${diff}
 
     // Output based on format
     if (outputFormat === "json") {
-      log(JSON.stringify(reviewData, null, 2));
+      process.stdout.write(`${JSON.stringify(reviewData, null, 2)}\n`);
     } else if (outputFormat === "markdown") {
       log(response.text);
       if (externalSignals.isSelfLoop) {
@@ -1628,6 +1672,7 @@ ${diff}
     }
 
     logSuccess(`Review saved to ${reviewFile}`);
+    if (jsonMode) setLogTarget("stdout");
     return reviewData;
   } catch (err) {
     logError(`API call failed: ${err.message}`);
@@ -2304,7 +2349,12 @@ async function main() {
         : "staged";
 
       const fileIdx = args.indexOf("--file");
-      const target = fileIdx >= 0 ? args[fileIdx + 1] : null;
+      const targetIdx = args.indexOf("--target");
+      const target = fileIdx >= 0
+        ? args[fileIdx + 1]
+        : targetIdx >= 0
+        ? args[targetIdx + 1]
+        : null;
 
       const dryRun = args.includes("--dry-run");
       const outputFormat = args.includes("--json")
@@ -2347,7 +2397,8 @@ async function main() {
       await knowledgeCapture({ source, input, projectTag });
     } else if (command === "dual-review") {
       const diffSource = args.includes("--branch") ? "branch" : "staged";
-      const target = null;
+      const targetIdx = args.indexOf("--target");
+      const target = targetIdx >= 0 ? args[targetIdx + 1] : null;
 
       await dualReview({ diffSource, target });
     } else if (command === "detect-mode") {
@@ -2422,7 +2473,8 @@ ${COLORS.bold}Commands:${COLORS.reset}
 ${COLORS.bold}Options:${COLORS.reset}
   local-review:
     --staged           Review staged changes (default)
-    --branch           Review changes on current branch vs main
+    --branch           Review changes on current branch vs base (origin/HEAD or main)
+    --target <branch>  Override base branch for --branch (e.g., master)
     --file <path>      Review changes in specific file
     --dry-run          Show prompt without calling API
     --json             Output as JSON
@@ -2439,7 +2491,8 @@ ${COLORS.bold}Options:${COLORS.reset}
 
   dual-review:
     --staged         Review staged changes (default)
-    --branch         Review current branch
+    --branch         Review current branch vs base (origin/HEAD or main)
+    --target <branch> Override base branch for --branch (e.g., master)
 
 ${COLORS.bold}Examples:${COLORS.reset}
   # Review staged changes with Claude
