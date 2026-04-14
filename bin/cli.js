@@ -1910,6 +1910,31 @@ async function main() {
       return;
     }
 
+    if (sub === "test-hooks") {
+      let pluginLoader;
+      try { pluginLoader = require("./plugin-loader"); }
+      catch (e) { console.error(`❌ plugin-loader not available: ${e.message}`); process.exit(1); }
+      const evtIdx = args.indexOf("--event");
+      const event = evtIdx >= 0 ? args[evtIdx + 1] : "pre-review";
+      if (event !== "pre-review" && event !== "post-review") {
+        console.error(`❌ --event must be pre-review or post-review`);
+        process.exit(1);
+      }
+      (async () => {
+        const manifest = pluginManager.readManifest();
+        if (!manifest.plugins || manifest.plugins.length === 0) {
+          console.log("No plugins registered. Run `solo-cto-agent plugin add --path <dir>` first.");
+          return;
+        }
+        const payload = { diff: "// sample diff\n+ console.log('hi')\n", metadata: { dryRun: true } };
+        const fn = event === "pre-review" ? pluginLoader.runPreReviewHooks : pluginLoader.runPostReviewHooks;
+        const result = await fn(payload, { manifest });
+        console.log(`${event} → ${Array.isArray(result) ? result.length + " hook(s)" : "patched payload"}:`);
+        console.log(JSON.stringify(result, null, 2));
+      })().catch((e) => { console.error(`❌ ${e.message}`); process.exit(1); });
+      return;
+    }
+
     if (sub === "remove" || sub === "rm") {
       const name = args[2];
       if (!name) {
