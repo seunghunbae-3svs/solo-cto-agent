@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.0.0 — First stable release
+
+**Why 1.0**: the loop is now closable end-to-end. Previous 0.x releases were
+the skill pack alone. 1.0 adds the three-tier external-signal framework,
+self-cross-review, inbound feedback, and honest signal reporting — the pieces
+needed to trust a single-agent loop for production work.
+
+### External-loop framework (PR-E1 through E5)
+* T1 Peer Model — OpenAI Codex cross-check via `dual-review`
+* T2 External Knowledge — npm registry package-currency scan surfaces major/minor/deprecated deltas
+* T3 Ground Truth — Vercel deployment + Supabase log signals injected into the review prompt
+* Self-loop warning — boxed notice when no external signals are active (single-model blind-spot alert)
+* Inbound feedback channel — `feedback record` + Slack/GitHub dispatch
+
+### Dogfood-driven fixes (PR-F1, F2)
+* default-branch auto-detection (B1) — no more hardcoded `main`, works on `master` / `develop` repos
+* `--target <base>` override (B2) — diff against any ref
+* `--dry-run` now surfaces the self-loop warning without API spend (B3)
+* README flags match reality (B4) — dead examples removed
+* `--json | jq` pipe-safety (B5) — `setLogChannel("stderr")` keeps stdout pure JSON
+* **honest signal reporting (F2)** — `activeCount` now reflects actual fetch outcome, not just env flags. A tier set-but-silent no longer gets counted as "active", and hints surface `enabled-but-silent: T2 (env set, no data)` for debugging.
+
+### Developer experience
+* 247 tests (up from ~180 in 0.6.x) covering CLI, engine parser, watch gating, self-loop warning, and new drive-run regressions
+* Package-validate + Changelog + Test CI workflows all green
+
 ## 0.6.0
 
 * added `solo-cto-agent lint` command — flags skills over 150 lines, missing frontmatter, large code blocks
