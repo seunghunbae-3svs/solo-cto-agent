@@ -1,9 +1,9 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 
 /**
  * cowork-engine.js
  *
- * Core engine for Cowork mode — LOCAL execution without GitHub Actions.
+ * Core engine for Cowork mode ??LOCAL execution without GitHub Actions.
  * Supports:
  *   - Mode A: Cowork Solo (Claude-only, all local)
  *   - Mode B: Cowork+Codex Dual (Claude + Codex cross-review)
@@ -25,7 +25,7 @@ const { execSync } = require("child_process");
 // CONFIGURATION & CONSTANTS
 // ============================================================================
 
-// Lazy path getters — resolve $HOME at call time so tests can override.
+// Lazy path getters ??resolve $HOME at call time so tests can override.
 // Tests can also set COWORK_SKILL_DIR_OVERRIDE env var or via _setSkillDirOverride().
 let _skillDirOverride = null;
 function _setSkillDirOverride(p) { _skillDirOverride = p; }
@@ -42,7 +42,7 @@ const CONFIG = {
     claude: "claude-sonnet-4-20250514",
     codex: "codex-mini-latest",
   },
-  // Tier × Mode 자동화 한계 (Semi-auto mode)
+  // Tier 횞 Mode ?먮룞???쒓퀎 (Semi-auto mode)
   tierLimits: {
     maker:   { maxRetries: 2, selfCrossReview: false, autoMcpProbe: false, maxIssuesShown: 5  },
     builder: { maxRetries: 3, selfCrossReview: true,  autoMcpProbe: true,  maxIssuesShown: 10 },
@@ -52,69 +52,69 @@ const CONFIG = {
 
 // ============================================================================
 // EMBEDDED SKILL CONTEXT
-// 정확한 본문은 skills/_shared/skill-context.md 와 동기화 (build-time check)
+// ?뺥솗??蹂몃Ц? skills/_shared/skill-context.md ? ?숆린??(build-time check)
 // ============================================================================
 
-// A. 운영 원칙 (스택 무관)
+// A. ?댁쁺 ?먯튃 (?ㅽ깮 臾닿?)
 const OPERATING_PRINCIPLES = `
-## 운영 원칙 (스택 무관)
-- Live Source of Truth: 배포·DB·코드·로그는 항상 라이브 소스 직접 조회. 문서 기억 의존 금지.
-  → 라이브 = [확정], 캐시 = [캐시], 추정 = [추정], 미확인 = [미검증]
-- 최소 안전 수정: 요청 범위 밖 리팩토링 금지. diff 밖 파일 언급 금지.
-- 에러 처리: 조용한 실패 금지. try-catch 는 실제 실패 지점에만. 구조화된 에러 반환.
-- 팩트 기반: 모든 수치·주장에 [확정]/[추정]/[미검증]/[캐시]/[OFFLINE] 태그.
-- PR 본문 필수: 요약 / 리스크(LOW·MEDIUM·HIGH) / 롤백 / Preview 링크.
-- Circuit Breaker: 같은 에러 3회 재시도 실패 시 정지 후 보고.
+## ?댁쁺 ?먯튃 (?ㅽ깮 臾닿?)
+- Live Source of Truth: 諛고룷쨌DB쨌肄붾뱶쨌濡쒓렇????긽 ?쇱씠釉??뚯뒪 吏곸젒 議고쉶. 臾몄꽌 湲곗뼲 ?섏〈 湲덉?.
+  ???쇱씠釉?= [?뺤젙], 罹먯떆 = [罹먯떆], 異붿젙 = [異붿젙], 誘명솗??= [誘멸?利?
+- 理쒖냼 ?덉쟾 ?섏젙: ?붿껌 踰붿쐞 諛?由ы뙥?좊쭅 湲덉?. diff 諛??뚯씪 ?멸툒 湲덉?.
+- ?먮윭 泥섎━: 議곗슜???ㅽ뙣 湲덉?. try-catch ???ㅼ젣 ?ㅽ뙣 吏?먯뿉留? 援ъ“?붾맂 ?먮윭 諛섑솚.
+- ?⑺듃 湲곕컲: 紐⑤뱺 ?섏튂쨌二쇱옣??[?뺤젙]/[異붿젙]/[誘멸?利?/[罹먯떆]/[OFFLINE] ?쒓렇.
+- PR 蹂몃Ц ?꾩닔: ?붿빟 / 由ъ뒪??LOW쨌MEDIUM쨌HIGH) / 濡ㅻ갚 / Preview 留곹겕.
+- Circuit Breaker: 媛숈? ?먮윭 3???ъ떆???ㅽ뙣 ???뺤? ??蹂닿퀬.
 `;
 
-// B. Common Stack 패턴 (자주 등장하는 스택)
+// B. Common Stack ?⑦꽩 (?먯＜ ?깆옣?섎뒗 ?ㅽ깮)
 const COMMON_STACK_PATTERNS = `
-## Common Stack 반복 에러 패턴 (사용자 stack 매칭 시 활성)
-- Next.js: import @/ 절대경로, 14/15 params 동기/Promise 혼용 금지, Tailwind v3/v4 혼용 금지, 'use client' 정확성
-- Prisma: Drizzle 와 동시 사용 금지, prisma generate 타이밍 (postinstall 또는 build pre-step), schema 변경 시 마이그레이션 필수
-- NextAuth: session.user 확장 시 next-auth.d.ts types 필요, callback URL 환경별 분리
-- Supabase: RLS 활성화 (비활성=BLOCKER), service_role 클라이언트 노출 금지, N+1 쿼리 점검
-- Vercel: env 변수 누락 / prisma generate 타이밍 / build command 불일치 = 빌드 실패 상위 3
+## Common Stack 諛섎났 ?먮윭 ?⑦꽩 (?ъ슜??stack 留ㅼ묶 ???쒖꽦)
+- Next.js: import @/ ?덈?寃쎈줈, 14/15 params ?숆린/Promise ?쇱슜 湲덉?, Tailwind v3/v4 ?쇱슜 湲덉?, 'use client' ?뺥솗??
+- Prisma: Drizzle ? ?숈떆 ?ъ슜 湲덉?, prisma generate ??대컢 (postinstall ?먮뒗 build pre-step), schema 蹂寃???留덉씠洹몃젅?댁뀡 ?꾩닔
+- NextAuth: session.user ?뺤옣 ??next-auth.d.ts types ?꾩슂, callback URL ?섍꼍蹂?遺꾨━
+- Supabase: RLS ?쒖꽦??(鍮꾪솢??BLOCKER), service_role ?대씪?댁뼵???몄텧 湲덉?, N+1 荑쇰━ ?먭?
+- Vercel: env 蹂???꾨씫 / prisma generate ??대컢 / build command 遺덉씪移?= 鍮뚮뱶 ?ㅽ뙣 ?곸쐞 3
 `;
 
-// C. 리뷰 우선순위
+// C. 由щ럭 ?곗꽑?쒖쐞
 const REVIEW_PRIORITY = `
-## 리뷰 우선순위 (높음 → 낮음)
-1. 보안 (secret 노출, auth bypass, SQL injection, RLS 비활성) → BLOCKER
-2. 데이터 손실 위험 (마이그레이션 누락, 무차별 delete, 트랜잭션 누락) → BLOCKER
-3. 타입 안전성 (any, strict 위반) → SUGGESTION (의도 명확하면 NIT)
-4. 에러 처리 (조용한 실패, 구조화 안 됨) → SUGGESTION
-5. 스택 일관성 (Common Stack 패턴 위반) → SUGGESTION 또는 BLOCKER
-6. PR 본문 누락 → SUGGESTION
-7. 성능 (N+1, 불필요 re-render, 큰 번들) → SUGGESTION
-8. 스타일/일관성 → NIT
+## 由щ럭 ?곗꽑?쒖쐞 (?믪쓬 ????쓬)
+1. 蹂댁븞 (secret ?몄텧, auth bypass, SQL injection, RLS 鍮꾪솢?? ??BLOCKER
+2. ?곗씠???먯떎 ?꾪뿕 (留덉씠洹몃젅?댁뀡 ?꾨씫, 臾댁감蹂?delete, ?몃옖??뀡 ?꾨씫) ??BLOCKER
+3. ????덉쟾??(any, strict ?꾨컲) ??SUGGESTION (?섎룄 紐낇솗?섎㈃ NIT)
+4. ?먮윭 泥섎━ (議곗슜???ㅽ뙣, 援ъ“?????? ??SUGGESTION
+5. ?ㅽ깮 ?쇨???(Common Stack ?⑦꽩 ?꾨컲) ??SUGGESTION ?먮뒗 BLOCKER
+6. PR 蹂몃Ц ?꾨씫 ??SUGGESTION
+7. ?깅뒫 (N+1, 遺덊븘??re-render, ??踰덈뱾) ??SUGGESTION
+8. ?ㅽ????쇨?????NIT
 `;
 
-// 통합 SKILL_CONTEXT (호환성 alias — 기존 코드와 외부 참조용)
+// ?듯빀 SKILL_CONTEXT (?명솚??alias ??湲곗〈 肄붾뱶? ?몃? 李몄“??
 const SKILL_CONTEXT = OPERATING_PRINCIPLES + "\n" + COMMON_STACK_PATTERNS;
 const SKILL_REVIEW_CRITERIA = REVIEW_PRIORITY;
 
-// D. Tier 별 에이전트 아이덴티티
-// CLAUDE.md 의 "Maker Tier 에 강한 톤 적용 금지" 규칙 반영
+// D. Tier 蹂??먯씠?꾪듃 ?꾩씠?댄떚??
+// CLAUDE.md ??"Maker Tier ??媛뺥븳 ???곸슜 湲덉?" 洹쒖튃 諛섏쁺
 const AGENT_IDENTITY_BY_TIER = {
-  maker: `당신은 사용자의 desktop 에서 동작하는 페어 CTO 다. (Maker Tier — 학습/검증 단계)
-- 사용자가 명시적으로 호출한 작업만 수행한다.
-- 약점·리스크를 친절하게 짚되, 단정짓지 않는다. 검증 액션을 함께 제시한다.
-- "이건 틀렸다" 보다 "이 가정이 깨지면 ~" 식 조건부 표현 우선.
-- desktop runtime + 클라우드 amplifier (MCP, web search, scheduled task) 를 엮어 한 호출에서 가치를 최대로 뽑는다.`,
-  builder: `당신은 사용자의 desktop 에서 동작하는 페어 CTO 다. (Builder Tier — 실행/배포 단계)
-- 코드를 지키는 사람이지, 추가만 하는 사람이 아니다.
-- 깨질 것을 먼저 보고, 만들 것을 나중에 본다.
-- 자동 적용 가능한 LOW 리스크 변경은 제안과 함께 가드(typecheck/test) 결과를 첨부한다.
-- desktop runtime + 클라우드 amplifier 의 라이브 소스 ([확정]) 를 우선 인용한다.`,
-  cto: `당신은 CTO급 co-founder 다. (CTO Tier — 멀티 에이전트 오케스트레이션)
-- 배포되는 것은 전부 본인 책임이라는 전제에서 움직인다.
-- 유저가 신난다고 해도 틀린 아이디어는 막아선다.
-- Cowork+Codex 또는 self cross-review 결과의 합의/불일치를 명시하고 우선순위를 정한다.
-- 정책상 CTO Tier 의 완전 자율 실행은 Full-auto + Dual 에서만. Semi-auto 에서는 사용자 명시 호출에 따라 동작.`,
+  maker: `?뱀떊? ?ъ슜?먯쓽 desktop ?먯꽌 ?숈옉?섎뒗 ?섏뼱 CTO ?? (Maker Tier ???숈뒿/寃利??④퀎)
+- ?ъ슜?먭? 紐낆떆?곸쑝濡??몄텧???묒뾽留??섑뻾?쒕떎.
+- ?쎌젏쨌由ъ뒪?щ? 移쒖젅?섍쾶 吏싲릺, ?⑥젙吏볦? ?딅뒗?? 寃利??≪뀡???④퍡 ?쒖떆?쒕떎.
+- "?닿굔 ??몃떎" 蹂대떎 "??媛?뺤씠 源⑥?硫?~" ??議곌굔遺 ?쒗쁽 ?곗꽑.
+- desktop runtime + ?대씪?곕뱶 amplifier (MCP, web search, scheduled task) 瑜???뼱 ???몄텧?먯꽌 媛移섎? 理쒕?濡?戮묐뒗??`,
+  builder: `?뱀떊? ?ъ슜?먯쓽 desktop ?먯꽌 ?숈옉?섎뒗 ?섏뼱 CTO ?? (Builder Tier ???ㅽ뻾/諛고룷 ?④퀎)
+- 肄붾뱶瑜?吏?ㅻ뒗 ?щ엺?댁?, 異붽?留??섎뒗 ?щ엺???꾨땲??
+- 源⑥쭏 寃껋쓣 癒쇱? 蹂닿퀬, 留뚮뱾 寃껋쓣 ?섏쨷??蹂몃떎.
+- ?먮룞 ?곸슜 媛?ν븳 LOW 由ъ뒪??蹂寃쎌? ?쒖븞怨??④퍡 媛??typecheck/test) 寃곌낵瑜?泥⑤??쒕떎.
+- desktop runtime + ?대씪?곕뱶 amplifier ???쇱씠釉??뚯뒪 ([?뺤젙]) 瑜??곗꽑 ?몄슜?쒕떎.`,
+  cto: `?뱀떊? CTO湲?co-founder ?? (CTO Tier ??硫???먯씠?꾪듃 ?ㅼ??ㅽ듃?덉씠??
+- 諛고룷?섎뒗 寃껋? ?꾨? 蹂몄씤 梨낆엫?대씪???꾩젣?먯꽌 ?吏곸씤??
+- ?좎?媛 ?좊궃?ㅺ퀬 ?대룄 ?由??꾩씠?붿뼱??留됱븘?좊떎.
+- Cowork+Codex ?먮뒗 self cross-review 寃곌낵???⑹쓽/遺덉씪移섎? 紐낆떆?섍퀬 ?곗꽑?쒖쐞瑜??뺥븳??
+- ?뺤콉??CTO Tier ???꾩쟾 ?먯쑉 ?ㅽ뻾? Full-auto + Dual ?먯꽌留? Semi-auto ?먯꽌???ъ슜??紐낆떆 ?몄텧???곕씪 ?숈옉.`,
 };
 
-// 호환용 (구 코드/테스트가 AGENT_IDENTITY 직접 참조하는 경우)
+// ?명솚??(援?肄붾뱶/?뚯뒪?멸? AGENT_IDENTITY 吏곸젒 李몄“?섎뒗 寃쎌슦)
 const AGENT_IDENTITY = AGENT_IDENTITY_BY_TIER.builder;
 
 const COLORS = {
@@ -128,12 +128,12 @@ const COLORS = {
 };
 
 // ============================================================================
-// TIER · PERSONALIZATION · LIVE SOURCE LAYER (Cowork-specific)
+// TIER 쨌 PERSONALIZATION 쨌 LIVE SOURCE LAYER (Cowork-specific)
 // ============================================================================
 
 /**
- * SKILL.md 에서 tier 추출. 없으면 builder (안전한 기본).
- * tier: 또는 mode 필드를 frontmatter 또는 본문에서 스캔.
+ * SKILL.md ?먯꽌 tier 異붿텧. ?놁쑝硫?builder (?덉쟾??湲곕낯).
+ * tier: ?먮뒗 mode ?꾨뱶瑜?frontmatter ?먮뒗 蹂몃Ц?먯꽌 ?ㅼ틪.
  */
 function readTier() {
   const skillPath = path.join(CONFIG.skillDir, "SKILL.md");
@@ -146,7 +146,7 @@ function readTier() {
 }
 
 /**
- * SKILL.md 의 mode 필드 (cowork-main / codex-main). 없으면 cowork-main.
+ * SKILL.md ??mode ?꾨뱶 (cowork-main / codex-main). ?놁쑝硫?cowork-main.
  */
 function readMode() {
   const skillPath = path.join(CONFIG.skillDir, "SKILL.md");
@@ -159,11 +159,11 @@ function readMode() {
 }
 
 /**
- * 개인화 누적 데이터 로드. 누적 항목:
- * - acceptedPatterns: 사용자가 수락한 제안 패턴 (location 또는 keyword)
- * - rejectedPatterns: 사용자가 거부/무시한 제안 패턴
- * - repeatErrors: 반복 발생 에러 (failure-catalog 보강용)
- * - stylePrefs: { verbosity, commentDensity, naming } — 누적 휴리스틱
+ * 媛쒖씤???꾩쟻 ?곗씠??濡쒕뱶. ?꾩쟻 ??ぉ:
+ * - acceptedPatterns: ?ъ슜?먭? ?섎씫???쒖븞 ?⑦꽩 (location ?먮뒗 keyword)
+ * - rejectedPatterns: ?ъ슜?먭? 嫄곕?/臾댁떆???쒖븞 ?⑦꽩
+ * - repeatErrors: 諛섎났 諛쒖깮 ?먮윭 (failure-catalog 蹂닿컯??
+ * - stylePrefs: { verbosity, commentDensity, naming } ???꾩쟻 ?대━?ㅽ떛
  * - lastUpdated: ISO timestamp
  */
 function loadPersonalization() {
@@ -188,18 +188,18 @@ function savePersonalization(p) {
 }
 
 /**
- * 리뷰 결과를 personalization 에 반영.
- * - 새 reviewCount + 1
- * - 새 BLOCKER/SUGGESTION 타입의 location keyword → 후속 추적용
- * - 동일 location 이 N회 이상 반복 → repeatErrors 등록
+ * 由щ럭 寃곌낵瑜?personalization ??諛섏쁺.
+ * - ??reviewCount + 1
+ * - ??BLOCKER/SUGGESTION ??낆쓽 location keyword ???꾩냽 異붿쟻??
+ * - ?숈씪 location ??N???댁긽 諛섎났 ??repeatErrors ?깅줉
  */
 function updatePersonalizationFromReview(review) {
   const p = loadPersonalization();
   p.reviewCount = (p.reviewCount || 0) + 1;
 
-  // 각 issue 의 location 을 키워드 형태로 누적
+  // 媛?issue ??location ???ㅼ썙???뺥깭濡??꾩쟻
   for (const issue of review.issues || []) {
-    const key = (issue.location || "").split(":")[0]; // path 부분만
+    const key = (issue.location || "").split(":")[0]; // path 遺遺꾨쭔
     if (!key) continue;
     const idx = p.repeatErrors.findIndex((e) => e.location === key && e.severity === issue.severity);
     if (idx >= 0) {
@@ -215,7 +215,7 @@ function updatePersonalizationFromReview(review) {
     }
   }
 
-  // 상위 50개만 유지
+  // ?곸쐞 50媛쒕쭔 ?좎?
   p.repeatErrors.sort((a, b) => (b.count || 0) - (a.count || 0));
   p.repeatErrors = p.repeatErrors.slice(0, 50);
 
@@ -267,8 +267,8 @@ function recordFeedback({ verdict, location, severity, note = "" }) {
 }
 
 /**
- * 개인화 누적 데이터를 프롬프트 주입용 텍스트 블록으로 변환.
- * 빈 상태 (첫 사용) 면 빈 문자열 반환.
+ * 媛쒖씤???꾩쟻 ?곗씠?곕? ?꾨＼?꾪듃 二쇱엯???띿뒪??釉붾줉?쇰줈 蹂??
+ * 鍮??곹깭 (泥??ъ슜) 硫?鍮?臾몄옄??諛섑솚.
  *
  * Anti-bias rotation:
  *   - 80% of calls: full personalization context (exploit accumulated knowledge)
@@ -285,45 +285,45 @@ function personalizationContext(opts = {}) {
     || (opts.exploration !== false && Math.random() < 0.20);
 
   if (explore) {
-    return `\n## 개인화 컨텍스트 (탐색 모드 — 과거 패턴 의존도 낮춤)
-사용자 히스토리 ${p.reviewCount}회 누적되어 있으나 이번 리뷰는 새 시각으로 본다.
-과거 핫스팟/거부 패턴은 참조만, 단정 근거로는 사용 금지.
+    return `\n## 媛쒖씤??而⑦뀓?ㅽ듃 (?먯깋 紐⑤뱶 ??怨쇨굅 ?⑦꽩 ?섏〈????땄)
+?ъ슜???덉뒪?좊━ ${p.reviewCount}???꾩쟻?섏뼱 ?덉쑝???대쾲 由щ럭?????쒓컖?쇰줈 蹂몃떎.
+怨쇨굅 ?レ뒪??嫄곕? ?⑦꽩? 李몄“留? ?⑥젙 洹쇨굅濡쒕뒗 ?ъ슜 湲덉?.
 `;
   }
 
   const top = (p.repeatErrors || [])
     .filter((e) => (e.count || 0) >= 2)
     .slice(0, 8)
-    .map((e) => `- ${e.location} (${e.severity}, ${e.count}회)`)
+    .map((e) => `- ${e.location} (${e.severity}, ${e.count}??`)
     .join("\n");
 
   const accepted = (p.acceptedPatterns || [])
     .slice(0, 5)
-    .map((x) => `- ${x.location} (${x.severity}, accept ×${x.count})`)
+    .map((x) => `- ${x.location} (${x.severity}, accept 횞${x.count})`)
     .join("\n");
 
   const rejected = (p.rejectedPatterns || [])
     .slice(0, 5)
-    .map((x) => `- ${x.location} (${x.severity}, reject ×${x.count})${x.note ? ` — ${x.note}` : ""}`)
+    .map((x) => `- ${x.location} (${x.severity}, reject 횞${x.count})${x.note ? ` ??${x.note}` : ""}`)
     .join("\n");
 
   const styleLines = Object.entries(p.stylePrefs || {})
     .map(([k, v]) => `- ${k}: ${v}`)
     .join("\n");
 
-  let out = `\n## 누적 개인화 컨텍스트 (사용자 히스토리 ${p.reviewCount}회 리뷰 기준)\n`;
-  if (top) out += `\n반복 발생 핫스팟 (우선 점검):\n${top}\n`;
-  if (accepted) out += `\n사용자가 이전에 동의한 패턴 (가중치 ↑):\n${accepted}\n`;
-  if (rejected) out += `\n사용자가 이전에 거부한 패턴 (false positive 가능 — 가중치 ↓):\n${rejected}\n`;
-  if (styleLines) out += `\n사용자 스타일 선호:\n${styleLines}\n`;
+  let out = `\n## ?꾩쟻 媛쒖씤??而⑦뀓?ㅽ듃 (?ъ슜???덉뒪?좊━ ${p.reviewCount}??由щ럭 湲곗?)\n`;
+  if (top) out += `\n諛섎났 諛쒖깮 ?レ뒪??(?곗꽑 ?먭?):\n${top}\n`;
+  if (accepted) out += `\n?ъ슜?먭? ?댁쟾???숈쓽???⑦꽩 (媛以묒튂 ??:\n${accepted}\n`;
+  if (rejected) out += `\n?ъ슜?먭? ?댁쟾??嫄곕????⑦꽩 (false positive 媛????媛以묒튂 ??:\n${rejected}\n`;
+  if (styleLines) out += `\n?ъ슜???ㅽ????좏샇:\n${styleLines}\n`;
   if (!top && !accepted && !rejected && !styleLines) return "";
   return out;
 }
 
 /**
- * 라이브 소스 (MCP 커넥터) 가용 여부 감지.
- * Semi-auto mode 에서는 desktop runtime 의 환경 또는 사용자 SKILL.md 의 mcp 필드를 본다.
- * 환경변수 힌트: MCP_VERCEL=1, MCP_SUPABASE=1, MCP_GITHUB=1 등.
+ * ?쇱씠釉??뚯뒪 (MCP 而ㅻ꽖?? 媛???щ? 媛먯?.
+ * Semi-auto mode ?먯꽌??desktop runtime ???섍꼍 ?먮뒗 ?ъ슜??SKILL.md ??mcp ?꾨뱶瑜?蹂몃떎.
+ * ?섍꼍蹂???뚰듃: MCP_VERCEL=1, MCP_SUPABASE=1, MCP_GITHUB=1 ??
  */
 /**
  * Detect MCP live sources with provenance.
@@ -331,10 +331,10 @@ function personalizationContext(opts = {}) {
  * Returns: { confirmed: [...], inferred: [...], all: [...] }
  *   - confirmed: probed from ~/.claude/mcp.json or claude_desktop_config.json (Claude Desktop)
  *                or solo-cto-agent SKILL.md `mcp:` field
- *   - inferred:  env vars only (token presence ≠ MCP installed; only suggests credentials exist)
+ *   - inferred:  env vars only (token presence ??MCP installed; only suggests credentials exist)
  *
- * Heuristic note: env-var detection used to claim "connected" — that's wrong because
- * a token can exist without the MCP server being registered. Now downgraded to [추정].
+ * Heuristic note: env-var detection used to claim "connected" ??that's wrong because
+ * a token can exist without the MCP server being registered. Now downgraded to [異붿젙].
  */
 function detectLiveSources() {
   const confirmed = new Set();
@@ -403,36 +403,36 @@ function liveSourceContext() {
   const inferred = sources.inferred || [];
 
   if (!confirmed.length && !inferred.length) {
-    return `\n## 라이브 소스\nMCP 라이브 소스 없음 (Claude Desktop mcp.json 미발견 + env 힌트 없음).\n모든 외부 상태는 [추정] 또는 [미검증] 으로 표기.\n오프라인 폴백: 캐시된 failure-catalog 와 personalization 만 사용.\n`;
+    return `\n## ?쇱씠釉??뚯뒪\nMCP ?쇱씠釉??뚯뒪 ?놁쓬 (Claude Desktop mcp.json 誘몃컻寃?+ env ?뚰듃 ?놁쓬).\n紐⑤뱺 ?몃? ?곹깭??[異붿젙] ?먮뒗 [誘멸?利? ?쇰줈 ?쒓린.\n?ㅽ봽?쇱씤 ?대갚: 罹먯떆??failure-catalog ? personalization 留??ъ슜.\n`;
   }
 
-  const lines = [`\n## 라이브 소스`];
+  const lines = [`\n## ?쇱씠釉??뚯뒪`];
   if (confirmed.length) {
-    lines.push(`확정 MCP (Claude Desktop config 또는 SKILL.md mcp: 명시) — [확정] 자료로 인용 가능:`);
+    lines.push(`?뺤젙 MCP (Claude Desktop config ?먮뒗 SKILL.md mcp: 紐낆떆) ??[?뺤젙] ?먮즺濡??몄슜 媛??`);
     lines.push(`  ${confirmed.join(", ")}`);
   }
   if (inferred.length) {
-    lines.push(`추정 MCP (env 토큰만 존재 — MCP 서버 등록 여부 미확인) — [추정] 으로만 인용:`);
+    lines.push(`異붿젙 MCP (env ?좏겙留?議댁옱 ??MCP ?쒕쾭 ?깅줉 ?щ? 誘명솗?? ??[異붿젙] ?쇰줈留??몄슜:`);
     lines.push(`  ${inferred.join(", ")}`);
   }
   const has = (n) => confirmed.includes(n);
   lines.push(``);
-  lines.push(`- 배포 상태: ${has("vercel") ? "Vercel MCP 직접 조회 가능 [확정]" : "라이브 MCP 없음 → [추정]"}`);
-  lines.push(`- DB 상태:   ${has("supabase") ? "Supabase MCP 직접 조회 가능 [확정]" : "라이브 MCP 없음 → [추정]"}`);
-  lines.push(`- 코드 상태: ${has("github") ? "GitHub MCP 직접 조회 가능 [확정]" : "로컬 git 만 → [캐시]"}`);
-  lines.push(`문서/이전 기억보다 위 라이브 소스를 우선한다. 추정 항목은 단정 표현 금지.`);
+  lines.push(`- 諛고룷 ?곹깭: ${has("vercel") ? "Vercel MCP 吏곸젒 議고쉶 媛??[?뺤젙]" : "?쇱씠釉?MCP ?놁쓬 ??[異붿젙]"}`);
+  lines.push(`- DB ?곹깭:   ${has("supabase") ? "Supabase MCP 吏곸젒 議고쉶 媛??[?뺤젙]" : "?쇱씠釉?MCP ?놁쓬 ??[異붿젙]"}`);
+  lines.push(`- 肄붾뱶 ?곹깭: ${has("github") ? "GitHub MCP 吏곸젒 議고쉶 媛??[?뺤젙]" : "濡쒖뺄 git 留???[罹먯떆]"}`);
+  lines.push(`臾몄꽌/?댁쟾 湲곗뼲蹂대떎 ???쇱씠釉??뚯뒪瑜??곗꽑?쒕떎. 異붿젙 ??ぉ? ?⑥젙 ?쒗쁽 湲덉?.`);
   return lines.join("\n") + "\n";
 }
 
 /**
- * Tier 에 맞는 에이전트 아이덴티티 + agent 구성 표시.
+ * Tier ??留욌뒗 ?먯씠?꾪듃 ?꾩씠?댄떚??+ agent 援ъ꽦 ?쒖떆.
  * agent: "cowork" | "cowork+codex"
  */
 function buildIdentity(tier, agent) {
   const id = AGENT_IDENTITY_BY_TIER[tier] || AGENT_IDENTITY_BY_TIER.builder;
   const agentLine = agent === "cowork+codex"
-    ? "\n에이전트 구성: Cowork + Codex (dual). 합의/불일치를 명시한다."
-    : "\n에이전트 구성: Cowork 단독. 자기 검증 (self cross-review) 으로 단일 시점 의견의 한계를 보완한다.";
+    ? "\n?먯씠?꾪듃 援ъ꽦: Cowork + Codex (dual). ?⑹쓽/遺덉씪移섎? 紐낆떆?쒕떎."
+    : "\n?먯씠?꾪듃 援ъ꽦: Cowork ?⑤룆. ?먭린 寃利?(self cross-review) ?쇰줈 ?⑥씪 ?쒖젏 ?섍껄???쒓퀎瑜?蹂댁셿?쒕떎.";
   return id + agentLine;
 }
 
@@ -446,23 +446,23 @@ function log(...args) {
 
 function logSection(title) {
   log(`\n${COLORS.bold}${title}${COLORS.reset}`);
-  log("─".repeat(Math.min(title.length, 40)));
+  log("?".repeat(Math.min(title.length, 40)));
 }
 
 function logSuccess(msg) {
-  log(`${COLORS.green}✓${COLORS.reset} ${msg}`);
+  log(`${COLORS.green}??{COLORS.reset} ${msg}`);
 }
 
 function logError(msg) {
-  log(`${COLORS.red}✗${COLORS.reset} ${msg}`);
+  log(`${COLORS.red}??{COLORS.reset} ${msg}`);
 }
 
 function logWarn(msg) {
-  log(`${COLORS.yellow}⚠${COLORS.reset} ${msg}`);
+  log(`${COLORS.yellow}??{COLORS.reset} ${msg}`);
 }
 
 function logInfo(msg) {
-  log(`${COLORS.blue}ℹ${COLORS.reset} ${msg}`);
+  log(`${COLORS.blue}??{COLORS.reset} ${msg}`);
 }
 
 function logDim(msg) {
@@ -723,17 +723,17 @@ function normalizeVerdict(raw) {
   if (up.includes("REQUEST_CHANGES") || up.includes("CHANGES_REQUESTED") || up.includes("REQUEST CHANGES") || up.includes("CHANGES REQUESTED")) {
     return "REQUEST_CHANGES";
   }
-  if (raw.includes("수정요청") || raw.includes("변경요청")) return "REQUEST_CHANGES";
+  if (raw.includes("?섏젙?붿껌") || raw.includes("蹂寃쎌슂泥?)) return "REQUEST_CHANGES";
   if (up.includes("APPROVE")) return "APPROVE";
-  if (raw.includes("승인")) return "APPROVE";
+  if (raw.includes("?뱀씤")) return "APPROVE";
   if (up.includes("COMMENT")) return "COMMENT";
-  if (raw.includes("보류")) return "COMMENT";
+  if (raw.includes("蹂대쪟")) return "COMMENT";
   return "COMMENT";
 }
 
 // Korean label for verdict
 function verdictLabel(v) {
-  return v === "APPROVE" ? "승인" : v === "REQUEST_CHANGES" ? "수정요청" : "보류";
+  return v === "APPROVE" ? "?뱀씤" : v === "REQUEST_CHANGES" ? "?섏젙?붿껌" : "蹂대쪟";
 }
 
 // Severity: BLOCKER | SUGGESTION | NIT (with backwards-compat aliases)
@@ -747,13 +747,13 @@ function normalizeSeverity(raw) {
 
 function parseReviewResponse(text) {
   // Verdict: prefer [VERDICT] header, fall back to scanning entire text
-  const verdictHeader = text.match(/\[VERDICT\][:\s]*([A-Za-z_\s가-힣]+)/i);
+  const verdictHeader = text.match(/\[VERDICT\][:\s]*([A-Za-z_\s媛-??+)/i);
   const verdict = normalizeVerdict(verdictHeader ? verdictHeader[1] : text);
 
-  // Parse issues: look for ⛔/⚠️/💡 markers followed by [location] then description+arrow+fix
+  // Parse issues: look for ???좑툘/?뮕 markers followed by [location] then description+arrow+fix
   const issues = [];
   const issuePattern =
-    /(⛔|⚠️|💡)\s*\[([^\]]+)\]\s*\n\s*([^\n]+)\n\s*(?:→|->|=>)\s*([^\n]+)/g;
+    /(???좑툘|?뮕)\s*\[([^\]]+)\]\s*\n\s*([^\n]+)\n\s*(?:??->|=>)\s*([^\n]+)/g;
 
   let match;
   while ((match = issuePattern.exec(text)) !== null) {
@@ -761,7 +761,7 @@ function parseReviewResponse(text) {
     const location = match[2].trim();
     const issue = match[3].trim();
     const suggestion = match[4].trim();
-    const severity = icon === "⛔" ? "BLOCKER" : icon === "⚠️" ? "SUGGESTION" : "NIT";
+    const severity = icon === "?? ? "BLOCKER" : icon === "?좑툘" ? "SUGGESTION" : "NIT";
     issues.push({ location, issue, suggestion, severity });
   }
 
@@ -776,16 +776,17 @@ function parseReviewResponse(text) {
  * Assess which external-signal tiers are active for this review.
  *
  * The three tiers of external evaluation (see docs/external-loop-policy.md):
- *   T1 Peer Model     — another AI family reviewing (Claude + OpenAI dual)
- *   T2 External Knowledge — web search / package registry / trend data
- *   T3 Ground Truth    — real runtime logs / deploy status / production errors
+ *   T1 Peer Model     ??another AI family reviewing (Claude + OpenAI dual)
+ *   T2 External Knowledge ??web search / package registry / trend data
+ *   T3 Ground Truth    ??real runtime logs / deploy status / production errors
  *
- * Without at least one tier active the review is a pure self-loop — the
+ * Without at least one tier active the review is a pure self-loop ??the
  * same model's opinion reinforcing itself. This function detects the
  * environment so `formatSelfLoopWarning` can label the output honestly.
  */
 function assessExternalSignals(opts = {}) {
   const env = opts.env || process.env;
+  const overrides = opts.overrides || {};
   const flags = {
     t1PeerModel: !!env.OPENAI_API_KEY,
     t2ExternalKnowledge:
@@ -797,30 +798,236 @@ function assessExternalSignals(opts = {}) {
       || !!env.SUPABASE_ACCESS_TOKEN
       || env.COWORK_GROUND_TRUTH === "1",
   };
+  if (typeof overrides.t1PeerModel === "boolean") flags.t1PeerModel = overrides.t1PeerModel;
+  if (typeof overrides.t2ExternalKnowledge === "boolean") flags.t2ExternalKnowledge = overrides.t2ExternalKnowledge;
+  if (typeof overrides.t3GroundTruth === "boolean") flags.t3GroundTruth = overrides.t3GroundTruth;
   const activeCount = Object.values(flags).filter(Boolean).length;
   flags.activeCount = activeCount;
   flags.isSelfLoop = activeCount === 0;
   return flags;
 }
 
+function shouldUseExternalKnowledge(env) {
+  return env.COWORK_EXTERNAL_KNOWLEDGE === "1"
+    || env.COWORK_WEB_SEARCH === "1"
+    || env.COWORK_PACKAGE_REGISTRY === "1";
+}
+
+function shouldUseGroundTruth(env) {
+  return env.COWORK_GROUND_TRUTH === "1"
+    || !!env.VERCEL_TOKEN
+    || !!env.SUPABASE_ACCESS_TOKEN
+    || !!env.GITHUB_TOKEN
+    || !!env.GH_TOKEN
+    || !!env.ORCHESTRATOR_PAT;
+}
+
+function readPackageJson() {
+  const pkgPath = path.join(process.cwd(), "package.json");
+  if (!fs.existsSync(pkgPath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+  } catch (_) {
+    return null;
+  }
+}
+
+function normalizeVersion(v) {
+  if (!v) return "";
+  return String(v).trim().replace(/^[^0-9]*/, "");
+}
+
+function majorVersion(v) {
+  const m = String(v || "").match(/^(\d+)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+function safeExec(cmd) {
+  try {
+    return execSync(cmd, { encoding: "utf8", stdio: "pipe", timeout: 2000 }).trim();
+  } catch (_) {
+    return "";
+  }
+}
+
+function getRepoFromGit() {
+  try {
+    const remote = execSync("git config --get remote.origin.url", { encoding: "utf8", stdio: "pipe" }).trim();
+    if (!remote) return null;
+    // https://github.com/owner/repo.git or git@github.com:owner/repo.git
+    const httpsMatch = remote.match(/github\.com\/([^/]+)\/([^/.]+)(\.git)?$/);
+    if (httpsMatch) return { owner: httpsMatch[1], repo: httpsMatch[2] };
+    const sshMatch = remote.match(/github\.com:([^/]+)\/([^/.]+)(\.git)?$/);
+    if (sshMatch) return { owner: sshMatch[1], repo: sshMatch[2] };
+  } catch (_) {}
+  return null;
+}
+
+function githubApi(pathname, token) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: "api.github.com",
+      path: pathname,
+      method: "GET",
+      headers: {
+        "User-Agent": "solo-cto-agent",
+        Accept: "application/vnd.github+json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    };
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => {
+        if (res.statusCode >= 400) {
+          return reject(new Error(`GitHub API ${res.statusCode}: ${data.slice(0, 200)}`));
+        }
+        try {
+          resolve(JSON.parse(data));
+        } catch (_) {
+          resolve(null);
+        }
+      });
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+async function collectExternalKnowledge(opts = {}) {
+  const env = opts.env || process.env;
+  if (!shouldUseExternalKnowledge(env)) {
+    return { active: false, summary: "", packages: [] };
+  }
+
+  const pkg = readPackageJson();
+  if (!pkg) {
+    return { active: false, summary: "", packages: [], reason: "package.json not found" };
+  }
+
+  const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+  const focus = [
+    "next",
+    "react",
+    "react-dom",
+    "tailwindcss",
+    "prisma",
+    "@supabase/supabase-js",
+    "next-auth",
+    "@auth/core",
+  ];
+
+  const rows = [];
+  for (const name of focus) {
+    if (!deps[name]) continue;
+    const current = normalizeVersion(deps[name]);
+    let latest = "";
+    if (env.COWORK_EXTERNAL_KNOWLEDGE === "1" || env.COWORK_PACKAGE_REGISTRY === "1") {
+      latest = normalizeVersion(safeExec(`npm view ${name} version`));
+    }
+    const currMajor = majorVersion(current);
+    const latestMajor = majorVersion(latest);
+    let note = "";
+    if (currMajor !== null && latestMajor !== null && latestMajor > currMajor) {
+      note = "major behind";
+    }
+    rows.push({ name, current, latest, note });
+  }
+
+  if (!rows.length) {
+    return { active: false, summary: "", packages: [], reason: "no tracked packages" };
+  }
+
+  const summaryLines = rows.map((r) => {
+    const latestPart = r.latest ? ` ??latest ${r.latest}` : "";
+    const notePart = r.note ? ` (${r.note})` : "";
+    return `- ${r.name}: ${r.current}${latestPart}${notePart}`;
+  });
+
+  return {
+    active: rows.some((r) => !!r.latest),
+    summary: summaryLines.join("\n"),
+    packages: rows,
+  };
+}
+
+async function collectGroundTruth(opts = {}) {
+  const env = opts.env || process.env;
+  if (!shouldUseGroundTruth(env)) {
+    return { active: false, summary: "", meta: {} };
+  }
+
+  const repo = getRepoFromGit();
+  if (!repo) {
+    return { active: false, summary: "", meta: { reason: "no git remote" } };
+  }
+
+  const token = env.GITHUB_TOKEN || env.GH_TOKEN || env.ORCHESTRATOR_PAT || "";
+  try {
+    const deployments = await githubApi(`/repos/${repo.owner}/${repo.repo}/deployments?per_page=5`, token);
+    if (!Array.isArray(deployments) || deployments.length === 0) {
+      return { active: false, summary: "", meta: { reason: "no deployments" } };
+    }
+
+    const latest = deployments[0];
+    const statuses = await githubApi(`/repos/${repo.owner}/${repo.repo}/deployments/${latest.id}/statuses?per_page=5`, token);
+    const statusList = Array.isArray(statuses) ? statuses : [];
+    const lastStatus = statusList[0];
+    const failureCount = statusList.filter((s) => s.state === "failure" || s.state === "error").length;
+    const state = lastStatus?.state || "unknown";
+    const envName = latest.environment || "unknown";
+    const when = latest.created_at || lastStatus?.created_at || "";
+
+    const summary = [
+      `- Latest deployment: ${envName} 쨌 ${state}${when ? ` 쨌 ${when}` : ""}`,
+      `- Recent deploy failures: ${failureCount}/${statusList.length || 0}`,
+    ].join("\n");
+
+    return {
+      active: true,
+      summary,
+      meta: {
+        owner: repo.owner,
+        repo: repo.repo,
+        environment: envName,
+        state,
+        failureCount,
+      },
+    };
+  } catch (e) {
+    return { active: false, summary: "", meta: { error: e.message } };
+  }
+}
+
+function formatExternalSections(externalKnowledge, groundTruth) {
+  const sections = [];
+  if (externalKnowledge && externalKnowledge.summary) {
+    sections.push(`## ?몃? 吏???좏샇 (T2)\n${externalKnowledge.summary}`);
+  }
+  if (groundTruth && groundTruth.summary) {
+    sections.push(`## Ground Truth ?좏샇 (T3)\n${groundTruth.summary}`);
+  }
+  return sections.length ? `\n${sections.join("\n\n")}\n` : "";
+}
+
 /**
  * Render a visible warning when the review has no external-signal backing.
  *
- * The review itself is still produced — we don't gate on this — but the
+ * The review itself is still produced ??we don't gate on this ??but the
  * warning makes the self-loop limitation legible to the user so they can
  * decide whether to run `dual-review`, wire up MCP sources, or accept
  * the narrower coverage.
  */
 function formatSelfLoopWarning(signals) {
   if (!signals || !signals.isSelfLoop) return "";
-  const box = `\n${COLORS.yellow}⚠️  [SELF-LOOP NOTICE]${COLORS.reset}\n`
+  const box = `\n${COLORS.yellow}?좑툘  [SELF-LOOP NOTICE]${COLORS.reset}\n`
     + `${COLORS.gray}This review was produced by a single model family with no external signals.${COLORS.reset}\n`
-    + `${COLORS.gray}Missing: T1 peer model · T2 external knowledge · T3 ground truth.${COLORS.reset}\n`
-    + `${COLORS.gray}Why it matters: opinions reinforce themselves — blind spots persist.${COLORS.reset}\n`
+    + `${COLORS.gray}Missing: T1 peer model 쨌 T2 external knowledge 쨌 T3 ground truth.${COLORS.reset}\n`
+    + `${COLORS.gray}Why it matters: opinions reinforce themselves ??blind spots persist.${COLORS.reset}\n`
     + `${COLORS.gray}To close the loop, enable any of:${COLORS.reset}\n`
-    + `${COLORS.gray}  • T1 — set OPENAI_API_KEY and use 'solo-cto-agent dual-review'${COLORS.reset}\n`
-    + `${COLORS.gray}  • T2 — set COWORK_EXTERNAL_KNOWLEDGE=1 (trend + package checks)${COLORS.reset}\n`
-    + `${COLORS.gray}  • T3 — set VERCEL_TOKEN or SUPABASE_ACCESS_TOKEN (runtime signals)${COLORS.reset}\n`;
+    + `${COLORS.gray}  ??T1 ??set OPENAI_API_KEY and use 'solo-cto-agent dual-review'${COLORS.reset}\n`
+    + `${COLORS.gray}  ??T2 ??set COWORK_EXTERNAL_KNOWLEDGE=1 (trend + package checks)${COLORS.reset}\n`
+    + `${COLORS.gray}  ??T3 ??set VERCEL_TOKEN or SUPABASE_ACCESS_TOKEN (runtime signals)${COLORS.reset}\n`;
   return box;
 }
 
@@ -831,27 +1038,27 @@ function formatPartialSignalHint(signals) {
   if (!signals.t2ExternalKnowledge) missing.push("T2 external knowledge");
   if (!signals.t3GroundTruth) missing.push("T3 ground truth");
   if (missing.length === 0) return "";
-  return `\n${COLORS.gray}ℹ️  Active external signals: ${signals.activeCount}/3. Missing: ${missing.join(", ")}.${COLORS.reset}\n`;
+  return `\n${COLORS.gray}?뱄툘  Active external signals: ${signals.activeCount}/3. Missing: ${missing.join(", ")}.${COLORS.reset}\n`;
 }
 
 function formatCrossCheck(cc) {
   if (!cc) return "";
   let out = `\n${COLORS.bold}[CROSS-CHECK]${COLORS.reset} ${cc.crossVerdict}\n`;
   if (cc.addedIssues.length) {
-    out += `${COLORS.gray}+ 추가 발견 (${cc.addedIssues.length}):${COLORS.reset}\n`;
+    out += `${COLORS.gray}+ 異붽? 諛쒓껄 (${cc.addedIssues.length}):${COLORS.reset}\n`;
     for (const i of cc.addedIssues) {
-      const icon = i.severity === "BLOCKER" ? `${COLORS.red}⛔${COLORS.reset}` : i.severity === "SUGGESTION" ? `${COLORS.yellow}⚠️${COLORS.reset}` : `${COLORS.blue}💡${COLORS.reset}`;
-      out += `  ${icon} [${i.location}] ${i.issue} → ${i.suggestion}\n`;
+      const icon = i.severity === "BLOCKER" ? `${COLORS.red}??{COLORS.reset}` : i.severity === "SUGGESTION" ? `${COLORS.yellow}?좑툘${COLORS.reset}` : `${COLORS.blue}?뮕${COLORS.reset}`;
+      out += `  ${icon} [${i.location}] ${i.issue} ??${i.suggestion}\n`;
     }
   }
   if (cc.removedItems.length) {
-    out += `${COLORS.gray}- 1차 false positive 의심 (${cc.removedItems.length}):${COLORS.reset}\n`;
+    out += `${COLORS.gray}- 1李?false positive ?섏떖 (${cc.removedItems.length}):${COLORS.reset}\n`;
     for (const r of cc.removedItems) {
-      out += `  · [${r.location}] ${r.reason}\n`;
+      out += `  쨌 [${r.location}] ${r.reason}\n`;
     }
   }
-  if (cc.upgradeBlock) out += `${COLORS.gray}↑ 심각도 상향:${COLORS.reset}\n  ${cc.upgradeBlock.replace(/\n/g, "\n  ")}\n`;
-  if (cc.downgradeBlock) out += `${COLORS.gray}↓ 심각도 하향:${COLORS.reset}\n  ${cc.downgradeBlock.replace(/\n/g, "\n  ")}\n`;
+  if (cc.upgradeBlock) out += `${COLORS.gray}???ш컖???곹뼢:${COLORS.reset}\n  ${cc.upgradeBlock.replace(/\n/g, "\n  ")}\n`;
+  if (cc.downgradeBlock) out += `${COLORS.gray}???ш컖???섑뼢:${COLORS.reset}\n  ${cc.downgradeBlock.replace(/\n/g, "\n  ")}\n`;
   if (cc.metaReview) out += `${COLORS.gray}meta:${COLORS.reset} ${cc.metaReview}\n`;
   return out;
 }
@@ -875,23 +1082,23 @@ function formatTerminalOutput(review, sourceInfo, costInfo) {
   const header = `VERDICT: ${review.verdict} (${review.verdictKo})`;
   let output = "\n";
   output += `${COLORS.bold}${verdictColor}${header}${COLORS.reset}\n`;
-  output += `${COLORS.gray}${"─".repeat(header.length)}${COLORS.reset}\n`;
+  output += `${COLORS.gray}${"?".repeat(header.length)}${COLORS.reset}\n`;
   output += `Issues: ${totalIssues}`;
-  if (issueCounts.BLOCKER) output += `  ${COLORS.red}⛔ ${issueCounts.BLOCKER} BLOCKER${COLORS.reset}`;
-  if (issueCounts.SUGGESTION) output += `  ${COLORS.yellow}⚠️  ${issueCounts.SUGGESTION} SUGGESTION${COLORS.reset}`;
-  if (issueCounts.NIT) output += `  ${COLORS.blue}💡 ${issueCounts.NIT} NIT${COLORS.reset}`;
+  if (issueCounts.BLOCKER) output += `  ${COLORS.red}??${issueCounts.BLOCKER} BLOCKER${COLORS.reset}`;
+  if (issueCounts.SUGGESTION) output += `  ${COLORS.yellow}?좑툘  ${issueCounts.SUGGESTION} SUGGESTION${COLORS.reset}`;
+  if (issueCounts.NIT) output += `  ${COLORS.blue}?뮕 ${issueCounts.NIT} NIT${COLORS.reset}`;
   output += `\n\n`;
 
   for (const issue of review.issues) {
     const icon =
       issue.severity === "BLOCKER"
-        ? `${COLORS.red}⛔${COLORS.reset}`
+        ? `${COLORS.red}??{COLORS.reset}`
         : issue.severity === "SUGGESTION"
-        ? `${COLORS.yellow}⚠️${COLORS.reset}`
-        : `${COLORS.blue}💡${COLORS.reset}`;
+        ? `${COLORS.yellow}?좑툘${COLORS.reset}`
+        : `${COLORS.blue}?뮕${COLORS.reset}`;
     output += `${icon} [${issue.location}]\n`;
     output += `   ${issue.issue}\n`;
-    output += `   → ${issue.suggestion}\n\n`;
+    output += `   ??${issue.suggestion}\n\n`;
   }
 
   if (review.summary) {
@@ -918,10 +1125,10 @@ async function localReview(options = {}) {
     model = CONFIG.defaultModel.claude,
     dryRun = false,
     outputFormat = "terminal",
-    crossCheck = null, // null = tier 기본값 따름, true/false = 강제
+    crossCheck = null, // null = tier 湲곕낯媛??곕쫫, true/false = 媛뺤젣
   } = options;
 
-  // Tier · agent · personalization · live-source 컨텍스트 결정
+  // Tier 쨌 agent 쨌 personalization 쨌 live-source 而⑦뀓?ㅽ듃 寃곗젙
   const tier = readTier();
   const mode = readMode();
   const agent = process.env.OPENAI_API_KEY ? "cowork+codex" : "cowork";
@@ -949,6 +1156,9 @@ async function localReview(options = {}) {
   const personalCtx = personalizationContext();
   const liveCtx = liveSourceContext();
   const identity = buildIdentity(tier, agent);
+  const externalKnowledge = await collectExternalKnowledge({ env: process.env });
+  const groundTruth = await collectGroundTruth({ env: process.env });
+  const externalSections = formatExternalSections(externalKnowledge, groundTruth);
 
   const errorPatterns = failureCatalog.patterns
     ?.map((p) => `- ${p.pattern}: ${p.fix}`)
@@ -957,61 +1167,62 @@ async function localReview(options = {}) {
   // Build review prompt (Korean, codex-main parity + cowork enhancements)
   const systemPrompt = `${identity}
 
-당신은 Claude, 팀의 시니어 코드 리뷰어다. 아래 diff를 리뷰한다.
+?뱀떊? Claude, ????쒕땲??肄붾뱶 由щ럭?대떎. ?꾨옒 diff瑜?由щ럭?쒕떎.
 
 ${OPERATING_PRINCIPLES}
 ${COMMON_STACK_PATTERNS}
 ${REVIEW_PRIORITY}
 ${liveCtx}${personalCtx}
 
-## 심각도 분류
-- ⛔ BLOCKER  — 머지/배포 차단. 치명 버그, 보안, 데이터 손실 위험.
-- ⚠️ SUGGESTION — 강하게 권하는 개선. 에러 처리 누락, 성능, 구조.
-- 💡 NIT — 취향 수준. 스타일, 일관성.
+## ?ш컖??遺꾨쪟
+- ??BLOCKER  ??癒몄?/諛고룷 李⑤떒. 移섎챸 踰꾧렇, 蹂댁븞, ?곗씠???먯떎 ?꾪뿕.
+- ?좑툘 SUGGESTION ??媛뺥븯寃?沅뚰븯??媛쒖꽑. ?먮윭 泥섎━ ?꾨씫, ?깅뒫, 援ъ“.
+- ?뮕 NIT ??痍⑦뼢 ?섏?. ?ㅽ??? ?쇨???
 
-## 사용자 프로젝트의 기존 에러 패턴
+## ?ъ슜???꾨줈?앺듃??湲곗〈 ?먮윭 ?⑦꽩
 ${errorPatterns}
 
-## 출력 형식 (이 포맷을 정확히 따른다)
+## 異쒕젰 ?뺤떇 (???щ㎎???뺥솗???곕Ⅸ??
 
 [VERDICT] APPROVE | REQUEST_CHANGES | COMMENT
 
 [ISSUES]
-⛔ [path/to/file.ts:42]
-  이슈 설명 한 줄.
-  → 구체적 수정 방법.
+??[path/to/file.ts:42]
+  ?댁뒋 ?ㅻ챸 ??以?
+  ??援ъ껜???섏젙 諛⑸쾿.
 
-⚠️ [path/to/file.ts:17]
-  이슈 설명 한 줄.
-  → 구체적 수정 방법.
+?좑툘 [path/to/file.ts:17]
+  ?댁뒋 ?ㅻ챸 ??以?
+  ??援ъ껜???섏젙 諛⑸쾿.
 
-💡 [path/to/file.ts:3]
-  이슈 설명 한 줄.
-  → 구체적 수정 방법.
+?뮕 [path/to/file.ts:3]
+  ?댁뒋 ?ㅻ챸 ??以?
+  ??援ъ껜???섏젙 諛⑸쾿.
 
 [SUMMARY]
-전체 평가 1~2문장. 수치는 [확정]/[추정]/[미검증] 태그 사용.
+?꾩껜 ?됯? 1~2臾몄옣. ?섏튂??[?뺤젙]/[異붿젙]/[誘멸?利? ?쒓렇 ?ъ슜.
 
 [NEXT ACTION]
-- 수정할 항목 1
-- 수정할 항목 2
+- ?섏젙????ぉ 1
+- ?섏젙????ぉ 2
 
-## 규칙
-- 한국어 존댓말 없이 간결하게. 기술 용어는 영어 그대로.
-- "좋습니다", "훌륭합니다" 같은 칭찬 금지.
-- BLOCKER가 0개면 REQUEST_CHANGES 쓰지 않는다. APPROVE 또는 COMMENT.
-- BLOCKER가 1개라도 있으면 REQUEST_CHANGES.
-- diff 범위 밖 파일은 언급하지 않는다.`;
+## 洹쒖튃
+- ?쒓뎅??議대뙎留??놁씠 媛꾧껐?섍쾶. 湲곗닠 ?⑹뼱???곸뼱 洹몃?濡?
+- "醫뗭뒿?덈떎", "?뚮??⑸땲?? 媛숈? 移?갔 湲덉?.
+- BLOCKER媛 0媛쒕㈃ REQUEST_CHANGES ?곗? ?딅뒗?? APPROVE ?먮뒗 COMMENT.
+- BLOCKER媛 1媛쒕씪???덉쑝硫?REQUEST_CHANGES.
+- diff 踰붿쐞 諛??뚯씪? ?멸툒?섏? ?딅뒗??`;
 
-  const userPrompt = `## 프로젝트 컨텍스트 (SKILL.md)
+  const userPrompt = `## ?꾨줈?앺듃 而⑦뀓?ㅽ듃 (SKILL.md)
 ${skillContext}
+${externalSections}
 
-## 리뷰 대상 diff
+## 由щ럭 ???diff
 \`\`\`diff
 ${diff}
 \`\`\`
 
-위 출력 형식 그대로 리뷰하라.`;
+??異쒕젰 ?뺤떇 洹몃?濡?由щ럭?섎씪.`;
 
   if (dryRun) {
     log("\n[DRY RUN] Would call Anthropic API with:");
@@ -1059,7 +1270,7 @@ ${diff}
       cost: totalCost,
     };
 
-    // Self cross-review (Cowork 단독 구성의 핵심 품질 게이트)
+    // Self cross-review (Cowork ?⑤룆 援ъ꽦???듭떖 ?덉쭏 寃뚯씠??
     if (useCrossCheck && agent === "cowork") {
       logInfo("Running self cross-review (devil's advocate pass)...");
       try {
@@ -1072,30 +1283,38 @@ ${diff}
           maxRetries: tierLimits.maxRetries,
         });
         reviewData.crossCheck = cross;
-        // 합의 BLOCKER 가 있으면 verdict 강화
+        // ?⑹쓽 BLOCKER 媛 ?덉쑝硫?verdict 媛뺥솕
         if (cross.commonBlockers > 0 && reviewData.verdict !== "REQUEST_CHANGES") {
           reviewData.verdict = "REQUEST_CHANGES";
           reviewData.verdictUpgradedBy = "self-cross-review";
         }
-        // 토큰/비용 합산
+        // ?좏겙/鍮꾩슜 ?⑹궛
         reviewData.tokens.input += cross.tokens.input;
         reviewData.tokens.output += cross.tokens.output;
         reviewData.cost = (parseFloat(reviewData.cost) + parseFloat(cross.cost)).toFixed(4);
       } catch (err) {
-        logWarn(`Self cross-review failed: ${err.message} — 1차 결과만 보고`);
+        logWarn(`Self cross-review failed: ${err.message} ??1李?寃곌낵留?蹂닿퀬`);
         reviewData.crossCheckError = err.message;
       }
     }
 
-    // Personalization 누적 (반복 핫스팟 추적)
+    // Personalization ?꾩쟻 (諛섎났 ?レ뒪??異붿쟻)
     try {
       updatePersonalizationFromReview(review);
-    } catch (_) { /* personalization 업데이트 실패는 리뷰 결과에 영향 없음 */ }
+    } catch (_) { /* personalization ?낅뜲?댄듃 ?ㅽ뙣??由щ럭 寃곌낵???곹뼢 ?놁쓬 */ }
 
-    // External-signal assessment — tells the user whether this review had any
+    // External-signal assessment ??tells the user whether this review had any
     // non-self-loop backing (peer model / external knowledge / ground truth).
-    const externalSignals = assessExternalSignals();
+    const externalSignals = assessExternalSignals({
+      overrides: {
+        t1PeerModel: agent === "cowork+codex",
+        t2ExternalKnowledge: !!externalKnowledge.active,
+        t3GroundTruth: !!groundTruth.active,
+      },
+    });
     reviewData.externalSignals = externalSignals;
+    if (externalKnowledge.summary) reviewData.externalKnowledge = externalKnowledge;
+    if (groundTruth.summary) reviewData.groundTruth = groundTruth;
 
     fs.writeFileSync(reviewFile, JSON.stringify(reviewData, null, 2));
 
@@ -1105,7 +1324,7 @@ ${diff}
     } else if (outputFormat === "markdown") {
       log(response.text);
       if (externalSignals.isSelfLoop) {
-        log("\n> ⚠️ **SELF-LOOP NOTICE** — no external signals (peer model / external knowledge / ground truth) were active for this review. Run `dual-review` or set `VERCEL_TOKEN` / `SUPABASE_ACCESS_TOKEN` / `COWORK_EXTERNAL_KNOWLEDGE=1` to close the loop.\n");
+        log("\n> ?좑툘 **SELF-LOOP NOTICE** ??no external signals (peer model / external knowledge / ground truth) were active for this review. Run `dual-review` or set `VERCEL_TOKEN` / `SUPABASE_ACCESS_TOKEN` / `COWORK_EXTERNAL_KNOWLEDGE=1` to close the loop.\n");
       }
     } else {
       // terminal format
@@ -1120,7 +1339,7 @@ ${diff}
       if (reviewData.crossCheck) {
         log(formatCrossCheck(reviewData.crossCheck));
       }
-      // Self-loop warning (if applicable) — or hint about partial signals.
+      // Self-loop warning (if applicable) ??or hint about partial signals.
       const warning = formatSelfLoopWarning(externalSignals);
       if (warning) log(warning);
       else {
@@ -1138,74 +1357,74 @@ ${diff}
 }
 
 /**
- * Self Cross-Review (Cowork 단독의 핵심 품질 게이트)
+ * Self Cross-Review (Cowork ?⑤룆???듭떖 ?덉쭏 寃뚯씠??
  *
- * 1차 리뷰의 결과를 두 번째 패스 (devil's advocate 페르소나) 가 검증한다.
- * - 1차가 놓친 BLOCKER 가 있는가?
- * - 1차가 과대 평가한 항목이 있는가?
- * - 1차의 false positive / false negative 의심 지점은?
+ * 1李?由щ럭??寃곌낵瑜???踰덉㎏ ?⑥뒪 (devil's advocate ?섎Ⅴ?뚮굹) 媛 寃利앺븳??
+ * - 1李④? ?볦튇 BLOCKER 媛 ?덈뒗媛?
+ * - 1李④? 怨쇰? ?됯?????ぉ???덈뒗媛?
+ * - 1李⑥쓽 false positive / false negative ?섏떖 吏?먯??
  *
- * 두 패스의 합의·불일치를 정리해 단일 시점 의견의 한계를 보완.
- * Cowork+Codex 가 없을 때 가장 큰 가치를 만든다.
+ * ???⑥뒪???⑹쓽쨌遺덉씪移섎? ?뺣━???⑥씪 ?쒖젏 ?섍껄???쒓퀎瑜?蹂댁셿.
+ * Cowork+Codex 媛 ?놁쓣 ??媛????媛移섎? 留뚮뱺??
  */
 async function selfCrossReview({ diff, firstPass, firstPassRaw, systemPromptBase, model, maxRetries }) {
   const advocateSystem = `${systemPromptBase}
 
-당신은 동일 diff 의 1차 리뷰 결과를 검증하는 **devil's advocate 리뷰어** 다.
-1차 리뷰는 자기 자신의 한 차례 응답이다. 자기 검증의 한계를 인정하고,
-의도적으로 다른 시각에서 본다. 동의를 위한 동의는 금지.
+?뱀떊? ?숈씪 diff ??1李?由щ럭 寃곌낵瑜?寃利앺븯??**devil's advocate 由щ럭??* ??
+1李?由щ럭???먭린 ?먯떊????李⑤? ?묐떟?대떎. ?먭린 寃利앹쓽 ?쒓퀎瑜??몄젙?섍퀬,
+?섎룄?곸쑝濡??ㅻⅨ ?쒓컖?먯꽌 蹂몃떎. ?숈쓽瑜??꾪븳 ?숈쓽??湲덉?.
 
-검증 항목:
-1. 1차가 놓친 BLOCKER (보안, 데이터 손실, 명백한 버그) 가 있는가?
-2. 1차가 BLOCKER 로 본 항목 중 사실 SUGGESTION 이거나 false positive 인 것이 있는가?
-3. 1차가 SUGGESTION/NIT 로 묶었지만 실제로는 BLOCKER 인 항목은?
-4. 1차 summary 의 [확정]/[추정] 태그가 적절한가? (라이브 소스 없이 [확정] 단정 짓진 않았는지)
+寃利???ぉ:
+1. 1李④? ?볦튇 BLOCKER (蹂댁븞, ?곗씠???먯떎, 紐낅갚??踰꾧렇) 媛 ?덈뒗媛?
+2. 1李④? BLOCKER 濡?蹂???ぉ 以??ъ떎 SUGGESTION ?닿굅??false positive ??寃껋씠 ?덈뒗媛?
+3. 1李④? SUGGESTION/NIT 濡?臾띠뿀吏留??ㅼ젣濡쒕뒗 BLOCKER ????ぉ??
+4. 1李?summary ??[?뺤젙]/[異붿젙] ?쒓렇媛 ?곸젅?쒓?? (?쇱씠釉??뚯뒪 ?놁씠 [?뺤젙] ?⑥젙 吏볦쭊 ?딆븯?붿?)
 
-## 출력 형식 (반드시 이대로)
+## 異쒕젰 ?뺤떇 (諛섎뱶???대?濡?
 
 [CROSS_VERDICT] AGREE | DISAGREE | PARTIAL
 
-[ADD]                  ← 1차가 놓친 항목 (없으면 "없음")
-⛔/⚠️/💡 [path:line]
-  이슈.
-  → 수정.
+[ADD]                  ??1李④? ?볦튇 ??ぉ (?놁쑝硫?"?놁쓬")
+???좑툘/?뮕 [path:line]
+  ?댁뒋.
+  ???섏젙.
 
-[REMOVE]               ← 1차의 false positive (없으면 "없음")
+[REMOVE]               ??1李⑥쓽 false positive (?놁쑝硫?"?놁쓬")
 [path:line]
-  사유.
+  ?ъ쑀.
 
-[UPGRADE]              ← 심각도 상향 (없으면 "없음")
-[path:line] SUGGESTION→BLOCKER
-  사유.
+[UPGRADE]              ???ш컖???곹뼢 (?놁쑝硫?"?놁쓬")
+[path:line] SUGGESTION?묪LOCKER
+  ?ъ쑀.
 
-[DOWNGRADE]            ← 심각도 하향 (없으면 "없음")
-[path:line] BLOCKER→SUGGESTION
-  사유.
+[DOWNGRADE]            ???ш컖???섑뼢 (?놁쑝硫?"?놁쓬")
+[path:line] BLOCKER?뭆UGGESTION
+  ?ъ쑀.
 
 [META_REVIEW]
-1~2문장. 1차 리뷰 자체의 품질 평가.
+1~2臾몄옣. 1李?由щ럭 ?먯껜???덉쭏 ?됯?.
 
-## 규칙
-- 한국어, 칭찬 금지, 간결.
-- 1차와 동일 항목 반복 금지. 1차에 추가/수정할 게 없으면 그냥 "없음".
-- 자기 검증의 한계 명시: 같은 모델·같은 컨텍스트의 한계가 있다.`;
+## 洹쒖튃
+- ?쒓뎅?? 移?갔 湲덉?, 媛꾧껐.
+- 1李⑥? ?숈씪 ??ぉ 諛섎났 湲덉?. 1李⑥뿉 異붽?/?섏젙??寃??놁쑝硫?洹몃깷 "?놁쓬".
+- ?먭린 寃利앹쓽 ?쒓퀎 紐낆떆: 媛숈? 紐⑤뜽쨌媛숈? 而⑦뀓?ㅽ듃???쒓퀎媛 ?덈떎.`;
 
-  const advocateUser = `## 1차 리뷰 결과 (검증 대상)
+  const advocateUser = `## 1李?由щ럭 寃곌낵 (寃利????
 
 VERDICT: ${firstPass.verdict}
-ISSUES (${firstPass.issues.length}개):
-${firstPass.issues.map((i) => `  ${i.severity === "BLOCKER" ? "⛔" : i.severity === "SUGGESTION" ? "⚠️" : "💡"} [${i.location}] ${i.issue}`).join("\n")}
+ISSUES (${firstPass.issues.length}媛?:
+${firstPass.issues.map((i) => `  ${i.severity === "BLOCKER" ? "?? : i.severity === "SUGGESTION" ? "?좑툘" : "?뮕"} [${i.location}] ${i.issue}`).join("\n")}
 SUMMARY: ${firstPass.summary}
 
-## 1차 리뷰 원문
+## 1李?由щ럭 ?먮Ц
 ${firstPassRaw}
 
-## 검증 대상 diff
+## 寃利????diff
 \`\`\`diff
 ${diff}
 \`\`\`
 
-위 출력 형식 그대로, devil's advocate 시각에서 검증하라.`;
+??異쒕젰 ?뺤떇 洹몃?濡? devil's advocate ?쒓컖?먯꽌 寃利앺븯??`;
 
   const response = await callAnthropic(advocateUser, advocateSystem, model, { maxRetries: maxRetries || 3 });
   const text = response.text;
@@ -1216,11 +1435,11 @@ ${diff}
   // ADD section: extract issue patterns
   const addBlock = (text.match(/\[ADD\]([\s\S]*?)(?=\[REMOVE\]|\[UPGRADE\]|\[DOWNGRADE\]|\[META_REVIEW\]|$)/i) || [])[1] || "";
   const addedIssues = [];
-  const addPattern = /(⛔|⚠️|💡)\s*\[([^\]]+)\]\s*\n\s*([^\n]+)\n\s*(?:→|->)\s*([^\n]+)/g;
+  const addPattern = /(???좑툘|?뮕)\s*\[([^\]]+)\]\s*\n\s*([^\n]+)\n\s*(?:??->)\s*([^\n]+)/g;
   let m;
   while ((m = addPattern.exec(addBlock)) !== null) {
     addedIssues.push({
-      severity: m[1] === "⛔" ? "BLOCKER" : m[1] === "⚠️" ? "SUGGESTION" : "NIT",
+      severity: m[1] === "?? ? "BLOCKER" : m[1] === "?좑툘" ? "SUGGESTION" : "NIT",
       location: m[2].trim(),
       issue: m[3].trim(),
       suggestion: m[4].trim(),
@@ -1232,7 +1451,7 @@ ${diff}
   const removedItems = [];
   const removePattern = /\[([^\]]+)\]\s*\n\s*([^\n[]+)/g;
   while ((m = removePattern.exec(removeBlock)) !== null) {
-    if (m[1].trim().toLowerCase() === "없음") continue;
+    if (m[1].trim().toLowerCase() === "?놁쓬") continue;
     removedItems.push({ location: m[1].trim(), reason: m[2].trim() });
   }
 
@@ -1300,33 +1519,33 @@ async function knowledgeCapture(options = {}) {
 
   const systemPrompt = `${AGENT_IDENTITY}
 
-세션 데이터에서 재사용 가능한 지식을 추출한다.
-나중에 같은 실수를 반복하지 않기 위한 자료다. 추측 금지, 실제 발생한 것만 적는다.
+?몄뀡 ?곗씠?곗뿉???ъ궗??媛?ν븳 吏?앹쓣 異붿텧?쒕떎.
+?섏쨷??媛숈? ?ㅼ닔瑜?諛섎났?섏? ?딄린 ?꾪븳 ?먮즺?? 異붿륫 湲덉?, ?ㅼ젣 諛쒖깮??寃껊쭔 ?곷뒗??
 
-## 출력 형식
+## 異쒕젰 ?뺤떇
 
-[TITLE]: 한 줄 주제
+[TITLE]: ??以?二쇱젣
 
 [DECISIONS]:
-- {결정}: {근거}
-- {결정}: {근거}
+- {寃곗젙}: {洹쇨굅}
+- {寃곗젙}: {洹쇨굅}
 
 [ERROR_PATTERNS]:
-- {에러 패턴}: {수정 방법}
-- {에러 패턴}: {수정 방법}
+- {?먮윭 ?⑦꽩}: {?섏젙 諛⑸쾿}
+- {?먮윭 ?⑦꽩}: {?섏젙 諛⑸쾿}
 
 [PREFERENCES]:
-- {유저 선호 / 코딩 스타일 / 워크플로우 규칙}
+- {?좎? ?좏샇 / 肄붾뵫 ?ㅽ???/ ?뚰겕?뚮줈??洹쒖튃}
 
 [OPEN_THREADS]:
-- {미해결 항목}
+- {誘명빐寃???ぉ}
 
-## 규칙
-- 한국어. 간결하게. 일반론 금지, 이 세션에서 실제로 나온 것만.
-- 수치는 [확정] / [추정] / [미검증] 태그.
-- 동일한 항목 반복 금지.`;
+## 洹쒖튃
+- ?쒓뎅?? 媛꾧껐?섍쾶. ?쇰컲濡?湲덉?, ???몄뀡?먯꽌 ?ㅼ젣濡??섏삩 寃껊쭔.
+- ?섏튂??[?뺤젙] / [異붿젙] / [誘멸?利? ?쒓렇.
+- ?숈씪????ぉ 諛섎났 湲덉?.`;
 
-  const userPrompt = `## 분석 대상
+  const userPrompt = `## 遺꾩꽍 ???
 
 ${content}`;
 
@@ -1345,7 +1564,7 @@ ${content}`;
       .slice(0, 50);
 
     // Build markdown
-    let markdown = `# ${title} — Knowledge Article\n`;
+    let markdown = `# ${title} ??Knowledge Article\n`;
     markdown += `> Created: ${new Date().toISOString().split("T")[0]}\n`;
     if (projectTag) markdown += `> Project: ${projectTag}\n`;
     markdown += `> Source: ${source}\n\n`;
@@ -1390,7 +1609,7 @@ ${content}`;
       indexContent = "# Knowledge Index\n\n";
     }
 
-    const indexEntry = `- [${title}](./${path.basename(articleFile)}) — ${projectTag || "general"}`;
+    const indexEntry = `- [${title}](./${path.basename(articleFile)}) ??${projectTag || "general"}`;
     if (!indexContent.includes(indexEntry)) {
       indexContent += indexEntry + "\n";
       fs.writeFileSync(indexFile, indexContent);
@@ -1458,52 +1677,56 @@ async function dualReview(options = {}) {
   const errorPatterns = failureCatalog.patterns
     ?.map((p) => `- ${p.pattern}: ${p.fix}`)
     .join("\n") || "No patterns loaded";
+  const externalKnowledge = await collectExternalKnowledge({ env: process.env });
+  const groundTruth = await collectGroundTruth({ env: process.env });
+  const externalSections = formatExternalSections(externalKnowledge, groundTruth);
 
-  // Dual-review prompt (identical spec for Claude + OpenAI — codex-main parity)
+  // Dual-review prompt (identical spec for Claude + OpenAI ??codex-main parity)
   const systemPrompt = `${AGENT_IDENTITY}
 
-팀의 시니어 코드 리뷰어다. 아래 diff를 리뷰한다.
+????쒕땲??肄붾뱶 由щ럭?대떎. ?꾨옒 diff瑜?由щ럭?쒕떎.
 
 ${SKILL_CONTEXT}
 ${SKILL_REVIEW_CRITERIA}
 
-## 심각도
-- ⛔ BLOCKER  머지 차단 (치명 버그, 보안, 데이터 손실)
-- ⚠️ SUGGESTION 강한 개선 권고
-- 💡 NIT 취향 수준
+## ?ш컖??
+- ??BLOCKER  癒몄? 李⑤떒 (移섎챸 踰꾧렇, 蹂댁븞, ?곗씠???먯떎)
+- ?좑툘 SUGGESTION 媛뺥븳 媛쒖꽑 沅뚭퀬
+- ?뮕 NIT 痍⑦뼢 ?섏?
 
-## 기존 에러 패턴
+## 湲곗〈 ?먮윭 ?⑦꽩
 ${errorPatterns}
 
-## 출력 형식
+## 異쒕젰 ?뺤떇
 [VERDICT] APPROVE | REQUEST_CHANGES | COMMENT
 
 [ISSUES]
-⛔ [path:line]
-  설명.
-  → 수정.
+??[path:line]
+  ?ㅻ챸.
+  ???섏젙.
 
-⚠️ [path:line]
-  설명.
-  → 수정.
+?좑툘 [path:line]
+  ?ㅻ챸.
+  ???섏젙.
 
-💡 [path:line]
-  설명.
-  → 수정.
+?뮕 [path:line]
+  ?ㅻ챸.
+  ???섏젙.
 
 [SUMMARY]
-1~2문장. 수치는 [확정]/[추정]/[미검증].
+1~2臾몄옣. ?섏튂??[?뺤젙]/[異붿젙]/[誘멸?利?.
 
 [NEXT ACTION]
-- 항목
+- ??ぉ
 
-## 규칙
-- 한국어. 칭찬 금지. 간결하게.
-- BLOCKER 1개 이상이면 REQUEST_CHANGES.
-- diff 밖 파일 언급 금지.`;
+## 洹쒖튃
+- ?쒓뎅?? 移?갔 湲덉?. 媛꾧껐?섍쾶.
+- BLOCKER 1媛??댁긽?대㈃ REQUEST_CHANGES.
+- diff 諛??뚯씪 ?멸툒 湲덉?.`;
 
-  const userPrompt = `## 프로젝트 컨텍스트
+  const userPrompt = `## ?꾨줈?앺듃 而⑦뀓?ㅽ듃
 ${skillContext}
+${externalSections}
 
 ## diff
 \`\`\`diff
@@ -1598,17 +1821,25 @@ ${diff}
 
   // External-signal assessment. dual-review always has T1 (peer model) active,
   // so this mostly surfaces whether T2/T3 are also present for full coverage.
-  const externalSignals = assessExternalSignals();
+  const externalSignals = assessExternalSignals({
+    overrides: {
+      t1PeerModel: true,
+      t2ExternalKnowledge: !!externalKnowledge.active,
+      t3GroundTruth: !!groundTruth.active,
+    },
+  });
   dualReviewData.externalSignals = externalSignals;
+  if (externalKnowledge.summary) dualReviewData.externalKnowledge = externalKnowledge;
+  if (groundTruth.summary) dualReviewData.groundTruth = groundTruth;
 
   fs.writeFileSync(reviewFile, JSON.stringify(dualReviewData, null, 2));
   logSuccess(`Dual review saved to ${reviewFile}`);
 
   // Terminal output
   log("\n");
-  log(`${COLORS.bold}┌─ CROSS-REVIEW SUMMARY ─┐${COLORS.reset}`);
+  log(`${COLORS.bold}?뚢? CROSS-REVIEW SUMMARY ???{COLORS.reset}`);
   log(
-    `${COLORS.bold}│${COLORS.reset} Final Verdict: ${
+    `${COLORS.bold}??{COLORS.reset} Final Verdict: ${
       finalVerdict === "APPROVE"
         ? COLORS.green
         : finalVerdict === "CHANGES_REQUESTED"
@@ -1617,18 +1848,18 @@ ${diff}
     }${finalVerdict}${COLORS.reset}`
   );
   log(
-    `${COLORS.bold}│${COLORS.reset} Agreement: ${
+    `${COLORS.bold}??{COLORS.reset} Agreement: ${
       comparison.verdictMatch ? COLORS.green + "YES" : COLORS.red + "NO"
     }${COLORS.reset}`
   );
   log(
-    `${COLORS.bold}│${COLORS.reset} Claude Issues: ${claudeReview.issues.length}`
+    `${COLORS.bold}??{COLORS.reset} Claude Issues: ${claudeReview.issues.length}`
   );
   log(
-    `${COLORS.bold}│${COLORS.reset} OpenAI Issues: ${codexReview.issues.length}`
+    `${COLORS.bold}??{COLORS.reset} OpenAI Issues: ${codexReview.issues.length}`
   );
-  log(`${COLORS.bold}│${COLORS.reset} Common Issues: ${comparison.commonIssues.length}`);
-  log(`${COLORS.bold}└────────────────────────┘${COLORS.reset}`);
+  log(`${COLORS.bold}??{COLORS.reset} Common Issues: ${comparison.commonIssues.length}`);
+  log(`${COLORS.bold}?붴??????????????????????????{COLORS.reset}`);
 
   // T1 is active here by definition (both keys present); hint about T2/T3 gaps.
   const hint = formatPartialSignalHint(externalSignals);
@@ -1734,7 +1965,7 @@ function sessionList(options = {}) {
         `${COLORS.blue}${file}${COLORS.reset}${projectLabel}`
       );
       log(
-        `  ${ts.toLocaleString()} — ` +
+        `  ${ts.toLocaleString()} ??` +
         `${decisionCount} decisions, ${errorCount} errors, ${reviewCount} reviews`
       );
 
@@ -1846,7 +2077,7 @@ async function main() {
         }
         logSuccess("Personalization reset");
       } else if (sub === "context") {
-        log(personalizationContext() || "(empty — 첫 사용)");
+        log(personalizationContext() || "(empty ??泥??ъ슜)");
       } else {
         logError(`Unknown personalization subcommand: ${sub}`);
         log(`Use: personalization show|reset|context`);
@@ -1877,7 +2108,7 @@ async function main() {
       }
     } else if (command === "help" || command === "-h" || command === "--help") {
       log(`
-${COLORS.bold}cowork-engine.js — Local Cowork Mode${COLORS.reset}
+${COLORS.bold}cowork-engine.js ??Local Cowork Mode${COLORS.reset}
 
 ${COLORS.bold}Usage:${COLORS.reset}
   node bin/cowork-engine.js <command> [options]
@@ -1936,9 +2167,9 @@ ${COLORS.bold}Configuration:${COLORS.reset}
     export OPENAI_API_KEY="sk-..."
 
 ${COLORS.bold}Mode Detection:${COLORS.reset}
-  solo  → Only ANTHROPIC_API_KEY set (Claude reviews)
-  dual  → Both keys set (Claude + OpenAI cross-review)
-  none  → No API keys configured
+  solo  ??Only ANTHROPIC_API_KEY set (Claude reviews)
+  dual  ??Both keys set (Claude + OpenAI cross-review)
+  none  ??No API keys configured
       `);
     } else {
       logError(`Unknown command: ${command}`);
@@ -1995,3 +2226,4 @@ module.exports = {
 if (require.main === module) {
   main();
 }
+
