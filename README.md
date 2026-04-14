@@ -6,6 +6,7 @@
 [![Changelog](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/changelog.yml/badge.svg)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/changelog.yml)
 [![License](https://img.shields.io/github/license/seunghunbae-3svs/solo-cto-agent)](LICENSE)
 
+> **Languages**: English (primary) · [한국어 요약](#한국어-요약-korean-summary) below.
 
 I made this because I got tired of using AI coding tools that were good at writing code, but still left me doing all the messy CTO work around it.
 
@@ -62,6 +63,70 @@ It is probably not a good fit if you:
 * do not want agents touching files or setup
 * want every action manually approved
 * prefer a neutral framework-agnostic starter pack with very conservative defaults
+
+---
+
+## 한국어 요약 (Korean summary)
+
+> 영어가 기본 문서이고, 아래는 핵심만 요약한 한국어 버전입니다. 전체 명세는 위 영어 본문을 우선 참고하세요.
+
+### 이게 뭐야
+
+`solo-cto-agent` 는 **Claude Cowork + OpenAI Codex** 조합을 기본으로 하는, 솔로 파운더 · 인디해커 · 소규모 팀을 위한 AI 코딩 에이전트용 skill pack 입니다. "코드를 대신 쓰는 도구" 가 아니라 "그 코드를 둘러싼 CTO 수준의 잡무를 대신 돌려주는 loop" 가 목적입니다.
+
+- 같은 빌드 에러를 무한 반복하지 않도록 **circuit breaker** 로 루프를 끊고 요약합니다.
+- 세션마다 스택을 다시 설명할 필요가 없도록 **중요한 결정사항을 재사용** 합니다.
+- 리뷰가 "좋아 보여요" 로 끝나지 않도록 **자기 교차 리뷰 (self cross-review) + dual-review (Cowork+Codex)** 를 강제합니다.
+- AI 티 나는 디자인을 잡기 위한 **UI/UX 감시 skill** 을 포함합니다.
+- 리스크 낮은 작업은 매번 허락을 받지 않고 agent 가 먼저 처리합니다.
+
+### 누구에게 맞나
+
+- 거의 혼자 빌드하거나 2-3명 팀인 경우.
+- Claude Cowork (선택적으로 Codex) 가 이미 주 워크플로우인 경우.
+- 엔터프라이즈 수준의 강한 승인 체계가 필요한 팀에는 맞지 않습니다.
+- Cursor / Windsurf / Copilot 은 **legacy compatibility** 로만 지원합니다. 본 문서 최하단 Appendix 참고.
+
+### 빠른 시작
+
+```bash
+# 한 번만: 글로벌 프리셋 설치
+npx solo-cto-agent init --wizard
+
+# 매 리뷰 (staged 변경 기준)
+npx solo-cto-agent review
+
+# Codex 키가 있을 때 — 서로 다른 모델 패밀리의 교차 검증
+npx solo-cto-agent dual-review
+```
+
+자세한 설치/운영 가이드: [`docs/cowork-main-install.md`](docs/cowork-main-install.md) — 한국어 본문.
+
+### Tier 축 (기능 범위)
+
+| Tier | 범위 | 필요한 키 |
+|---|---|---|
+| **Maker** | review · knowledge · session | `ANTHROPIC_API_KEY` |
+| **Builder** (default) | Maker + build · ship · apply-fixes · watch · notify | 위 + (선택) `OPENAI_API_KEY` |
+| **CTO** | Builder + orchestrate · routing-engine · dual-review | 위 둘 다 + 권장: CI |
+
+Tier 상세 정의: [`docs/tier-matrix.md`](docs/tier-matrix.md) (한글 본문).
+
+### 외부 루프 정책 (Self-loop 경고)
+
+리뷰를 **자기 혼자 쓴 diff 를 자기 한 명이 본다** 면 blind spot 이 반복됩니다. 본 패키지는 세 가지 외부 신호 (T1 peer model · T2 external knowledge · T3 ground truth) 를 감지해 부족하면 경고합니다. 전체 정책: [`docs/external-loop-policy.md`](docs/external-loop-policy.md).
+
+### 핵심 문서 바로가기
+
+- 설치/운영 (한글 본문): [`docs/cowork-main-install.md`](docs/cowork-main-install.md)
+- Tier 정의 (한글 본문): [`docs/tier-matrix.md`](docs/tier-matrix.md)
+- Tier 사용 예 (한글 본문): [`docs/tier-examples.md`](docs/tier-examples.md)
+- CTO 운영 정책 (한글 본문): [`docs/cto-policy.md`](docs/cto-policy.md)
+- 외부 루프 정책 (영한 병기): [`docs/external-loop-policy.md`](docs/external-loop-policy.md)
+- 피드백 가이드 (영한 병기): [`docs/feedback-guide.md`](docs/feedback-guide.md)
+- Skill slimming 패턴 (영한 병기): [`docs/skill-slimming.md`](docs/skill-slimming.md)
+
+---
 
 ## What's inside
 
