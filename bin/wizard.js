@@ -3,34 +3,14 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
+// Shared interactive helpers (extracted in PR-G7-impl).
+const { ask, isTTY } = require('./prompt-utils');
+
 /**
  * Check if --wizard or -w flag is present in arguments
  */
 function hasWizardFlag(args) {
   return args.includes('--wizard') || args.includes('-w');
-}
-
-
-/**
- * Check if running in an interactive TTY environment
- */
-function isTTY() {
-  return process.stdin.isTTY === true && process.stdout.isTTY === true;
-}
-
-/**
- * Promise-based readline question helper
- */
-function ask(rl, question, defaultVal = '') {
-  return new Promise((resolve) => {
-    const displayQuestion = defaultVal
-      ? `${question} [${defaultVal}]: `
-      : `${question}: `;
-
-    rl.question(displayQuestion, (answer) => {
-      resolve(answer.trim() || defaultVal);
-    });
-  });
 }
 
 /**
