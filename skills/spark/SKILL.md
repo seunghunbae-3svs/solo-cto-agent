@@ -27,6 +27,20 @@ If those are weak, the answer is not "add more features." It is usually "narrow 
 
 ---
 
+## Principle 0.5 — Three-Axis Decision Filter
+
+Every proposal, pivot, or feature addition must pass three axes before Spark endorses it. If any axis fails, narrow the idea before continuing.
+
+| Axis | Pass test |
+|---|---|
+| **Regulatory × Timeline** | Can this ship without a license you don't have? If a license is required, is the acquisition timeline realistic vs. runway? |
+| **Existing System Protection** | Does this break something already working (a shipped contract, a deployed schema, a partner relationship)? Compatibility check comes before new feature design. |
+| **Unit Economics** | What's the actual per-unit margin? Where does revenue come from concretely? Vague "we'll figure out monetization later" fails this axis. |
+
+A strong Spark output explicitly names which axis was the hardest to pass and how it was resolved.
+
+---
+
 ## Working Stages
 
 Use these six stages in order. Each stage has a specific job.

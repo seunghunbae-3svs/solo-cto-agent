@@ -188,8 +188,8 @@ solo-cto-agent uiux-review tokens                            # 디자인 토큰 
 solo-cto-agent uiux-review vision --screenshot shot.png      # 6축 점수 (layout/typography/spacing/color/a11y/polish)
 solo-cto-agent uiux-review cross-verify --screenshot shot.png
                                                              # 코드 ↔ 비전 교차검증
-solo-cto-agent uiux-review baseline save --screenshot shot.png --project tribo
-solo-cto-agent uiux-review baseline diff --screenshot shot.png --project tribo
+solo-cto-agent uiux-review baseline save --screenshot shot.png --project myapp
+solo-cto-agent uiux-review baseline diff --screenshot shot.png --project myapp
 ```
 
 Vision 리뷰는 기본 manual 전용. watch 자동 트리거에서는 제외 (비용 가드레일).
