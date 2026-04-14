@@ -268,7 +268,10 @@ describe("runWizard (non-interactive)", () => {
     expect(res.ok).toBe(true);
     expect(res.chat.chatId).toBe("42");
     expect(res.storage.env.ok).toBe(true);
-    expect(logs.some((l) => /All set/.test(l))).toBe(true);
+    // Match either en ("All set") or ko ("완료") since the default locale
+    // is ko but CI may have LANG=en_US set. PR-G10 wired the wizard
+    // through i18n so the string depends on the active bundle.
+    expect(logs.some((l) => /All set|완료/.test(l))).toBe(true);
   });
 
   it("gates on SOLO_CTO_EXPERIMENTAL", async () => {
@@ -292,5 +295,46 @@ describe("runWizard (non-interactive)", () => {
     );
     expect(r.ok).toBe(false);
     expect(r.reason).toBe("GETME_FAILED");
+  });
+
+  // PR-G10 — --lang ko emits the Korean bundle, --lang en emits English.
+  // The wizard writes user-facing strings through i18n.t() so switching
+  // locale at runtime flips the output for the same execution.
+  it("honors opts.lang=ko and emits Korean prompts", async () => {
+    const getJson = async () => ({ status: 200, json: { ok: true, result: { id: 1, username: "b" } } });
+    const postJson = async () => ({ status: 200, json: { ok: true, result: { message_id: 1 } } });
+    const logs = [];
+    await runWizard(
+      {
+        token: "123456789:AAE" + "a".repeat(30),
+        chat: "42",
+        storage: 1,
+        nonInteractive: true,
+        cwd: tmpCwd(),
+        lang: "ko",
+      },
+      { httpGetJson: getJson, httpPostJson: postJson, log: (l) => logs.push(l), errLog: () => {} },
+    );
+    const joined = logs.join("\n");
+    expect(joined).toMatch(/테스트 알림 전송 중|chat 42 에 전달됨|기본 notify 설정 파일 작성|봇 토큰|완료/);
+  });
+
+  it("honors opts.lang=en and emits English prompts", async () => {
+    const getJson = async () => ({ status: 200, json: { ok: true, result: { id: 1, username: "b" } } });
+    const postJson = async () => ({ status: 200, json: { ok: true, result: { message_id: 1 } } });
+    const logs = [];
+    await runWizard(
+      {
+        token: "123456789:AAE" + "a".repeat(30),
+        chat: "42",
+        storage: 1,
+        nonInteractive: true,
+        cwd: tmpCwd(),
+        lang: "en",
+      },
+      { httpGetJson: getJson, httpPostJson: postJson, log: (l) => logs.push(l), errLog: () => {} },
+    );
+    const joined = logs.join("\n");
+    expect(joined).toMatch(/Sending test notification|Delivered to chat 42|Wrote default notify config|All set/);
   });
 });

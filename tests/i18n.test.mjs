@@ -118,4 +118,46 @@ describe("i18n module", () => {
     expect(i18n.isSupported("fr")).toBe(false);
     expect(i18n.isSupported("")).toBe(false);
   });
+
+  // PR-G10 — telegram wizard bundle (spec §6). These guard against
+  // accidental drift between the wizard code and the bundles.
+  test("telegram wizard keys exist in both bundles", () => {
+    const keys = [
+      "telegram.wizard.not_experimental",
+      "telegram.wizard.step1.header",
+      "telegram.wizard.step1.hint",
+      "telegram.wizard.step1.verified",
+      "telegram.wizard.step2.send_message",
+      "telegram.wizard.step2.captured",
+      "telegram.wizard.step3.header",
+      "telegram.wizard.step4.sending",
+      "telegram.wizard.step4.delivered",
+      "telegram.wizard.step5.wrote_config",
+      "telegram.wizard.done",
+    ];
+    for (const k of keys) {
+      i18n.setLocale("en");
+      expect(i18n.t(k)).not.toBe(k);
+      i18n.setLocale("ko");
+      expect(i18n.t(k)).not.toBe(k);
+    }
+  });
+
+  test("telegram wizard ko bundle is actually different from en", () => {
+    i18n.setLocale("en");
+    const en = i18n.t("telegram.wizard.step1.header");
+    i18n.setLocale("ko");
+    const ko = i18n.t("telegram.wizard.step1.header");
+    expect(en).not.toBe(ko);
+    expect(ko).toContain("봇 토큰");
+  });
+
+  test("telegram wizard interpolation works in both locales", () => {
+    i18n.setLocale("en");
+    expect(i18n.t("telegram.wizard.step1.verified", { username: "mybot" }))
+      .toContain("@mybot");
+    i18n.setLocale("ko");
+    expect(i18n.t("telegram.wizard.step1.verified", { username: "mybot" }))
+      .toContain("@mybot");
+  });
 });
