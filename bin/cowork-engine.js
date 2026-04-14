@@ -224,17 +224,87 @@ function updatePersonalizationFromReview(review) {
 }
 
 /**
+ * Record explicit accept/reject feedback on a review issue.
+ * Used by `solo-cto-agent feedback accept|reject ...` CLI.
+ *
+ * Anti-bias contract: accepted patterns inform future "trust this verdict",
+ * rejected patterns inform "user disputes this severity" so we down-weight
+ * similar future findings. personalizationContext() consumes both.
+ */
+function recordFeedback({ verdict, location, severity, note = "" }) {
+  if (!verdict || !["accept", "reject"].includes(verdict)) {
+    throw new Error(`recordFeedback: verdict must be 'accept' or 'reject' (got: ${verdict})`);
+  }
+  if (!location) throw new Error("recordFeedback: location is required");
+
+  const p = loadPersonalization();
+  const bucket = verdict === "accept" ? "acceptedPatterns" : "rejectedPatterns";
+  if (!Array.isArray(p[bucket])) p[bucket] = [];
+
+  const pathOnly = location.split(":")[0];
+  const existing = p[bucket].find((x) => x.location === pathOnly && x.severity === severity);
+  if (existing) {
+    existing.count = (existing.count || 1) + 1;
+    existing.lastSeen = new Date().toISOString();
+    if (note) existing.note = note;
+  } else {
+    p[bucket].push({
+      location: pathOnly,
+      severity: severity || "UNKNOWN",
+      count: 1,
+      firstSeen: new Date().toISOString(),
+      lastSeen: new Date().toISOString(),
+      note,
+    });
+  }
+
+  // Keep buckets bounded
+  p[bucket].sort((a, b) => (b.count || 0) - (a.count || 0));
+  p[bucket] = p[bucket].slice(0, 100);
+
+  savePersonalization(p);
+  return { verdict, location: pathOnly, severity, totalInBucket: p[bucket].length };
+}
+
+/**
  * 개인화 누적 데이터를 프롬프트 주입용 텍스트 블록으로 변환.
  * 빈 상태 (첫 사용) 면 빈 문자열 반환.
+ *
+ * Anti-bias rotation:
+ *   - 80% of calls: full personalization context (exploit accumulated knowledge)
+ *   - 20% of calls: minimal context with explicit "fresh look" hint (explore)
+ *   This prevents over-fitting to past patterns and false-positive lock-in.
+ *   Override deterministically via opts.exploration = true | false.
  */
-function personalizationContext() {
+function personalizationContext(opts = {}) {
   const p = loadPersonalization();
   if (!p.reviewCount) return "";
+
+  // Decide rotation slot
+  const explore = opts.exploration === true
+    || (opts.exploration !== false && Math.random() < 0.20);
+
+  if (explore) {
+    return `\n## 개인화 컨텍스트 (탐색 모드 — 과거 패턴 의존도 낮춤)
+사용자 히스토리 ${p.reviewCount}회 누적되어 있으나 이번 리뷰는 새 시각으로 본다.
+과거 핫스팟/거부 패턴은 참조만, 단정 근거로는 사용 금지.
+`;
+  }
 
   const top = (p.repeatErrors || [])
     .filter((e) => (e.count || 0) >= 2)
     .slice(0, 8)
     .map((e) => `- ${e.location} (${e.severity}, ${e.count}회)`)
+    .join("\n");
+
+  const accepted = (p.acceptedPatterns || [])
+    .slice(0, 5)
+    .map((x) => `- ${x.location} (${x.severity}, accept ×${x.count})`)
+    .join("\n");
+
+  const rejected = (p.rejectedPatterns || [])
+    .slice(0, 5)
+    .map((x) => `- ${x.location} (${x.severity}, reject ×${x.count})${x.note ? ` — ${x.note}` : ""}`)
     .join("\n");
 
   const styleLines = Object.entries(p.stylePrefs || {})
@@ -243,8 +313,10 @@ function personalizationContext() {
 
   let out = `\n## 누적 개인화 컨텍스트 (사용자 히스토리 ${p.reviewCount}회 리뷰 기준)\n`;
   if (top) out += `\n반복 발생 핫스팟 (우선 점검):\n${top}\n`;
+  if (accepted) out += `\n사용자가 이전에 동의한 패턴 (가중치 ↑):\n${accepted}\n`;
+  if (rejected) out += `\n사용자가 이전에 거부한 패턴 (false positive 가능 — 가중치 ↓):\n${rejected}\n`;
   if (styleLines) out += `\n사용자 스타일 선호:\n${styleLines}\n`;
-  if (!top && !styleLines) return "";
+  if (!top && !accepted && !rejected && !styleLines) return "";
   return out;
 }
 
@@ -1816,6 +1888,7 @@ module.exports = {
   savePersonalization,
   updatePersonalizationFromReview,
   personalizationContext,
+  recordFeedback,
   detectLiveSources,
   liveSourceContext,
   buildIdentity,
