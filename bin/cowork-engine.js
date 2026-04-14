@@ -2638,28 +2638,57 @@ ${diff}
   const hint = formatPartialSignalHint(externalSignals);
   if (hint) log(hint);
 
-  // PR-G8-review-emit — dualReview's schema differs from localReview
+  // PR-G8-review-emit / PR-G11 — dualReview's schema differs from localReview
   // (finalVerdict / comparison / per-reviewer issues). Adapt to the shape
   // notifyReviewResult expects so the event taxonomy stays consistent.
   // Verdict mismatch between Claude and OpenAI → "review.dual-disagree";
   // otherwise use aggregated blockers → "review.blocker".
+  //
+  // PR-G11 hardening: the prior adapter used `!comparison.verdictMatch`,
+  // which silently collapsed three distinct states (agree / disagree /
+  // unknown) into a binary. If either verdict was undefined (parse failure)
+  // the expression `undefined === undefined` returned true and pretended
+  // the reviewers agreed; if verdictMatch itself was undefined it flipped
+  // to true and pretended they disagreed. Now we route explicitly on the
+  // tri-state so partial/malformed comparisons degrade to a conservative
+  // DISAGREE sentinel AND log a warning instead of masquerading as signal.
   try {
     const notifyMod = require("./notify");
-    const dualDisagreed = !comparison.verdictMatch;
+    const cv = claudeReview && claudeReview.verdict;
+    const xv = codexReview && codexReview.verdict;
+    let crossVerdict;
+    if (!cv || !xv) {
+      // One side failed to parse — treat as disagree (conservative: never
+      // claim agreement when we don't know).
+      crossVerdict = "DISAGREE";
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[notify] dual-review comparison has missing verdict (claude=${cv || "∅"} openai=${xv || "∅"}) — routing as DISAGREE`
+      );
+    } else if (comparison && comparison.verdictMatch === true) {
+      crossVerdict = finalVerdict;
+    } else if (comparison && comparison.verdictMatch === false) {
+      crossVerdict = "DISAGREE";
+    } else {
+      // verdictMatch was undefined despite both verdicts present — compute
+      // directly from the verdicts rather than trust a missing field.
+      crossVerdict = cv === xv ? finalVerdict : "DISAGREE";
+    }
     const mergedIssues = [
       ...((claudeReview && claudeReview.issues) || []),
       ...((codexReview && codexReview.issues) || []),
     ];
+    const agreementLabel = crossVerdict === "DISAGREE" ? "NO" : "YES";
     await notifyMod
       .notifyReviewResult({
         verdict: finalVerdict,
         issues: mergedIssues,
-        summary: `dual-review • claude=${claudeReview && claudeReview.verdict} openai=${codexReview && codexReview.verdict} • agreement=${comparison.verdictMatch ? "YES" : "NO"}`,
+        summary: `dual-review • claude=${cv || "∅"} openai=${xv || "∅"} • agreement=${agreementLabel}`,
         crossCheck: {
           // notifyReviewResult treats any crossVerdict !== verdict as
-          // "dual-disagree". Forcing a distinct sentinel here makes the
-          // event routing unambiguous.
-          crossVerdict: dualDisagreed ? "DISAGREE" : finalVerdict,
+          // "dual-disagree". The explicit DISAGREE sentinel above makes
+          // the event routing unambiguous even when finalVerdict is null.
+          crossVerdict,
         },
         tier: "dual",
         agent: "dual",
