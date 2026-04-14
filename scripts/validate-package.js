@@ -5,12 +5,10 @@ const root = process.cwd();
 const required = [
   'package.json',
   'setup.sh',
-  '.cursorrules',
-  '.windsurfrules',
-  '.github/copilot-instructions.md',
   'README.md',
   'CONTRIBUTING',
-  'Examples',
+  'examples/README.md',
+  'docs/claude.md',
   'failure-catalog.json',
   'failure-catalog.schema.json',
 ];

@@ -182,7 +182,7 @@ async function runWizard(targetDir, force = false) {
     const config = {
       mode,
       os: await ask(rl, 'OS', 'macOS'),
-      editor: await ask(rl, 'Editor', 'Cursor'),
+      editor: await ask(rl, 'Editor', 'Claude Cowork'),
       framework: await ask(rl, 'Framework', 'Next.js'),
       style: await ask(rl, 'Style', 'Tailwind CSS'),
       deployTarget: await ask(rl, 'Deploy target', 'Vercel'),
