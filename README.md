@@ -66,6 +66,32 @@ It is probably not a good fit if you:
 
 ---
 
+## Tool entry points
+
+The agent is organised around **per-tool entry points**. Start from the doc for the tool you actually use.
+
+| Tool | Entry point | Status |
+|---|---|---|
+| **Claude** (Cowork + CLI) | [`docs/claude.md`](docs/claude.md) | Supported (primary) |
+| Cursor | — | Not yet. Planned as this grows. |
+| Windsurf | — | Not yet. Planned as this grows. |
+| GitHub Copilot | — | Not yet. Planned as this grows. |
+
+Right now Claude is the only supported execution surface. Other tools are on the roadmap and will get their own entry points as they land — each with its own install, invocation pattern, and compatible skill subset. The repo's core skills (`review`, `build`, `ship`, `memory`, `craft`, `spark`) are written to be tool-agnostic; the entry-point docs are the place where the per-tool glue lives.
+
+## Examples
+
+Real-world flows, four-part shape (input → agent behavior → output → pain reduced). Start with whichever subfolder matches your bottleneck:
+
+- [`examples/build/`](examples/build/) — writing features, escaping recurring error loops
+- [`examples/ship/`](examples/ship/) — pre-deploy env lint, idempotent release pipeline
+- [`examples/review/`](examples/review/) — dual-review blockers, UI/UX vision gates
+- [`examples/founder-workflow/`](examples/founder-workflow/) — session brief, idea critique
+
+See [`examples/README.md`](examples/README.md) for the full index.
+
+---
+
 ## ?쒓뎅???붿빟 (Korean summary)
 
 > ?곸뼱媛 湲곕낯 臾몄꽌?닿퀬, ?꾨옒???듭떖留??붿빟???쒓뎅??踰꾩쟾?낅땲?? ?꾩껜 紐낆꽭?????곸뼱 蹂몃Ц???곗꽑 李멸퀬?섏꽭??
@@ -117,13 +143,15 @@ Tier ?곸꽭 ?뺤쓽: [`docs/tier-matrix.md`](docs/tier-matrix.md) (?쒓? 蹂몃
 
 ### ?듭떖 臾몄꽌 諛붾줈媛湲?
 
-- ?ㅼ튂/?댁쁺 (?쒓? 蹂몃Ц): [`docs/cowork-main-install.md`](docs/cowork-main-install.md)
-- Tier ?뺤쓽 (?쒓? 蹂몃Ц): [`docs/tier-matrix.md`](docs/tier-matrix.md)
-- Tier ?ъ슜 ??(?쒓? 蹂몃Ц): [`docs/tier-examples.md`](docs/tier-examples.md)
-- CTO ?댁쁺 ?뺤콉 (?쒓? 蹂몃Ц): [`docs/cto-policy.md`](docs/cto-policy.md)
-- ?몃? 猷⑦봽 ?뺤콉 (?곹븳 蹂묎린): [`docs/external-loop-policy.md`](docs/external-loop-policy.md)
-- ?쇰뱶諛?媛?대뱶 (?곹븳 蹂묎린): [`docs/feedback-guide.md`](docs/feedback-guide.md)
-- Skill slimming ?⑦꽩 (?곹븳 蹂묎린): [`docs/skill-slimming.md`](docs/skill-slimming.md)
+- **Claude 도구 엔트리 (primary):** [`docs/claude.md`](docs/claude.md) — 이 레포의 기본 진입점. 설치 · 키 · tier · 루프 개요.
+- **실사용 예시 (`examples/`):** [`examples/README.md`](examples/README.md) — build / ship / review / founder-workflow 시나리오. 입력 → agent 동작 → 출력 → 줄어든 문제.
+- 설치/운영 상세 (한글): [`docs/cowork-main-install.md`](docs/cowork-main-install.md)
+- Tier 정의 (한글): [`docs/tier-matrix.md`](docs/tier-matrix.md)
+- Tier 사용 예 (한글): [`docs/tier-examples.md`](docs/tier-examples.md)
+- CTO 운영 정책 (한글): [`docs/cto-policy.md`](docs/cto-policy.md)
+- 외부 루프 정책 (영문): [`docs/external-loop-policy.md`](docs/external-loop-policy.md)
+- 피드백 가이드 (영문): [`docs/feedback-guide.md`](docs/feedback-guide.md)
+- Skill slimming 패턴 (영문): [`docs/skill-slimming.md`](docs/skill-slimming.md)
 
 ---
 

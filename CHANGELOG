@@ -1,5 +1,63 @@
 # Changelog
 
+## Unreleased — Toolkit upgrade: per-tool entry points + examples/
+
+**Theme**: repositioning from "skill pack" to "toolkit" by splitting the
+docs surface along tool boundaries and filling `examples/` with real
+usage flows — not feature tours. Each example shows input → agent
+behavior → output → pain reduced, so you can recognise which failure
+mode an example applies to without reading the skill definitions.
+
+### Docs structure
+* **`docs/claude.md`** — primary tool entry point (English, slim).
+  Links deeper into `cowork-main-install.md` for install detail.
+  Landing for: install, keys, tier choice, loop overview.
+* **Per-tool entry-point convention** — README now lists tool entry
+  points as a table. Claude is supported today; Cursor / Windsurf /
+  Copilot rows are marked "Not yet" and will gain their own docs
+  pages when their execution adapters land. The core skills
+  (`review`, `build`, `ship`, `memory`, `craft`, `spark`) stay
+  tool-agnostic.
+* Removed the single-file top-level `Examples` file; replaced with a
+  full `examples/` tree.
+
+### examples/ (new)
+* `examples/build/add-google-oauth.md` — NextAuth + Supabase wiring
+  with env precheck before code gen.
+* `examples/build/fix-recurring-build-error.md` — circuit-breaker halt
+  on 3rd repeat error + root-cause patch instead of 4th band-aid.
+* `examples/ship/pre-deploy-env-lint.md` — service-scan + paste-ready
+  `vercel env add` commands before the deploy breaks.
+* `examples/ship/release-with-npm-publish.md` — version bump, tag,
+  idempotent publish, safe to re-run via workflow_dispatch.
+* `examples/review/dual-review-blocker.md` — Claude + Codex disagree
+  on a Stripe webhook race; cross-review resolves severity.
+* `examples/review/uiux-vision-check.md` — six-axis vision scorecard
+  on a preview URL surfaces AI-slop gradients and mobile tap targets.
+* `examples/founder-workflow/session-start-briefing.md` — 7-line brief
+  on session start instead of 15-minute context reload.
+* `examples/founder-workflow/idea-critique.md` — risk-first critique
+  surfaces a partnership conflict in 2 minutes.
+
+### Consistency
+* `scripts/validate-package.js` — required-file list no longer references
+  the removed `.cursorrules` / `.windsurfrules` /
+  `.github/copilot-instructions.md`. Now tracks `examples/README.md`
+  and `docs/claude.md`.
+* `bin/wizard.js` — default editor changed from `Cursor` to
+  `Claude Cowork` to match the supported primary surface.
+* README — new "Tool entry points" + "Examples" sections; document
+  bullet list cleaned up with proper UTF-8 Korean (the block that was
+  previously cp949-mojibake). Remaining Korean mojibake elsewhere in
+  the README is tracked as a separate encoding-repair pass.
+
+### No behavior change
+* No CLI commands changed. No skill specs changed. No API. Anyone who
+  had the previous version installed continues to work identically —
+  this is a documentation + examples release.
+
+---
+
 ## 1.1.0 — Tier-aware reviews, security signals, plugins & telegram
 
 **Theme**: closing the last gaps around signal quality and agent
