@@ -342,8 +342,71 @@ overall: N/10
 
 규칙: 한국어, 칭찬 금지 (단, [STRENGTHS] 섹션은 예외 — 사실 기반으로만), 간결. area 는 화면 영역명 (header/hero/card/footer/...). category 는 layout|typography|spacing|color|accessibility|polish.`;
 
-async function uiuxVisionReview({ screenshotPath, viewport = "desktop", projectSlug = null, model = CONFIG.visionModel, dryRun = false } = {}) {
+// ----------------------------------------------------------------------------
+// URL → screenshot capture (PR-G5 — Playwright-free path)
+// ----------------------------------------------------------------------------
+// Uses a public URL-to-image service (thum.io) so reviews work in CI, Cowork,
+// and air-gapped dev boxes without requiring a local Chrome/Playwright
+// install. fetchImpl is injectable for tests.
+
+const VIEWPORT_DIMS = {
+  mobile: { width: 375, height: 812 },
+  tablet: { width: 768, height: 1024 },
+  desktop: { width: 1280, height: 800 },
+};
+
+/**
+ * Capture a screenshot of `url` at the given viewport. Writes to `outPath`
+ * (or a temp file when omitted). Returns { path, bytes, source } on success,
+ * { ok:false, error } on failure.
+ */
+async function captureScreenshotFromUrl(url, opts = {}) {
+  const {
+    viewport = "desktop",
+    outPath = null,
+    fetchImpl,
+    timeoutMs = 15000,
+  } = opts;
+  const f = fetchImpl || (typeof fetch !== "undefined" ? fetch : null);
+  if (!f) return { ok: false, error: "fetch not available" };
+  if (!url || typeof url !== "string") return { ok: false, error: "url required" };
+
+  const dims = VIEWPORT_DIMS[viewport] || VIEWPORT_DIMS.desktop;
+  const shotUrl = `https://image.thum.io/get/width/${dims.width}/${encodeURIComponent(url)}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await f(shotUrl, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return { ok: false, error: `capture http ${res.status}` };
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (!buf.length) return { ok: false, error: "empty screenshot" };
+    const target = outPath || path.join(os.tmpdir(), `uiux-capture-${Date.now()}.png`);
+    ensureDir(path.dirname(target));
+    fs.writeFileSync(target, buf);
+    return { ok: true, path: target, bytes: buf.length, source: "thum.io", viewport };
+  } catch (e) {
+    clearTimeout(timer);
+    return { ok: false, error: e.name === "AbortError" ? "timeout" : String(e.message || e) };
+  }
+}
+
+async function uiuxVisionReview({ screenshotPath, url, viewport = "desktop", projectSlug = null, model = CONFIG.visionModel, dryRun = false, fetchImpl = null } = {}) {
   logSection(`uiux vision-review (${viewport})`);
+
+  // URL-capture path — no Playwright required.
+  if (!screenshotPath && url) {
+    logInfo(`Capturing screenshot from URL: ${url}`);
+    const cap = await captureScreenshotFromUrl(url, { viewport, fetchImpl });
+    if (!cap.ok) {
+      logError(`Capture failed: ${cap.error}`);
+      return null;
+    }
+    logSuccess(`Captured ${(cap.bytes / 1024).toFixed(1)} KB via ${cap.source} → ${cap.path}`);
+    screenshotPath = cap.path;
+  }
+
   if (!screenshotPath || !fs.existsSync(screenshotPath)) {
     logError(`Screenshot not found: ${screenshotPath}`);
     return null;
@@ -420,11 +483,11 @@ function parseStrengths(text) {
 // CROSS-VERIFY (Stage 3 — 코드 ↔ 시각 일치성)
 // ============================================================================
 
-async function uiuxCrossVerify({ diffSource = "staged", target = null, screenshotPath, viewport = "desktop", projectDir = process.cwd(), projectSlug = null } = {}) {
+async function uiuxCrossVerify({ diffSource = "staged", target = null, screenshotPath, url = null, viewport = "desktop", projectDir = process.cwd(), projectSlug = null, fetchImpl = null } = {}) {
   logSection("uiux cross-verify");
   const codeReview = await uiuxCodeReview({ diffSource, target, projectDir });
   if (!codeReview) { logWarn("Code review skipped"); }
-  const visionReview = await uiuxVisionReview({ screenshotPath, viewport, projectSlug });
+  const visionReview = await uiuxVisionReview({ screenshotPath, url, viewport, projectSlug, fetchImpl });
   if (!visionReview) { logWarn("Vision review skipped"); }
 
   if (!codeReview || !visionReview) return { codeReview, visionReview, alignment: null };
@@ -732,6 +795,9 @@ module.exports = {
   parseScores,
   parseStrengths,
   extractCategory,
+  // PR-G5 — Playwright-free URL capture
+  captureScreenshotFromUrl,
+  VIEWPORT_DIMS,
   _setSkillDirOverride,
 };
 
