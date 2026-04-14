@@ -772,6 +772,68 @@ function parseReviewResponse(text) {
   return { verdict, verdictKo: verdictLabel(verdict), issues, summary, nextAction };
 }
 
+/**
+ * Assess which external-signal tiers are active for this review.
+ *
+ * The three tiers of external evaluation (see docs/external-loop-policy.md):
+ *   T1 Peer Model     — another AI family reviewing (Claude + OpenAI dual)
+ *   T2 External Knowledge — web search / package registry / trend data
+ *   T3 Ground Truth    — real runtime logs / deploy status / production errors
+ *
+ * Without at least one tier active the review is a pure self-loop — the
+ * same model's opinion reinforcing itself. This function detects the
+ * environment so `formatSelfLoopWarning` can label the output honestly.
+ */
+function assessExternalSignals(opts = {}) {
+  const env = opts.env || process.env;
+  const flags = {
+    t1PeerModel: !!env.OPENAI_API_KEY,
+    t2ExternalKnowledge:
+      env.COWORK_EXTERNAL_KNOWLEDGE === "1"
+      || !!env.COWORK_WEB_SEARCH
+      || !!env.COWORK_PACKAGE_REGISTRY,
+    t3GroundTruth:
+      !!env.VERCEL_TOKEN
+      || !!env.SUPABASE_ACCESS_TOKEN
+      || env.COWORK_GROUND_TRUTH === "1",
+  };
+  const activeCount = Object.values(flags).filter(Boolean).length;
+  flags.activeCount = activeCount;
+  flags.isSelfLoop = activeCount === 0;
+  return flags;
+}
+
+/**
+ * Render a visible warning when the review has no external-signal backing.
+ *
+ * The review itself is still produced — we don't gate on this — but the
+ * warning makes the self-loop limitation legible to the user so they can
+ * decide whether to run `dual-review`, wire up MCP sources, or accept
+ * the narrower coverage.
+ */
+function formatSelfLoopWarning(signals) {
+  if (!signals || !signals.isSelfLoop) return "";
+  const box = `\n${COLORS.yellow}⚠️  [SELF-LOOP NOTICE]${COLORS.reset}\n`
+    + `${COLORS.gray}This review was produced by a single model family with no external signals.${COLORS.reset}\n`
+    + `${COLORS.gray}Missing: T1 peer model · T2 external knowledge · T3 ground truth.${COLORS.reset}\n`
+    + `${COLORS.gray}Why it matters: opinions reinforce themselves — blind spots persist.${COLORS.reset}\n`
+    + `${COLORS.gray}To close the loop, enable any of:${COLORS.reset}\n`
+    + `${COLORS.gray}  • T1 — set OPENAI_API_KEY and use 'solo-cto-agent dual-review'${COLORS.reset}\n`
+    + `${COLORS.gray}  • T2 — set COWORK_EXTERNAL_KNOWLEDGE=1 (trend + package checks)${COLORS.reset}\n`
+    + `${COLORS.gray}  • T3 — set VERCEL_TOKEN or SUPABASE_ACCESS_TOKEN (runtime signals)${COLORS.reset}\n`;
+  return box;
+}
+
+function formatPartialSignalHint(signals) {
+  if (!signals || signals.isSelfLoop || signals.activeCount >= 3) return "";
+  const missing = [];
+  if (!signals.t1PeerModel) missing.push("T1 peer model");
+  if (!signals.t2ExternalKnowledge) missing.push("T2 external knowledge");
+  if (!signals.t3GroundTruth) missing.push("T3 ground truth");
+  if (missing.length === 0) return "";
+  return `\n${COLORS.gray}ℹ️  Active external signals: ${signals.activeCount}/3. Missing: ${missing.join(", ")}.${COLORS.reset}\n`;
+}
+
 function formatCrossCheck(cc) {
   if (!cc) return "";
   let out = `\n${COLORS.bold}[CROSS-CHECK]${COLORS.reset} ${cc.crossVerdict}\n`;
@@ -1030,6 +1092,11 @@ ${diff}
       updatePersonalizationFromReview(review);
     } catch (_) { /* personalization 업데이트 실패는 리뷰 결과에 영향 없음 */ }
 
+    // External-signal assessment — tells the user whether this review had any
+    // non-self-loop backing (peer model / external knowledge / ground truth).
+    const externalSignals = assessExternalSignals();
+    reviewData.externalSignals = externalSignals;
+
     fs.writeFileSync(reviewFile, JSON.stringify(reviewData, null, 2));
 
     // Output based on format
@@ -1037,6 +1104,9 @@ ${diff}
       log(JSON.stringify(reviewData, null, 2));
     } else if (outputFormat === "markdown") {
       log(response.text);
+      if (externalSignals.isSelfLoop) {
+        log("\n> ⚠️ **SELF-LOOP NOTICE** — no external signals (peer model / external knowledge / ground truth) were active for this review. Run `dual-review` or set `VERCEL_TOKEN` / `SUPABASE_ACCESS_TOKEN` / `COWORK_EXTERNAL_KNOWLEDGE=1` to close the loop.\n");
+      }
     } else {
       // terminal format
       const costInfo = {
@@ -1049,6 +1119,13 @@ ${diff}
       log(output);
       if (reviewData.crossCheck) {
         log(formatCrossCheck(reviewData.crossCheck));
+      }
+      // Self-loop warning (if applicable) — or hint about partial signals.
+      const warning = formatSelfLoopWarning(externalSignals);
+      if (warning) log(warning);
+      else {
+        const hint = formatPartialSignalHint(externalSignals);
+        if (hint) log(hint);
       }
     }
 
@@ -1519,6 +1596,11 @@ ${diff}
     },
   };
 
+  // External-signal assessment. dual-review always has T1 (peer model) active,
+  // so this mostly surfaces whether T2/T3 are also present for full coverage.
+  const externalSignals = assessExternalSignals();
+  dualReviewData.externalSignals = externalSignals;
+
   fs.writeFileSync(reviewFile, JSON.stringify(dualReviewData, null, 2));
   logSuccess(`Dual review saved to ${reviewFile}`);
 
@@ -1547,6 +1629,10 @@ ${diff}
   );
   log(`${COLORS.bold}│${COLORS.reset} Common Issues: ${comparison.commonIssues.length}`);
   log(`${COLORS.bold}└────────────────────────┘${COLORS.reset}`);
+
+  // T1 is active here by definition (both keys present); hint about T2/T3 gaps.
+  const hint = formatPartialSignalHint(externalSignals);
+  if (hint) log(hint);
 
   return dualReviewData;
 }
@@ -1889,6 +1975,10 @@ module.exports = {
   updatePersonalizationFromReview,
   personalizationContext,
   recordFeedback,
+  // External-signal / self-loop assessment
+  assessExternalSignals,
+  formatSelfLoopWarning,
+  formatPartialSignalHint,
   detectLiveSources,
   liveSourceContext,
   buildIdentity,
