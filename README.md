@@ -24,7 +24,7 @@ This repo is my attempt to package those habits into a small set of reusable ski
 
 `solo-cto-agent` is an opinionated skill pack for solo founders, indie hackers, and small teams using AI coding agents in their build workflow.
 
-Primary workflow: **Claude Cowork + OpenAI Codex**. This is the only supported combination, and the rest of this document assumes Cowork + Codex.
+Primary workflow: **Claude Cowork + OpenAI Codex**. Cowork-only is supported for single-agent use, but this document assumes Cowork + Codex unless noted.
 
 The point is simple:
 
@@ -68,25 +68,22 @@ It is probably not a good fit if you:
 
 ## Tool entry points
 
-The agent is organised around **per-tool entry points**. Start from the doc for the tool you actually use.
+This pack is designed for Cowork + Codex. Start from the Claude entry point and expand only if you need automation.
 
 | Tool | Entry point | Status |
 |---|---|---|
-| **Claude** (Cowork + CLI) | [`docs/claude.md`](docs/claude.md) | Supported (primary) |
-| Cursor | ? | Not yet. Planned as this grows. |
-| Windsurf | ? | Not yet. Planned as this grows. |
-| GitHub Copilot | ? | Not yet. Planned as this grows. |
+| **Claude** (Cowork + CLI) | [docs/claude.md](docs/claude.md) | Supported (primary) |
 
-Right now Claude is the only supported execution surface. Other tools are on the roadmap and will get their own entry points as they land ? each with its own install, invocation pattern, and compatible skill subset. The repo's core skills (`review`, `build`, `ship`, `memory`, `craft`, `spark`) are written to be tool-agnostic; the entry-point docs are the place where the per-tool glue lives.
+Other tools are intentionally not covered yet to keep the workflow tight and consistent.
 
 ## Examples
 
-Real-world flows, four-part shape (input ¡æ agent behavior ¡æ output ¡æ pain reduced). Start with whichever subfolder matches your bottleneck:
+Real-world flows, four-part shape (input -> agent behavior -> output -> pain reduced). Start with whichever subfolder matches your bottleneck:
 
-- [`examples/build/`](examples/build/) ? writing features, escaping recurring error loops
-- [`examples/ship/`](examples/ship/) ? pre-deploy env lint, idempotent release pipeline
-- [`examples/review/`](examples/review/) ? dual-review blockers, UI/UX vision gates
-- [`examples/founder-workflow/`](examples/founder-workflow/) ? session brief, idea critique
+- [`examples/build/`](examples/build/) - writing features, escaping recurring error loops
+- [`examples/ship/`](examples/ship/) - pre-deploy env lint, idempotent release pipeline
+- [`examples/review/`](examples/review/) - dual-review blockers, UI/UX vision gates
+- [`examples/founder-workflow/`](examples/founder-workflow/) - session brief, idea critique
 
 See [`examples/README.md`](examples/README.md) for the full index.
 
@@ -153,14 +150,42 @@ solo-cto-agent/
 | Agent | Who reviews | Cowork (Claude) / Cowork + Codex |
 | Mode | Automation depth | Semi-auto (cowork-main) / Full-auto (codex-main) |
 
+Quick pick if you are unsure:
+- Start with Maker + Cowork + Semi-auto.
+- Move to Builder when you are shipping real features.
+- Move to CTO + Full-auto when you want always-on CI/CD and multi-agent routing.
+
+### Agents (summary)
+
+| Agent | What it means | When to use |
+|---|---|---|
+| Cowork (Claude) | single-agent review and fixes | cost-sensitive, fast iteration |
+| Cowork + Codex | dual review + cross-check | higher confidence, higher cost |
+
 ### Modes (summary)
 
 | | Semi-auto (cowork-main) | Full-auto (codex-main) |
 |---|---|---|
 | Runtime | Cowork desktop + CLI | GitHub Actions + orchestrator |
 | Triggers | manual / scheduled | webhook + repository_dispatch |
-| Sync | manual (dry-run default) | auto-commits scores + patterns |
-| Best for | local-first, low infra | full automation, CI/CD heavy |
+| Data freshness | manual sync (dry-run default) | auto-commits scores + patterns |
+| Infra | local-first, minimal | CI/CD + orchestrator repo |
+| Best for | low infra, private repos | full automation, multi-repo |
+
+Mode notes:
+- Semi-auto keeps network side-effects off by default. You run `sync --apply` only when you want remote data.
+- Full-auto assumes CI/CD is active and runs reviews, scoring, and reporting automatically.
+
+Full-auto requires:
+- an orchestrator repo
+- GitHub Actions secrets: `ORCHESTRATOR_PAT`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
+- pipelines installed via `setup-pipeline` or `setup.sh`
+
+Full-auto adds:
+- auto reviews + rework dispatch
+- decision queue + daily briefing
+- agent scores + routing
+- UI/UX quality gate + visual checks
 
 ### Tiers (summary)
 
@@ -171,36 +196,6 @@ solo-cto-agent/
 | CTO | Builder + orchestrate | multi-agent + routing |
 
 Details: `docs/tier-matrix.md`, `docs/tier-examples.md`, `docs/cto-policy.md`, `docs/cowork-main-install.md`.
-
-## Architecture
-
-```mermaid
-graph TD
-  subgraph "Session Start"
-    A[autopilot.md] --> B[Load context + templates]
-  end
-
-  subgraph "Skills"
-    C[build] --> D[ship]
-    E[spark] --> F[review]
-    G[craft]
-    H[memory]
-    I[orchestrate]
-  end
-
-  subgraph "Error Recovery"
-    J[failure-catalog.json] --> K[Pattern match]
-    K --> L{Fix found?}
-    L -->|yes| M[Apply + verify]
-    L -->|no, 3 tries| N[Stop + report]
-  end
-
-  B --> C
-  B --> E
-  D --> J
-  M --> D
-  H --> B
-```
 
 ## Install
 
@@ -248,7 +243,7 @@ Then open the skill file and replace the placeholders with your actual stack. Ex
 
 ### Using with Cowork + Codex
 
-Codex is a first-class target. Use the SKILL.md files directly as your instruction source. No extra Codex-specific files are required ->Cowork reads SKILL.md natively, and Codex (via OpenAI API) is invoked through the CLI when both keys are set.
+Codex is a first-class target. Use the SKILL.md files directly as your instruction source. No extra Codex-specific files are required - Cowork reads SKILL.md natively, and Codex (via OpenAI API) is invoked through the CLI when both keys are set.
 
 
 ## How I use autonomy
@@ -471,10 +466,10 @@ A: Because default AI output tends toward the same rounded-gradient look. The ru
 A: Not officially. This repo focuses on Cowork + Codex only.
 
 **Q: Why a separate orchestrator repo?**
-A: The orchestrator holds cross-repo logic (agent routing, score tracking, visual baselines, daily briefings) that doesn't belong in any single product repo. It dispatches workflows across your product repos and collects results centrally. If you only have one product repo, you can still use it ->the separation keeps CI/CD config out of your application code.
+A: The orchestrator holds cross-repo logic (agent routing, score tracking, visual baselines, daily briefings) that doesn't belong in any single product repo. It dispatches workflows across your product repos and collects results centrally. If you only have one product repo, you can still use it - the separation keeps CI/CD config out of your application code.
 
 **Q: How much do the API calls cost?**
-A: Typical per-PR cost depends on your review depth. A Claude auto-review of a medium PR (under 500 lines changed) uses roughly 5K-15K input tokens and 1K-3K output tokens. At Anthropic's Sonnet pricing that is well under $0.10 per review. If you add Codex cross-review (CTO tier), add roughly $0.05-0.15 per review for the OpenAI side. A solo dev doing 2-3 PRs per day can stay comfortably under $5/month on Anthropic and $5/month on OpenAI. Visual checks (Playwright screenshots) use no API tokens ->they run in GitHub Actions compute only.
+A: Typical per-PR cost depends on your review depth. A Claude auto-review of a medium PR (under 500 lines changed) uses roughly 5K-15K input tokens and 1K-3K output tokens. At Anthropic's Sonnet pricing that is well under $0.10 per review. If you add Codex cross-review (CTO tier), add roughly $0.05-0.15 per review for the OpenAI side. A solo dev doing 2-3 PRs per day can stay comfortably under $5/month on Anthropic and $5/month on OpenAI. Visual checks (Playwright screenshots) use no API tokens - they run in GitHub Actions compute only.
 
 **Q: Can I use this without GitHub Actions?**
 A: The skills (init, build, review, craft, etc.) work independently of CI/CD. You can install them and use them in your editor without ever running setup-pipeline. The CI/CD automation is an optional layer on top.
@@ -486,24 +481,34 @@ A: Run `solo-cto-agent sync --org <your-org>`. This fetches agent scores, workfl
 A: Here is a trimmed example from a production PR review:
 
 ```
-[claude-review] PR #42 ->Add group-buying countdown timer
-  ? ï¸ CHANGES_REQUESTED
+[claude-review] PR #42 - Add group-buying countdown timer
+  CHANGES_REQUESTED
   - Missing error boundary around countdown component
   - useEffect cleanup not handling unmount (memory leak risk)
-  - Hardcoded timezone offset ->use Intl.DateTimeFormat instead
+  - Hardcoded timezone offset - use Intl.DateTimeFormat instead
   - Price calculation should use Decimal, not float
-  ->Good: proper loading states, accessible aria-labels
+  Good: proper loading states, accessible aria-labels
 ```
 
 The review targets real issues (memory leaks, timezone bugs, floating-point money) rather than style nits.
 
 **Q: What happens on Day 1 with no data?**
-A: Everything works ->skills activate, build checks run, reviews trigger. The system starts empty and accumulates value over time. Agent scores begin tracking from the first PR. Error patterns grow as the failure catalog catches new issues. By session 10+ you will notice fewer repeated errors and more context-aware reviews.
+A: Everything works - skills activate, build checks run, reviews trigger. The system starts empty and accumulates value over time. Agent scores begin tracking from the first PR. Error patterns grow as the failure catalog catches new issues. By session 10+ you will notice fewer repeated errors and more context-aware reviews.
 
 **Q: Does this make network calls automatically?**
-A: No. `status` reads only local files. `sync` is manual and opt-in ->you run it explicitly when you want CI/CD data pulled from GitHub. Error pattern merging from `sync` is dry-run by default; use `sync --apply` to actually write changes. No background network activity, no telemetry.
+A: No. `status` reads only local files. `sync` is manual and opt-in - you run it explicitly when you want CI/CD data pulled from GitHub. Error pattern merging from `sync` is dry-run by default; use `sync --apply` to actually write changes. No background network activity, no telemetry.
 
 ---
+
+
+
+
+
+
+
+
+
+
 
 
 
