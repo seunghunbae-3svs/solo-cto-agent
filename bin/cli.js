@@ -1862,6 +1862,11 @@ async function main() {
     if (args.includes("--on")) opts.on = true;
     if (args.includes("--off")) opts.off = true;
     if (args.includes("--no-gh")) opts.withGh = false;
+    // PR-G10 — the top-level --lang flag is already parsed into
+    // i18n.setLocale() at cli.js main() startup. Passing it through
+    // opts lets the wizard runtime honor a last-moment override too.
+    const langIdx = args.indexOf("--lang");
+    if (langIdx >= 0) opts.lang = args[langIdx + 1];
 
     const dispatch = {
       wizard:   () => telegramWizard.runWizard(opts),

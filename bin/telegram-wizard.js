@@ -31,6 +31,14 @@ const https = require("https");
 
 const { isTTY, ask, askChoice, askYesNo, createRl } = require("./prompt-utils");
 const notifyConfig = require("./notify-config");
+// PR-G10 — i18n. `t()` falls back to en / key, so the wizard still
+// works if i18n.js is not present in the install (graceful degrade).
+let _i18n = null;
+try { _i18n = require("./i18n"); } catch (_) { _i18n = null; }
+function t(key, params) {
+  if (_i18n && typeof _i18n.t === "function") return _i18n.t(key, params);
+  return key;
+}
 
 // --------------------------------------------------------------------------
 // Small deps: minimal https wrapper. We avoid pulling `fetch` polyfills so
@@ -266,9 +274,16 @@ async function runWizard(opts = {}, deps = {}) {
   const postJson = deps.httpPostJson || httpPostJson;
   const cwd = opts.cwd || process.cwd();
 
+  // PR-G10 — allow callers (or the CLI top-level --lang) to override
+  // the active locale for just this wizard run without mutating global
+  // state. Default keeps whatever the cli.js dispatch already set.
+  if (_i18n && opts.lang && _i18n.isSupported && _i18n.isSupported(opts.lang)) {
+    _i18n.setLocale(opts.lang);
+  }
+
   const experimental = process.env.SOLO_CTO_EXPERIMENTAL === "1";
   if (!experimental && !opts.force) {
-    errLog("telegram-wizard is experimental. Re-run with SOLO_CTO_EXPERIMENTAL=1 to continue.");
+    errLog(t("telegram.wizard.not_experimental"));
     return { ok: false, reason: "NOT_EXPERIMENTAL" };
   }
 
@@ -280,16 +295,16 @@ async function runWizard(opts = {}, deps = {}) {
     let token = opts.token;
     if (!token) {
       if (nonInteractive) {
-        errLog("--token required in non-interactive mode");
+        errLog(t("telegram.wizard.step1.missing_token"));
         return { ok: false, reason: "MISSING_TOKEN" };
       }
       rl = rl || (deps.rl || createRl());
-      log("[1/5] Bot token");
-      log("      Open https://t.me/BotFather, run /newbot (or /mybots), then paste the token.");
+      log(t("telegram.wizard.step1.header"));
+      log(t("telegram.wizard.step1.hint"));
       while (true) {
         const answer = await ask(rl, "      token");
-        if (!answer) { log("      (empty — try again)"); continue; }
-        if (!isTokenShapeValid(answer)) { log("      token format looks off (expected 123:ABC...). Try again."); continue; }
+        if (!answer) { log(t("telegram.wizard.step1.empty")); continue; }
+        if (!isTokenShapeValid(answer)) { log(t("telegram.wizard.step1.bad_shape")); continue; }
         token = answer;
         break;
       }
@@ -301,7 +316,7 @@ async function runWizard(opts = {}, deps = {}) {
     let bot;
     try {
       bot = await verifyToken(token, { fetchImpl: getJson });
-      log(`      ✓ Verified with Telegram (getMe): @${bot.username || bot.id}`);
+      log(t("telegram.wizard.step1.verified", { username: bot.username || bot.id }));
     } catch (e) {
       errLog(`      ✗ ${e.message}`);
       return { ok: false, reason: "GETME_FAILED", error: e.message };
@@ -311,14 +326,14 @@ async function runWizard(opts = {}, deps = {}) {
     let chatInfo;
     if (opts.chat) {
       chatInfo = { chatId: opts.chat, kind: "unknown", name: null, text: "" };
-      log(`[2/5] Using provided chat id ${opts.chat}`);
+      log(t("telegram.wizard.step2.using_provided", { chatId: opts.chat }));
     } else if (nonInteractive) {
-      errLog("--chat required in non-interactive mode");
+      errLog(t("telegram.wizard.step2.missing_chat"));
       return { ok: false, reason: "MISSING_CHAT" };
     } else {
       rl = rl || (deps.rl || createRl());
-      log(`[2/5] Send ANY message to @${bot.username} now.`);
-      log("      (waiting up to 60 s — Ctrl-C cancels)");
+      log(t("telegram.wizard.step2.send_message", { username: bot.username }));
+      log(t("telegram.wizard.step2.waiting"));
       try {
         chatInfo = await captureChatId(token, {
           timeoutMs: (opts.timeout || 60) * 1000,
@@ -327,7 +342,11 @@ async function runWizard(opts = {}, deps = {}) {
           now: deps.now,
         });
         const namePart = chatInfo.name ? ` from ${chatInfo.name}` : "";
-        log(`      ✓ Got message${namePart} in chat ${chatInfo.chatId} (${chatInfo.kind})`);
+        log(t("telegram.wizard.step2.captured", {
+          namePart,
+          chatId: chatInfo.chatId,
+          kind: chatInfo.kind,
+        }));
       } catch (e) {
         errLog(`      ✗ ${e.message}`);
         return { ok: false, reason: e.code || "CAPTURE_FAILED" };
@@ -337,13 +356,13 @@ async function runWizard(opts = {}, deps = {}) {
     // ── Step 3: storage ──────────────────────────────────────────────
     let storage = opts.storage;
     if (!storage) {
-      if (nonInteractive) { errLog("--storage required in non-interactive mode"); return { ok: false, reason: "MISSING_STORAGE" }; }
+      if (nonInteractive) { errLog(t("telegram.wizard.step3.missing_storage")); return { ok: false, reason: "MISSING_STORAGE" }; }
       rl = rl || (deps.rl || createRl());
-      log("[3/5] Where to save credentials?");
-      log("      (1) .env (repo-local)");
-      log("      (2) shell profile (~/.zshrc or ~/.bashrc)");
-      log("      (3) GitHub repo secrets (gh)");
-      log("      (4) all of the above");
+      log(t("telegram.wizard.step3.header"));
+      log(t("telegram.wizard.step3.opt1"));
+      log(t("telegram.wizard.step3.opt2"));
+      log(t("telegram.wizard.step3.opt3"));
+      log(t("telegram.wizard.step3.opt4"));
       storage = await askChoice(rl, "      choice", 4, 1);
     }
 
@@ -357,7 +376,7 @@ async function runWizard(opts = {}, deps = {}) {
     }, log, errLog);
 
     // ── Step 4: live test ────────────────────────────────────────────
-    log("[4/5] Sending test notification…");
+    log(t("telegram.wizard.step4.sending"));
     try {
       const msg = await sendTestMessage(
         token,
@@ -365,7 +384,10 @@ async function runWizard(opts = {}, deps = {}) {
         "✅ <b>solo-cto-agent</b> is now wired up.\nYou'll get alerts on review blockers, dual-review disagreement, and CI failures.",
         { fetchImpl: postJson },
       );
-      log(`      ✓ Delivered to chat ${chatInfo.chatId} (message_id=${msg.message_id})`);
+      log(t("telegram.wizard.step4.delivered", {
+        chatId: chatInfo.chatId,
+        messageId: msg.message_id,
+      }));
     } catch (e) {
       errLog(`      ✗ ${e.message}`);
       return { ok: false, reason: "SEND_FAILED", error: e.message };
@@ -376,17 +398,17 @@ async function runWizard(opts = {}, deps = {}) {
     try {
       notifyResult = notifyConfig.ensureDefaultConfig();
       if (notifyResult.created) {
-        log(`[5/5] Wrote default notify config → ${notifyResult.path}`);
-        log("      Customize: solo-cto-agent telegram config");
+        log(t("telegram.wizard.step5.wrote_config", { path: notifyResult.path }));
+        log(t("telegram.wizard.step5.customize_hint"));
       } else {
-        log(`[5/5] Notify config already present → ${notifyResult.path}`);
+        log(t("telegram.wizard.step5.already_present", { path: notifyResult.path }));
       }
     } catch (e) {
-      errLog(`[5/5] Could not write notify config: ${e.message}`);
+      errLog(t("telegram.wizard.step5.write_failed", { detail: e.message }));
       notifyResult = { created: false, error: e.message };
     }
 
-    log("      All set. Turn off anytime with: solo-cto-agent telegram disable");
+    log(t("telegram.wizard.done"));
     return {
       ok: true,
       bot: { username: bot.username, id: bot.id },
