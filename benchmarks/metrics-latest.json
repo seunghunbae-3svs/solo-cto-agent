@@ -1,0 +1,16 @@
+{
+  "repo": "seunghunbae-3svs/solo-cto-agent",
+  "window_days": 30,
+  "collected_at": "2026-04-14T07:55:55.511Z",
+  "pr_count": 48,
+  "merged_count": 40,
+  "mean_time_to_merge_hours": 0.71,
+  "mean_time_to_first_review_hours": null,
+  "review_count_avg": 0,
+  "changes_requested_rate": 0,
+  "cross_review_rate": 0,
+  "notes": [
+    "Cross-review rate is based on >=2 unique reviewers (excluding author).",
+    "Only the most recent 100 PRs are sampled."
+  ]
+}
