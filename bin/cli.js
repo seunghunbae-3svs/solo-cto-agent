@@ -122,7 +122,10 @@ function writeFileIfMissing(filePath, content, force) {
 function copyDirSafe(src, dest, force) {
   if (!fs.existsSync(src)) return false;
   if (fs.existsSync(dest) && !force) return false;
-  fs.cpSync(src, dest, { recursive: true, force: true });
+  if (fs.existsSync(dest) && force) {
+    fs.rmSync(dest, { recursive: true, force: true });
+  }
+  copyRecursive(src, dest);
   return true;
 }
 

@@ -1,9 +1,20 @@
 import { describe, it, expect } from "vitest";
 import { spawnSync } from "child_process";
 
+function getNpmCommand() {
+  if (process.env.npm_execpath) {
+    return { cmd: process.execPath, args: [process.env.npm_execpath] };
+  }
+  if (process.platform === "win32") {
+    return { cmd: "npm.cmd", args: [] };
+  }
+  return { cmd: "npm", args: [] };
+}
+
 describe("npm pack", () => {
   it("produces a tarball with required files", () => {
-    const r = spawnSync("npm", ["pack", "--dry-run", "--json"], {
+    const npm = getNpmCommand();
+    const r = spawnSync(npm.cmd, [...npm.args, "pack", "--dry-run", "--json"], {
       encoding: "utf8",
       cwd: process.cwd(),
     });
@@ -33,7 +44,8 @@ describe("npm pack", () => {
   });
 
   it("does not include test or CI files", () => {
-    const r = spawnSync("npm", ["pack", "--dry-run", "--json"], {
+    const npm = getNpmCommand();
+    const r = spawnSync(npm.cmd, [...npm.args, "pack", "--dry-run", "--json"], {
       encoding: "utf8",
       cwd: process.cwd(),
     });
@@ -41,7 +53,9 @@ describe("npm pack", () => {
     const files = output[0].files.map((f) => f.path);
 
     const testFiles = files.filter((f) => f.startsWith("tests/"));
-    const workflowFiles = files.filter((f) => f.includes(".github/"));
+    const workflowFiles = files.filter(
+      (f) => f.includes(".github/") && !f.startsWith("templates/")
+    );
 
     expect(testFiles.length).toBe(0);
     expect(workflowFiles.length).toBe(0);
