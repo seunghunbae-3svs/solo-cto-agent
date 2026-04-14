@@ -30,6 +30,7 @@ const os = require("os");
 const https = require("https");
 
 const { isTTY, ask, askChoice, askYesNo, createRl } = require("./prompt-utils");
+const notifyConfig = require("./notify-config");
 
 // --------------------------------------------------------------------------
 // Small deps: minimal https wrapper. We avoid pulling `fetch` polyfills so
@@ -370,13 +371,28 @@ async function runWizard(opts = {}, deps = {}) {
       return { ok: false, reason: "SEND_FAILED", error: e.message };
     }
 
-    // ── Step 5: done ─────────────────────────────────────────────────
-    log("[5/5] All set.");
+    // ── Step 5: seed notify.json + done ─────────────────────────────
+    let notifyResult = null;
+    try {
+      notifyResult = notifyConfig.ensureDefaultConfig();
+      if (notifyResult.created) {
+        log(`[5/5] Wrote default notify config → ${notifyResult.path}`);
+        log("      Customize: solo-cto-agent telegram config");
+      } else {
+        log(`[5/5] Notify config already present → ${notifyResult.path}`);
+      }
+    } catch (e) {
+      errLog(`[5/5] Could not write notify config: ${e.message}`);
+      notifyResult = { created: false, error: e.message };
+    }
+
+    log("      All set. Turn off anytime with: solo-cto-agent telegram disable");
     return {
       ok: true,
       bot: { username: bot.username, id: bot.id },
       chat: chatInfo,
       storage: storageResults,
+      notifyConfig: notifyResult,
     };
   } finally {
     if (rl && !deps.rl) rl.close();
@@ -459,12 +475,342 @@ function defaultExec(argv) {
 }
 
 // --------------------------------------------------------------------------
+// Subcommands — test / config / status / disable / verify.
+// Each one is a thin, pure-ish helper so bin/cli.js can stay slim and
+// tests/telegram-wizard.test.mjs can hit the surface directly.
+// --------------------------------------------------------------------------
+
+/**
+ * Resolve the active token / chat. Priority: explicit opts → process.env.
+ * Returns { token, chatId, source } where `source` is 'args' | 'env'.
+ */
+function resolveCreds(opts = {}) {
+  const token = opts.token || process.env.TELEGRAM_BOT_TOKEN || "";
+  const chatId = opts.chat || process.env.TELEGRAM_CHAT_ID || "";
+  const source = opts.token || opts.chat ? "args" : "env";
+  return { token, chatId, source };
+}
+
+/**
+ * `telegram test` — send a one-shot test message with current creds.
+ * Does NOT consult notify-config (the whole point is to confirm the pipe
+ * works even if all events are disabled).
+ */
+async function telegramTest(opts = {}, deps = {}) {
+  const log = deps.log || ((l) => process.stdout.write(l + "\n"));
+  const errLog = deps.errLog || ((l) => process.stderr.write(l + "\n"));
+  const postJson = deps.httpPostJson || httpPostJson;
+
+  const { token, chatId, source } = resolveCreds(opts);
+  if (!token || !chatId) {
+    errLog("✗ Missing TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID (not in env and no --token/--chat).");
+    errLog("  Run `solo-cto-agent telegram wizard` first, or pass --token/--chat.");
+    return { ok: false, reason: "MISSING_CREDS" };
+  }
+  if (!isTokenShapeValid(token)) {
+    errLog("✗ token format looks off (expected '123:ABC...')");
+    return { ok: false, reason: "BAD_TOKEN_SHAPE" };
+  }
+
+  const text = opts.text
+    || "🔔 <b>solo-cto-agent</b> — test notification.\nIf you see this, the wire is live.";
+
+  try {
+    const msg = await sendTestMessage(token, chatId, text, { fetchImpl: postJson });
+    log(`✓ Delivered to chat ${chatId} (message_id=${msg.message_id}, source=${source})`);
+    return { ok: true, messageId: msg.message_id, source };
+  } catch (e) {
+    errLog(`✗ ${e.message}`);
+    return { ok: false, reason: "SEND_FAILED", error: e.message };
+  }
+}
+
+/**
+ * `telegram verify` — non-interactive round-trip (getMe + sendMessage).
+ * Returns a structured result for CI-style scripts. No stdout chrome
+ * unless `deps.log` is wired up.
+ */
+async function telegramVerify(opts = {}, deps = {}) {
+  const log = deps.log || ((l) => process.stdout.write(l + "\n"));
+  const errLog = deps.errLog || ((l) => process.stderr.write(l + "\n"));
+  const getJson = deps.httpGetJson || httpGetJson;
+  const postJson = deps.httpPostJson || httpPostJson;
+
+  const { token, chatId } = resolveCreds(opts);
+  if (!token) {
+    errLog("✗ TELEGRAM_BOT_TOKEN not set (and no --token)");
+    return { ok: false, reason: "MISSING_TOKEN" };
+  }
+  if (!isTokenShapeValid(token)) {
+    errLog("✗ token format looks off");
+    return { ok: false, reason: "BAD_TOKEN_SHAPE" };
+  }
+
+  let bot;
+  try {
+    bot = await verifyToken(token, { fetchImpl: getJson });
+    log(`✓ getMe: @${bot.username || bot.id}`);
+  } catch (e) {
+    errLog(`✗ getMe failed: ${e.message}`);
+    return { ok: false, reason: "GETME_FAILED", error: e.message };
+  }
+
+  if (!chatId) {
+    log("(no chat id provided → skipping sendMessage round-trip)");
+    return { ok: true, bot: { username: bot.username, id: bot.id }, sent: false };
+  }
+
+  try {
+    const msg = await sendTestMessage(
+      token,
+      chatId,
+      opts.text || "✔ solo-cto-agent verify",
+      { fetchImpl: postJson },
+    );
+    log(`✓ sendMessage → chat ${chatId} (message_id=${msg.message_id})`);
+    return {
+      ok: true,
+      bot: { username: bot.username, id: bot.id },
+      sent: true,
+      messageId: msg.message_id,
+    };
+  } catch (e) {
+    errLog(`✗ sendMessage failed: ${e.message}`);
+    return { ok: false, reason: "SEND_FAILED", error: e.message };
+  }
+}
+
+/**
+ * `telegram status` — show where creds are coming from + notify config
+ * summary. Pure read, no network.
+ */
+function telegramStatus(opts = {}, deps = {}) {
+  const log = deps.log || ((l) => process.stdout.write(l + "\n"));
+  const cwd = opts.cwd || process.cwd();
+
+  const envToken = process.env.TELEGRAM_BOT_TOKEN || "";
+  const envChat = process.env.TELEGRAM_CHAT_ID || "";
+
+  // Detect per-backend presence
+  const envFile = path.join(cwd, ".env");
+  const shellFile = shellProfilePath();
+  const envFileHas = fs.existsSync(envFile)
+    && fs.readFileSync(envFile, "utf8").includes(ENV_BLOCK_BEGIN);
+  const shellFileHas = fs.existsSync(shellFile)
+    && fs.readFileSync(shellFile, "utf8").includes(ENV_BLOCK_BEGIN);
+
+  const cfg = notifyConfig.readConfig();
+  const cfgPath = notifyConfig.configPath();
+  const cfgExists = fs.existsSync(cfgPath);
+
+  const masked = (s) => (s ? `${s.slice(0, 4)}…${s.slice(-4)}` : "(unset)");
+
+  log("solo-cto-agent telegram status");
+  log("────────────────────────────────");
+  log(`  Token (env):          ${masked(envToken)}`);
+  log(`  Chat  (env):          ${envChat || "(unset)"}`);
+  log(`  .env block:           ${envFileHas ? envFile : "(not present)"}`);
+  log(`  Shell profile block:  ${shellFileHas ? shellFile : "(not present)"}`);
+  log(`  Notify config:        ${cfgPath} ${cfgExists ? "" : "(defaults — file not written)"}`);
+  log(`  Format:               ${cfg.format}`);
+  log(`  Channels:             ${(cfg.channels || []).join(", ") || "(none)"}`);
+  log("  Events:");
+  for (const ev of notifyConfig.KNOWN_EVENTS) {
+    const on = cfg.events[ev] === true;
+    log(`    ${on ? "✓" : "·"} ${ev}${on ? "" : "  (off)"}`);
+  }
+
+  return {
+    ok: true,
+    creds: {
+      envToken: !!envToken,
+      envChat: !!envChat,
+      envFile: envFileHas ? envFile : null,
+      shellFile: shellFileHas ? shellFile : null,
+    },
+    notify: { path: cfgPath, exists: cfgExists, config: cfg },
+  };
+}
+
+/**
+ * `telegram disable` — strip credentials from every storage backend we
+ * wrote to and drop 'telegram' from notify-config.channels. Each backend
+ * is best-effort; we report per-backend outcome.
+ */
+async function telegramDisable(opts = {}, deps = {}) {
+  const log = deps.log || ((l) => process.stdout.write(l + "\n"));
+  const errLog = deps.errLog || ((l) => process.stderr.write(l + "\n"));
+  const cwd = opts.cwd || process.cwd();
+  const runExec = deps.exec || defaultExec;
+
+  const results = {};
+
+  // .env
+  try {
+    const envFile = path.join(cwd, ".env");
+    const r = removeEnvBlock(envFile);
+    log(r.removed ? `✓ Removed block from ${envFile}` : `· No block in ${envFile}`);
+    results.env = r;
+  } catch (e) {
+    errLog(`✗ .env: ${e.message}`);
+    results.env = { ok: false, error: e.message };
+  }
+
+  // shell profile
+  try {
+    const profile = shellProfilePath();
+    const r = removeEnvBlock(profile);
+    log(r.removed ? `✓ Removed block from ${profile}` : `· No block in ${profile}`);
+    results.shell = r;
+  } catch (e) {
+    errLog(`✗ shell profile: ${e.message}`);
+    results.shell = { ok: false, error: e.message };
+  }
+
+  // GitHub secrets (only if gh auth works; best effort)
+  if (opts.withGh !== false) {
+    try {
+      const auth = await runExec(["gh", "auth", "status"]);
+      if (auth.code !== 0) {
+        log("· gh not signed in — skipping GitHub secret removal");
+        results.gh = { ok: false, skipped: true };
+      } else {
+        await runExec(["gh", "secret", "remove", "TELEGRAM_BOT_TOKEN"]);
+        await runExec(["gh", "secret", "remove", "TELEGRAM_CHAT_ID"]);
+        log("✓ Removed GitHub secrets (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)");
+        results.gh = { ok: true };
+      }
+    } catch (e) {
+      errLog(`· gh: ${e.message}`);
+      results.gh = { ok: false, error: e.message };
+    }
+  }
+
+  // Drop 'telegram' from notify-config channels (if config exists)
+  try {
+    if (fs.existsSync(notifyConfig.configPath())) {
+      const updated = notifyConfig.setChannelEnabled("telegram", false);
+      log("✓ Dropped 'telegram' from notify-config channels");
+      results.notifyConfig = { ok: true, channels: updated.channels };
+    } else {
+      results.notifyConfig = { ok: true, skipped: true };
+    }
+  } catch (e) {
+    errLog(`✗ notify-config: ${e.message}`);
+    results.notifyConfig = { ok: false, error: e.message };
+  }
+
+  log("Disabled. Re-run `solo-cto-agent telegram wizard` to re-enable.");
+  return { ok: true, results };
+}
+
+/**
+ * `telegram config` — view or toggle a single event in notify.json.
+ *
+ * Non-interactive shapes:
+ *   --list              → dump current config to stdout
+ *   --event X --on      → enable event X
+ *   --event X --off     → disable event X
+ *   --format compact|detailed
+ *
+ * Interactive fall-back: prints a numbered menu of known events with
+ * their current state, user picks a number to toggle, blank = exit.
+ */
+async function telegramConfig(opts = {}, deps = {}) {
+  const log = deps.log || ((l) => process.stdout.write(l + "\n"));
+  const errLog = deps.errLog || ((l) => process.stderr.write(l + "\n"));
+
+  // Set explicit format
+  if (opts.format) {
+    if (!notifyConfig.KNOWN_FORMATS.includes(opts.format)) {
+      errLog(`✗ format must be one of: ${notifyConfig.KNOWN_FORMATS.join(", ")}`);
+      return { ok: false, reason: "BAD_FORMAT" };
+    }
+    const cfg = notifyConfig.readConfig();
+    cfg.format = opts.format;
+    const written = notifyConfig.writeConfig(cfg);
+    log(`✓ format = ${written.format}`);
+    return { ok: true, config: written };
+  }
+
+  // Toggle explicit event
+  if (opts.event) {
+    if (!notifyConfig.KNOWN_EVENTS.includes(opts.event)) {
+      errLog(`✗ unknown event '${opts.event}'. Known: ${notifyConfig.KNOWN_EVENTS.join(", ")}`);
+      return { ok: false, reason: "UNKNOWN_EVENT" };
+    }
+    if (opts.on === undefined && opts.off === undefined) {
+      errLog("✗ pass --on or --off with --event");
+      return { ok: false, reason: "MISSING_TOGGLE" };
+    }
+    const enabled = opts.on === true && opts.off !== true;
+    const written = notifyConfig.setEventEnabled(opts.event, enabled);
+    log(`✓ ${opts.event} = ${enabled ? "on" : "off"}`);
+    return { ok: true, config: written };
+  }
+
+  // List mode (default when no action flag)
+  if (opts.list || (!opts.event && !opts.format && (opts.nonInteractive || !isTTY()))) {
+    const cfg = notifyConfig.readConfig();
+    log(`config: ${notifyConfig.configPath()}`);
+    log(`format: ${cfg.format}`);
+    log(`channels: ${(cfg.channels || []).join(", ") || "(none)"}`);
+    log("events:");
+    for (const ev of notifyConfig.KNOWN_EVENTS) {
+      log(`  ${cfg.events[ev] ? "✓" : "·"} ${ev}`);
+    }
+    return { ok: true, config: cfg };
+  }
+
+  // Interactive toggle menu
+  const rl = deps.rl || createRl();
+  try {
+    while (true) {
+      const cfg = notifyConfig.readConfig();
+      log("");
+      log(`notify config — ${notifyConfig.configPath()}`);
+      notifyConfig.KNOWN_EVENTS.forEach((ev, i) => {
+        log(`  [${i + 1}] ${cfg.events[ev] ? "✓" : "·"} ${ev}`);
+      });
+      log(`  [f] format: ${cfg.format}`);
+      log("  [enter] save + exit");
+      const answer = await ask(rl, "  toggle which?");
+      if (!answer) break;
+      if (answer === "f") {
+        const next = cfg.format === "compact" ? "detailed" : "compact";
+        cfg.format = next;
+        notifyConfig.writeConfig(cfg);
+        log(`  → format = ${next}`);
+        continue;
+      }
+      const idx = parseInt(answer, 10);
+      if (!Number.isInteger(idx) || idx < 1 || idx > notifyConfig.KNOWN_EVENTS.length) {
+        log("  (invalid choice)");
+        continue;
+      }
+      const ev = notifyConfig.KNOWN_EVENTS[idx - 1];
+      notifyConfig.setEventEnabled(ev, !cfg.events[ev]);
+    }
+    return { ok: true, config: notifyConfig.readConfig() };
+  } finally {
+    if (!deps.rl) rl.close();
+  }
+}
+
+// --------------------------------------------------------------------------
 // Exports
 // --------------------------------------------------------------------------
 
 module.exports = {
   // public
   runWizard,
+
+  // subcommands (PR-G7-subcommands)
+  telegramTest,
+  telegramVerify,
+  telegramStatus,
+  telegramDisable,
+  telegramConfig,
 
   // helpers (exported for tests / future subcommands)
   isTokenShapeValid,
@@ -476,4 +822,5 @@ module.exports = {
   ensureGitignoreEnv,
   shellProfilePath,
   applyStorage,
+  resolveCreds,
 };

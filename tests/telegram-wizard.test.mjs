@@ -232,10 +232,19 @@ describe("applyStorage", () => {
 // ----------------------------------------------------------------------------
 describe("runWizard (non-interactive)", () => {
   const prev = process.env.SOLO_CTO_EXPERIMENTAL;
-  beforeEach(() => { process.env.SOLO_CTO_EXPERIMENTAL = "1"; });
+  let prevNotifyCfg;
+  beforeEach(() => {
+    process.env.SOLO_CTO_EXPERIMENTAL = "1";
+    // Step 5 writes notify.json — isolate it so we don't pollute ~/.
+    prevNotifyCfg = process.env.SOLO_CTO_NOTIFY_CONFIG;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tg-wiz-cfg-"));
+    process.env.SOLO_CTO_NOTIFY_CONFIG = path.join(dir, "notify.json");
+  });
   afterEach(() => {
     if (prev === undefined) delete process.env.SOLO_CTO_EXPERIMENTAL;
     else process.env.SOLO_CTO_EXPERIMENTAL = prev;
+    if (prevNotifyCfg === undefined) delete process.env.SOLO_CTO_NOTIFY_CONFIG;
+    else process.env.SOLO_CTO_NOTIFY_CONFIG = prevNotifyCfg;
   });
 
   it("runs end-to-end with --token/--chat/--storage 1", async () => {

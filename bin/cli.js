@@ -1826,19 +1826,39 @@ async function main() {
       process.exit(1);
     }
     const sub = args[1] || "wizard";
-    if (sub !== "wizard") {
-      console.error(`❌ Unknown telegram subcommand: ${sub}`);
-      console.error(`   Use: solo-cto-agent telegram wizard`);
-      process.exit(1);
-    }
+
+    // Common flag parser (subset relevant to each subcommand).
     const opts = {};
     const tokIdx = args.indexOf("--token");      if (tokIdx >= 0) opts.token = args[tokIdx + 1];
     const chatIdx = args.indexOf("--chat");      if (chatIdx >= 0) opts.chat = args[chatIdx + 1];
     const stoIdx = args.indexOf("--storage");    if (stoIdx >= 0) opts.storage = parseInt(args[stoIdx + 1], 10);
     const toutIdx = args.indexOf("--timeout");   if (toutIdx >= 0) opts.timeout = parseInt(args[toutIdx + 1], 10);
+    const eventIdx = args.indexOf("--event");    if (eventIdx >= 0) opts.event = args[eventIdx + 1];
+    const fmtIdx = args.indexOf("--format");     if (fmtIdx >= 0) opts.format = args[fmtIdx + 1];
+    const textIdx = args.indexOf("--text");      if (textIdx >= 0) opts.text = args[textIdx + 1];
     if (args.includes("--non-interactive")) opts.nonInteractive = true;
     if (args.includes("--force")) opts.force = true;
-    telegramWizard.runWizard(opts).then((res) => {
+    if (args.includes("--list")) opts.list = true;
+    if (args.includes("--on")) opts.on = true;
+    if (args.includes("--off")) opts.off = true;
+    if (args.includes("--no-gh")) opts.withGh = false;
+
+    const dispatch = {
+      wizard:   () => telegramWizard.runWizard(opts),
+      test:     () => telegramWizard.telegramTest(opts),
+      verify:   () => telegramWizard.telegramVerify(opts),
+      status:   () => Promise.resolve(telegramWizard.telegramStatus(opts)),
+      disable:  () => telegramWizard.telegramDisable(opts),
+      config:   () => telegramWizard.telegramConfig(opts),
+    };
+
+    if (!dispatch[sub]) {
+      console.error(`❌ Unknown telegram subcommand: ${sub}`);
+      console.error(`   Use: solo-cto-agent telegram wizard|test|verify|status|disable|config`);
+      process.exit(1);
+    }
+
+    dispatch[sub]().then((res) => {
       if (!res || !res.ok) process.exit(1);
     }).catch((e) => {
       console.error(`❌ ${e.message}`);
