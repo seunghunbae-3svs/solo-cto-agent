@@ -76,7 +76,8 @@ function apiGet(pathname, token) {
 async function fetchRepoJson(ownerRepo, filePath, token) {
   try {
     const data = await apiGet(`/repos/${ownerRepo}/contents/${filePath}`, token);
-    const content = Buffer.from(data.content || '', 'base64').toString('utf8');
+    let content = Buffer.from(data.content || '', 'base64').toString('utf8');
+    content = content.replace(/^\uFEFF/, '');
     return content ? JSON.parse(content) : null;
   } catch (err) {
     if (String(err.message || err).includes('404')) return null;
