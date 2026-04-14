@@ -7,6 +7,7 @@ import { execSync } from "child_process";
 
 const require = createRequire(import.meta.url);
 const rework = require("../bin/rework.js");
+const normalizeNewlines = (text) => text.replace(/\r\n/g, "\n");
 
 function makeTempRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rework-test-"));
@@ -95,7 +96,8 @@ describe("rework: applyFixes safety + dry-run", () => {
     expect(result.applied).toHaveLength(1);
     expect(result.applied[0]).toMatchObject({ applied: false, dryRun: true, validated: true });
     // File untouched
-    expect(fs.readFileSync(path.join(repo, "a.txt"), "utf8")).toBe("hello\nworld\n");
+    const content = normalizeNewlines(fs.readFileSync(path.join(repo, "a.txt"), "utf8"));
+    expect(content).toBe("hello\nworld\n");
   });
 
   it("--apply actually patches files when validation passes", async () => {
@@ -109,7 +111,8 @@ describe("rework: applyFixes safety + dry-run", () => {
     expect(result.cleanBefore).toBe(true);
     expect(result.applied).toHaveLength(1);
     expect(result.applied[0].applied).toBe(true);
-    expect(fs.readFileSync(path.join(repo, "a.txt"), "utf8")).toBe("HELLO\nworld\n");
+    const content = normalizeNewlines(fs.readFileSync(path.join(repo, "a.txt"), "utf8"));
+    expect(content).toBe("HELLO\nworld\n");
   });
 
   it("refuses --apply when working tree is dirty (cleanCheck on)", async () => {
