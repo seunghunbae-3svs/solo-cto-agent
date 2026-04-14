@@ -23,8 +23,7 @@ This repo is my attempt to package those habits into a small set of reusable ski
 
 `solo-cto-agent` is an opinionated skill pack for solo founders, indie hackers, and small teams using AI coding agents in their build workflow.
 
-Primary workflow: Cowork + Codex.  
-It was built around Claude Code & OpenAI Codex but the core rules also work in Cursor, Windsurf, and GitHub Copilot. The repo includes native config files where needed.
+Primary workflow: **Claude Cowork + OpenAI Codex**. This is the only combination that gets the full feature surface (dual review, cross-check, routing, UI/UX vision). Other AI editors (Cursor, Windsurf, Copilot) are supported as a legacy compatibility layer via the included rule files — see [Appendix: Legacy multi-editor support](#appendix-legacy-multi-editor-support) at the bottom of this README. The rest of this document assumes Cowork + Codex.
 
 The point is simple:
 
@@ -52,7 +51,7 @@ This is the difference I wanted in day-to-day use:
 This repo is probably useful if you:
 
 * build mostly alone or with a very small team
-* already use Claude, Codex, Cursor, Windsurf, or Copilot in your workflow
+* already use Claude Cowork (optionally with Codex) as your primary AI coding workflow
 * want the agent to take more initiative
 * care about startup execution, not just code completion
 * are okay with opinionated defaults
@@ -69,10 +68,6 @@ It is probably not a good fit if you:
 ```text
 solo-cto-agent/
 ├── autopilot.md
-├── .cursorrules              ← Cursor picks this up automatically
-├── .windsurfrules            ← Windsurf (Cascade) picks this up automatically
-├── .github/
-│   └── copilot-instructions.md  ← GitHub Copilot workspace instructions
 ├── skills/
 │   ├── build/
 │   │   └── SKILL.md
@@ -204,11 +199,11 @@ Product repo automation: PR opened → Claude auto-review → preview summary �
 
 ### CTO (Lv5+6) — Multi-Agent
 
-For teams or power users who want agents competing and cross-checking each other. Claude + Codex by default, with routing-engine architecture designed for adding more agents (Cursor, Copilot, custom).
+For teams or power users who want agents competing and cross-checking each other. Claude + Codex by default, with a routing-engine designed to accept custom agents if you want to extend it.
 
 | What you get | Details |
 |---|---|
-| Agents | Claude + Codex (extensible to Cursor, Copilot, etc.) |
+| Agents | Claude + Codex (extensible via `agent-scores.json`) |
 | Product repo workflows | 7 core + 1 optional (telegram) |
 | Orchestrator workflows | 24 (8 base + 16 multi-agent & pro) |
 | Skills | all Builder skills + orchestrate |
@@ -260,16 +255,6 @@ solo-cto-agent review --path ./src --diff HEAD~3
 ```
 
 The review checks your diff against the local failure catalog (known error patterns), then sends it to Claude for security, performance, correctness, and style analysis. Results are saved as markdown reports in `~/.claude/skills/solo-cto-agent/reviews/`. This is the same review quality as the CI/CD pipeline, but runs entirely locally — useful for private repos, offline work, or pre-push checks.
-
-### Knowledge Articles
-
-After CI/CD data accumulates (via `sync`), generate synthesized knowledge articles:
-
-```bash
-solo-cto-agent learn
-```
-
-This scans your failure catalog, agent scores, and sync history, then generates markdown articles grouped by category (deploy failures, database patterns, auth issues, etc.) at `~/.claude/skills/solo-cto-agent/knowledge/`. The articles include pattern frequencies, prevention checklists, and agent performance notes — making the accumulated data immediately useful to your AI agent.
 
 ### Local Code Review (Both tiers)
 
@@ -332,7 +317,7 @@ After syncing, `solo-cto-agent status` shows when data was last synced and how m
 
 ### Multi-Agent Extensibility (CTO tier)
 
-The routing engine (`ops/orchestrator/routing-engine.js`) dynamically adapts to the number of registered agents. Builder tier ships with Claude-only `agent-scores.json` and `routing-policy.json` (default: `single-agent` mode). CTO tier ships with Claude + Codex dual-agent config. To add a third agent (e.g., Cursor Agent, Copilot), extend `agent-scores.json` with the new agent's metrics and add a corresponding workflow. The routing engine auto-detects registered agents and skips dual-agent logic when only one agent exists.
+The routing engine (`ops/orchestrator/routing-engine.js`) dynamically adapts to the number of registered agents. Builder tier ships with Claude-only `agent-scores.json` and `routing-policy.json` (default: `single-agent` mode). CTO tier ships with Claude + Codex dual-agent config. To plug in a third agent, extend `agent-scores.json` with its metrics and add a corresponding workflow. The routing engine auto-detects registered agents and skips dual-agent logic when only one agent exists.
 
 ### Secrets Summary
 
@@ -345,7 +330,7 @@ The routing engine (`ops/orchestrator/routing-engine.js`) dynamically adapts to 
 | `TELEGRAM_CHAT_ID` | Optional | Optional | Telegram API |
 | `GITHUB_TOKEN` | Auto | Auto | Provided by GitHub Actions |
 
-Not CI/CD secrets (app-level only, set in your hosting dashboard separately): `VERCEL_TOKEN`, `SUPABASE_*`, Cursor OpenAI key, `gh` CLI.
+Not CI/CD secrets (app-level only, set in your hosting dashboard separately): `VERCEL_TOKEN`, `SUPABASE_*`, `gh` CLI auth.
 
 ---
 
@@ -522,32 +507,16 @@ Then open the skill file and replace the placeholders with your actual stack. Ex
 
 ```text
 {{YOUR_OS}}        -> macOS / Windows / Linux
-{{YOUR_EDITOR}}    -> Cursor / VSCode / etc.
+{{YOUR_EDITOR}}    -> Cowork / VSCode / etc.
 {{YOUR_DEPLOY}}    -> Vercel / Railway / Netlify / etc.
 {{YOUR_FRAMEWORK}} -> Next.js / Remix / SvelteKit / etc.
 ```
 
 ### Using with Cowork + Codex
 
-Codex is a first-class target. Use the SKILL.md files directly as your instruction source. No extra Codex-specific files are required.
+Codex is a first-class target. Use the SKILL.md files directly as your instruction source. No extra Codex-specific files are required — Cowork reads SKILL.md natively, and Codex (via OpenAI API) is invoked through the CLI when both keys are set.
 
-### Using with Codex, Cursor, Windsurf, or Copilot
-
-If you use Codex, Cursor, Windsurf, or GitHub Copilot instead of (or alongside) Claude, the repo includes native rule files:
-
-* `.cursorrules` - Cursor reads this from your project root automatically
-* `.windsurfrules` - Windsurf (Cascade) reads this from your project root automatically
-* `.github/copilot-instructions.md` - GitHub Copilot reads this as workspace-level instructions
-
-Just copy the files you need into your project:
-
-```bash
-cp solo-cto-agent/.cursorrules ./
-cp solo-cto-agent/.windsurfrules ./
-cp -r solo-cto-agent/.github ./
-```
-
-These files contain the same CTO philosophy as the Claude skills - autonomy levels, build discipline, design standards, review rules - adapted to each tool's format. They are not watered-down versions. They are the same operating system, just in a different config file.
+> Support for other AI editors (Cursor, Windsurf, GitHub Copilot) via their native rule files is kept as a legacy compatibility layer — see [Appendix: Legacy multi-editor support](#appendix-legacy-multi-editor-support).
 
 ## How I use autonomy
 
@@ -765,8 +734,8 @@ A: Infinite loops waste more time than they save. If something fails 3 times, th
 **Q: Why is the design skill so opinionated?**
 A: Because default AI output tends toward the same rounded-gradient look. The rules push for more intentional choices. Override whatever doesn't fit your taste.
 
-**Q: Does this work in Cursor/Windsurf?**
-A: Yes. The repo includes native config files for each. The core philosophy is the same across all tools.
+**Q: Does this work in Cursor/Windsurf/Copilot?**
+A: The primary, fully-supported workflow is Claude Cowork + OpenAI Codex. The repo also ships `.cursorrules`, `.windsurfrules`, and `.github/copilot-instructions.md` as a legacy compatibility layer that carries the same philosophy — see [Appendix: Legacy multi-editor support](#appendix-legacy-multi-editor-support). Full features (dual review, UI/UX vision, routing-engine, watch-mode auto-trigger) only surface through the CLI, which calls Claude + OpenAI APIs directly.
 
 **Q: Why a separate orchestrator repo?**
 A: The orchestrator holds cross-repo logic (agent routing, score tracking, visual baselines, daily briefings) that doesn't belong in any single product repo. It dispatches workflows across your product repos and collects results centrally. If you only have one product repo, you can still use it — the separation keeps CI/CD config out of your application code.
@@ -800,3 +769,42 @@ A: Everything works — skills activate, build checks run, reviews trigger. The 
 
 **Q: Does this make network calls automatically?**
 A: No. `status` reads only local files. `sync` is manual and opt-in — you run it explicitly when you want CI/CD data pulled from GitHub. Error pattern merging from `sync` is dry-run by default; use `sync --apply` to actually write changes. No background network activity, no telemetry.
+
+---
+
+## Appendix: Legacy multi-editor support
+
+The primary, fully-supported workflow for `solo-cto-agent` is **Claude Cowork + OpenAI Codex**. That is the only combination that gets the full feature surface — dual review, cross-check, routing-engine, UI/UX 6-axis vision scoring, `apply-fixes` / `watch` / `notify` CLI wiring, and the `cto` tier pipeline.
+
+For users on other AI editors, the repo ships three native rule files as a **legacy compatibility layer**. They carry the same CTO philosophy (autonomy levels, build discipline, review rules, Circuit Breaker policy) in each tool's native config format:
+
+| Editor | File | How it's picked up |
+|---|---|---|
+| **Cursor** | `.cursorrules` | Cursor reads it from project root automatically |
+| **Windsurf (Cascade)** | `.windsurfrules` | Windsurf reads it from project root automatically |
+| **GitHub Copilot** | `.github/copilot-instructions.md` | Copilot reads it as workspace-level instructions |
+
+Install in your project:
+
+```bash
+cp solo-cto-agent/.cursorrules ./
+cp solo-cto-agent/.windsurfrules ./
+cp -r solo-cto-agent/.github ./
+```
+
+### What works with the legacy layer
+
+- Core philosophy (3-axis autonomy, BLOCKER/SUGGESTION/NIT severity, fact-tagging `[확정]/[추정]/[미검증]`)
+- Review checklist (10 items — imports, Prisma, NextAuth, Supabase, TS, errors, security, deploy, Next version, Tailwind version)
+- Verdict format (`[VERDICT]` / `[ISSUES]` / `[SUMMARY]` / `[NEXT ACTION]`)
+- Circuit Breaker (3-retry + backoff)
+
+### What does NOT work with the legacy layer
+
+- `solo-cto-agent review` / `uiux-review` / `apply-fixes` / `feedback` / `watch` / `notify` — these CLI commands require Claude Cowork or the `solo-cto-agent` CLI running locally with API keys.
+- Cross-review between agents — requires both `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` and the `solo-cto-agent` CLI to orchestrate.
+- `setup-pipeline` and the 8/24 workflow suite — requires GitHub Actions integration (the CLI generates these).
+
+### Why it's kept "legacy"
+
+Adding first-class support for every AI editor means maintaining 4+ parallel invocation paths for every feature. We chose instead to bet on one deep stack (Cowork + Codex) and leave the rule files as a fallback so existing Cursor/Windsurf/Copilot users are not locked out of the philosophy. If you are starting fresh, use Cowork + Codex — you get the full loop.

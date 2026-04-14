@@ -60,7 +60,8 @@ describe("cowork-engine: personalization layer", () => {
     engine.updatePersonalizationFromReview(review);
     engine.updatePersonalizationFromReview(review);
     engine.updatePersonalizationFromReview(review);
-    const ctx = engine.personalizationContext();
+    // Force exploitation branch (disable 80/20 random exploration) to make this test deterministic.
+    const ctx = engine.personalizationContext({ exploration: false });
     expect(ctx).toContain("누적 개인화 컨텍스트");
     expect(ctx).toContain("src/db/queries.ts");
     expect(ctx).toContain("3회");
