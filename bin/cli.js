@@ -8,7 +8,7 @@ const { execSync } = require("child_process");
 
 const { syncCommand } = require("./sync");
 const { runWizard, hasWizardFlag } = require("./wizard");
-const { localReview, knowledgeCapture, dualReview, detectMode, sessionSave, sessionRestore, sessionList, recordFeedback } = require("./cowork-engine");
+const { localReview, knowledgeCapture, dualReview, detectMode, sessionSave, sessionRestore, sessionList, recordFeedback, setLogChannel } = require("./cowork-engine");
 // Lazy-load optional modules so missing files don't break older installs.
 let uiux, rework, watch, notify, inboundFeedback;
 try { uiux = require("./uiux-engine"); } catch (_) { uiux = null; }
@@ -42,8 +42,8 @@ Usage:
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent upgrade --org <github-org> [--repos <repo1,repo2,...>]
   solo-cto-agent sync --org <github-org> [--apply] [--repos <repo1,repo2,...>]
-  solo-cto-agent review [--staged|--branch|--file <path>] [--dry-run] [--solo]
-  solo-cto-agent dual-review [--staged|--branch]
+  solo-cto-agent review [--staged|--branch [--target <base>]|--file <path>] [--dry-run] [--solo] [--json|--markdown]
+  solo-cto-agent dual-review [--staged|--branch [--target <base>]]
   solo-cto-agent knowledge [--session|--file <path>|--manual] [--project <tag>]
   solo-cto-agent session save|restore|list [--project <tag>] [--session <file>] [--limit <n>]
   solo-cto-agent status
@@ -80,7 +80,9 @@ Examples:
   npx solo-cto-agent sync --org myorg --repos app1,app2   # dry-run: fetch + display
   npx solo-cto-agent sync --org myorg --apply              # apply: merge remote data into local
   npx solo-cto-agent review                                # Claude review of staged changes
-  npx solo-cto-agent review --branch                       # review branch diff vs main
+  npx solo-cto-agent review --branch                       # review branch diff vs auto-detected default
+  npx solo-cto-agent review --branch --target develop      # review branch diff vs explicit base
+  npx solo-cto-agent review --staged --json | jq .verdict  # pipe-safe JSON
   npx solo-cto-agent dual-review                           # Claude + OpenAI cross-review
   npx solo-cto-agent knowledge                             # extract decisions from recent commits
   npx solo-cto-agent knowledge --project tribo             # tag with project name
@@ -1475,14 +1477,31 @@ async function main() {
       process.exit(1);
     }
     const diffSource = args.includes("--branch") ? "branch" : args.includes("--file") ? "file" : "staged";
+    // Branch-mode target comes from --target <branch>; file-mode target comes from --file <path>.
+    // Keeping the two semantically distinct prevents the accidental
+    // "review --branch --file x.json" / "review --json --file out.json" collisions.
     const fileIndex = args.indexOf("--file");
-    const target = fileIndex >= 0 ? args[fileIndex + 1] : null;
+    const targetIndex = args.indexOf("--target");
+    let target = null;
+    if (diffSource === "branch") {
+      target = targetIndex >= 0 ? args[targetIndex + 1] : null; // null → auto-detect default branch
+    } else if (diffSource === "file") {
+      target = fileIndex >= 0 ? args[fileIndex + 1] : null;
+    }
     const dryRun = args.includes("--dry-run");
     const outputFormat = args.includes("--json") ? "json" : args.includes("--markdown") ? "markdown" : "terminal";
 
+    // B5: when --json is requested, route banner / info / success to stderr so
+    // stdout stays pure JSON and `solo-cto-agent review --json | jq` works.
+    if (outputFormat === "json" && typeof setLogChannel === "function") {
+      setLogChannel("stderr");
+    }
+
     if (mode === "dual" && !args.includes("--solo")) {
-      console.log("  Both API keys detected. Running dual review (Claude + OpenAI).");
-      console.log("  Use --solo to force Claude-only mode.\n");
+      if (outputFormat !== "json") {
+        console.log("  Both API keys detected. Running dual review (Claude + OpenAI).");
+        console.log("  Use --solo to force Claude-only mode.\n");
+      }
       await dualReview({ diffSource, target });
     } else {
       await localReview({ diffSource, target, dryRun, outputFormat });
@@ -1496,7 +1515,9 @@ async function main() {
       process.exit(1);
     }
     const diffSource = args.includes("--branch") ? "branch" : "staged";
-    await dualReview({ diffSource });
+    const targetIndex = args.indexOf("--target");
+    const target = diffSource === "branch" && targetIndex >= 0 ? args[targetIndex + 1] : null;
+    await dualReview({ diffSource, target });
     return;
   }
 
