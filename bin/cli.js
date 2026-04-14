@@ -570,6 +570,10 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
   console.log("                    Get: https://t.me/BotFather");
   console.log("");
   console.log("  GITHUB_TOKEN      Auto-provided by GitHub Actions (no action needed)");
+  console.log("");
+  console.log("  DEV/TEST NOTE     If you plan to run tests locally:");
+  console.log("                    Run `npm install` to install dev deps (vitest).");
+  console.log("                    No extra env vars are required for tests.");
 }
 
 // ─── Service Detection ─────────────────────────────────────
@@ -719,6 +723,13 @@ OPENAI_API_KEY=
 # Design guidelines are in ops/config/design-guidelines.json
 `;
   }
+
+  guide += `
+# DEV/TEST NOTE
+# Running tests locally requires dev dependencies (vitest).
+# Install with: npm install
+# No extra env vars are required for tests.
+`;
 
   return guide;
 }

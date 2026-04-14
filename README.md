@@ -223,6 +223,17 @@ GITHUB_TOKEN=ghp_xxx solo-cto-agent sync --org myorg --repos app1,app2
 GITHUB_TOKEN=ghp_xxx solo-cto-agent sync --org myorg --repos app1,app2 --apply
 ```
 
+### Development / Tests
+
+If you plan to run tests locally (contributors), install dev dependencies first:
+
+```bash
+npm install
+npm test
+```
+
+`vitest` is a dev dependency used by the test suite. Normal CLI usage does not require it.
+
 What it fetches and updates (with `--apply`):
 
 | Data | Source | Local file |
