@@ -326,14 +326,30 @@ The review checks your diff against the local failure catalog (known error patte
 Run multi-agent code review locally without GitHub Actions:
 
 ```bash
-# Claude review of staged changes
-ANTHROPIC_API_KEY=sk-xxx solo-cto-agent review --diff staged
+# Claude review of staged changes (default)
+ANTHROPIC_API_KEY=sk-xxx solo-cto-agent review --staged
 
-# Dual-agent review (Claude + GPT) of branch diff
-ANTHROPIC_API_KEY=sk-xxx OPENAI_API_KEY=sk-xxx solo-cto-agent review --diff branch
+# Claude review of branch diff vs default branch (auto-detects main/master/develop)
+ANTHROPIC_API_KEY=sk-xxx solo-cto-agent review --branch
 
-# Output as markdown file
-solo-cto-agent review --diff staged --output markdown --file review.md
+# Explicit base branch
+ANTHROPIC_API_KEY=sk-xxx solo-cto-agent review --branch --target develop
+
+# Dual-agent review (Claude + GPT) — auto-enabled when both keys present
+ANTHROPIC_API_KEY=sk-xxx OPENAI_API_KEY=sk-xxx solo-cto-agent review --branch
+
+# Force Claude-only even when both keys are set
+ANTHROPIC_API_KEY=sk-xxx OPENAI_API_KEY=sk-xxx solo-cto-agent review --staged --solo
+
+# Pipe-safe JSON output (banner/info routed to stderr so jq works)
+solo-cto-agent review --staged --json | jq '.verdict'
+
+# Save JSON / markdown to a file via redirect
+solo-cto-agent review --staged --json > review.json
+solo-cto-agent review --staged --markdown > review.md
+
+# Dry-run — prints prompt sizes + self-loop warning without calling the API
+ANTHROPIC_API_KEY=sk-xxx solo-cto-agent review --staged --dry-run
 ```
 
 Works completely offline from CI/CD. Claude reviews the diff first. If an OpenAI key is also set, GPT provides a second opinion and the tool cross-compares both reviews — highlighting agreed issues (high confidence) vs. divergent findings. New error patterns found during review are automatically added to the local failure catalog.

@@ -440,8 +440,19 @@ function buildIdentity(tier, agent) {
 // UTILITY FUNCTIONS
 // ============================================================================
 
+// When a caller wants stdout reserved for machine-readable output (--json),
+// all ANSI banner / info / success / error lines must go to stderr instead.
+// Set with setLogChannel("stderr") for the duration of a command.
+let LOG_CHANNEL = "stdout"; // "stdout" | "stderr"
+function setLogChannel(ch) {
+  LOG_CHANNEL = ch === "stderr" ? "stderr" : "stdout";
+}
+function getLogChannel() {
+  return LOG_CHANNEL;
+}
 function log(...args) {
-  console.log(...args);
+  if (LOG_CHANNEL === "stderr") console.error(...args);
+  else console.log(...args);
 }
 
 function logSection(title) {
@@ -479,16 +490,53 @@ function ensureDir(dir) {
   }
 }
 
-function getDiff(source, target) {
+// Detect the repository's default branch dynamically. Order of preference:
+//   1. `git symbolic-ref refs/remotes/origin/HEAD` (authoritative — what origin says is default)
+//   2. Presence of `origin/main`, `origin/master`, `origin/develop`
+//   3. Fallback: "main"
+// Returns just the short name (e.g. "master"), never the `origin/` prefix.
+function detectDefaultBranch(opts = {}) {
+  const cwd = opts.cwd || process.cwd();
+  try {
+    const ref = execSync("git symbolic-ref refs/remotes/origin/HEAD", {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      cwd,
+    }).trim();
+    // Form: "refs/remotes/origin/<branch>"
+    const m = ref.match(/refs\/remotes\/origin\/(.+)$/);
+    if (m) return m[1];
+  } catch {
+    // symbolic-ref may not be set on shallow clones — fall through
+  }
+  try {
+    const branches = execSync("git branch -r", {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      cwd,
+    });
+    if (/\borigin\/main\b/.test(branches)) return "main";
+    if (/\borigin\/master\b/.test(branches)) return "master";
+    if (/\borigin\/develop\b/.test(branches)) return "develop";
+  } catch {
+    // not a git repo or no remotes
+  }
+  return "main";
+}
+
+function getDiff(source, target, opts = {}) {
+  const cwd = opts.cwd || process.cwd();
   try {
     let cmd;
     switch (source) {
       case "staged":
         cmd = "git diff --staged";
         break;
-      case "branch":
-        cmd = `git diff ${target || "main"}...HEAD`;
+      case "branch": {
+        const base = target || detectDefaultBranch({ cwd });
+        cmd = `git diff ${base}...HEAD`;
         break;
+      }
       case "file":
         if (!target) throw new Error("--file requires target path");
         cmd = `git diff -- ${target}`;
@@ -496,7 +544,7 @@ function getDiff(source, target) {
       default:
         cmd = "git diff --staged";
     }
-    return execSync(cmd, { encoding: "utf8", maxBuffer: 1024 * 1024 * 5 });
+    return execSync(cmd, { encoding: "utf8", maxBuffer: 1024 * 1024 * 5, cwd });
   } catch (e) {
     if (e.status === 128) {
       logError("Not a git repository");
@@ -1511,6 +1559,17 @@ ${diff}
     log("\n[DRY RUN] Would call Anthropic API with:");
     log(`System prompt length: ${systemPrompt.length} chars`);
     log(`User prompt length: ${userPrompt.length} chars`);
+    // B3: Self-loop warning is free to compute — surface it on --dry-run too so
+    // operators can audit their external-signal config without paying for an API call.
+    try {
+      const signals = assessExternalSignals();
+      const warning = formatSelfLoopWarning(signals);
+      if (warning) log(warning);
+      else {
+        const hint = formatPartialSignalHint(signals);
+        if (hint) log(hint);
+      }
+    } catch (_) { /* never block dry-run on signal inspection */ }
     return null;
   }
 
@@ -1599,7 +1658,10 @@ ${diff}
 
     // Output based on format
     if (outputFormat === "json") {
-      log(JSON.stringify(reviewData, null, 2));
+      // B5: JSON body always goes to stdout verbatim regardless of LOG_CHANNEL
+      // (banner / info / success lines went to stderr via the log channel switch
+      // set by the caller). This keeps `review --json | jq` valid.
+      process.stdout.write(JSON.stringify(reviewData, null, 2) + "\n");
     } else if (outputFormat === "markdown") {
       log(response.text);
       if (externalSignals.isSelfLoop) {
@@ -2525,6 +2587,9 @@ module.exports = {
   // Utilities for testing
   parseReviewResponse,
   getDiff,
+  detectDefaultBranch,
+  setLogChannel,
+  getLogChannel,
   readSkillContext,
   readFailureCatalog,
   _setSkillDirOverride,
