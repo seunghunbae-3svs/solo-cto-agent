@@ -1360,6 +1360,182 @@ async function fetchPackageCurrency(opts) {
   };
 }
 
+// ----------------------------------------------------------------------------
+// T2 Security Advisories — OSV.dev (PR-G4)
+// ----------------------------------------------------------------------------
+// Queries the public OSV.dev API for known vulnerabilities affecting each
+// direct dependency at the pinned version. OSV aggregates GitHub Security
+// Advisory Database (GHSA), CVE, npm advisories, and others — no auth
+// required, public rate limits, 5 s timeout per request.
+//
+// Gate: COWORK_EXTERNAL_KNOWLEDGE_SECURITY. Defaults to ON when
+// COWORK_EXTERNAL_KNOWLEDGE=1 is set (same trust boundary as registry
+// traffic). Set to "0" to disable explicitly.
+
+/**
+ * Normalize a raw OSV severity block to a simple tag.
+ * OSV returns severity as an array of {type, score} entries (CVSS_V3 /
+ * CVSS_V4), and also an optional `database_specific.severity` string
+ * ("LOW"|"MODERATE"|"HIGH"|"CRITICAL"). We prefer database_specific when
+ * present, otherwise derive from CVSS score.
+ */
+function normalizeOsvSeverity(vuln) {
+  const db = vuln && vuln.database_specific;
+  if (db && typeof db.severity === "string") {
+    const s = db.severity.toUpperCase();
+    if (s === "CRITICAL" || s === "HIGH" || s === "MODERATE" || s === "LOW") return s;
+  }
+  const sev = Array.isArray(vuln && vuln.severity) ? vuln.severity : [];
+  for (const entry of sev) {
+    if (!entry || typeof entry.score !== "string") continue;
+    // CVSS vector string — pull the base score if it looks like a pure number,
+    // otherwise fall through to keyword heuristics below.
+    const asNum = Number(entry.score);
+    if (!Number.isNaN(asNum)) {
+      if (asNum >= 9.0) return "CRITICAL";
+      if (asNum >= 7.0) return "HIGH";
+      if (asNum >= 4.0) return "MODERATE";
+      if (asNum > 0) return "LOW";
+    }
+  }
+  return "UNKNOWN";
+}
+
+/**
+ * Severity rank for sorting. Higher number = more urgent.
+ */
+function severityRank(sev) {
+  switch ((sev || "").toUpperCase()) {
+    case "CRITICAL": return 4;
+    case "HIGH": return 3;
+    case "MODERATE": return 2;
+    case "LOW": return 1;
+    default: return 0;
+  }
+}
+
+/**
+ * Query OSV.dev for a single package@version. Returns
+ * { ok, name, version, vulns:[{id, summary, severity, references}] } or
+ * { ok:false, error }.
+ */
+async function fetchOsvAdvisories(name, version, opts = {}) {
+  const { fetchImpl, timeoutMs = 5000 } = opts;
+  const f = fetchImpl || (typeof fetch !== "undefined" ? fetch : null);
+  if (!f) return { ok: false, name, version, error: "fetch not available" };
+  if (!name || !version) return { ok: false, name, version, error: "missing name or version" };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await f("https://api.osv.dev/v1/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        package: { name, ecosystem: "npm" },
+        version,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return { ok: false, name, version, error: `osv http ${res.status}` };
+    const data = await res.json();
+    const rawVulns = Array.isArray(data && data.vulns) ? data.vulns : [];
+    const vulns = rawVulns.map((v) => {
+      const refs = Array.isArray(v.references) ? v.references.map((r) => r && r.url).filter(Boolean).slice(0, 3) : [];
+      const aliases = Array.isArray(v.aliases) ? v.aliases : [];
+      const cve = aliases.find((a) => /^CVE-/i.test(a)) || null;
+      const ghsa = aliases.find((a) => /^GHSA-/i.test(a)) || (/^GHSA-/i.test(v.id || "") ? v.id : null);
+      return {
+        id: v.id || null,
+        cve,
+        ghsa,
+        summary: typeof v.summary === "string" ? v.summary : null,
+        severity: normalizeOsvSeverity(v),
+        published: v.published || null,
+        modified: v.modified || null,
+        references: refs,
+      };
+    });
+    // Sort by severity desc, then id.
+    vulns.sort((a, b) => {
+      const d = severityRank(b.severity) - severityRank(a.severity);
+      if (d) return d;
+      return String(a.id || "").localeCompare(String(b.id || ""));
+    });
+    return { ok: true, name, version, vulns };
+  } catch (e) {
+    clearTimeout(timer);
+    return { ok: false, name, version, error: e.name === "AbortError" ? "timeout" : String(e.message || e) };
+  }
+}
+
+/**
+ * Batched OSV lookup across a list of { name, version } entries. Uses the
+ * same concurrency pool as package-currency to be polite. Skips entries
+ * with unresolvable versions (git:, workspace:, etc).
+ */
+async function fetchSecurityAdvisories(opts) {
+  const {
+    deps = {},
+    fetchImpl,
+    timeoutMs = 5000,
+    concurrency = 6,
+    limit = 20,
+  } = opts;
+  const names = Object.keys(deps).slice(0, limit);
+  const results = [];
+  let idx = 0;
+  async function worker() {
+    while (idx < names.length) {
+      const i = idx++;
+      const name = names[i];
+      const spec = deps[name];
+      const version = parsePinnedVersion(spec);
+      if (!version) {
+        results.push({ name, installedSpec: spec, ok: false, skipped: true, error: "unresolvable version" });
+        continue;
+      }
+      const r = await fetchOsvAdvisories(name, version, { fetchImpl, timeoutMs });
+      if (!r.ok) {
+        results.push({ name, installedSpec: spec, version, ok: false, error: r.error });
+        continue;
+      }
+      results.push({ name, installedSpec: spec, version, ok: true, vulns: r.vulns });
+    }
+  }
+  const workers = Array.from({ length: Math.min(concurrency, names.length) }, worker);
+  await Promise.all(workers);
+  // Sort entries: vulnerable packages first (by highest severity), then clean.
+  results.sort((a, b) => {
+    const av = a.ok && a.vulns && a.vulns.length ? severityRank(a.vulns[0].severity) : -1;
+    const bv = b.ok && b.vulns && b.vulns.length ? severityRank(b.vulns[0].severity) : -1;
+    if (bv !== av) return bv - av;
+    return String(a.name).localeCompare(String(b.name));
+  });
+  const vulnerable = results.filter((r) => r.ok && r.vulns && r.vulns.length);
+  const summary = {
+    critical: 0, high: 0, moderate: 0, low: 0, unknown: 0,
+    packagesAffected: vulnerable.length,
+    totalVulns: 0,
+    errored: results.filter((r) => !r.ok && !r.skipped).length,
+    skipped: results.filter((r) => r.skipped).length,
+  };
+  for (const r of vulnerable) {
+    for (const v of r.vulns) {
+      summary.totalVulns++;
+      const key = (v.severity || "UNKNOWN").toLowerCase();
+      if (summary[key] !== undefined) summary[key]++;
+    }
+  }
+  return {
+    scanned: names.length,
+    total: Object.keys(deps).length,
+    entries: results,
+    summary,
+  };
+}
+
 /**
  * Top-level T2 orchestrator. Runs only when COWORK_EXTERNAL_KNOWLEDGE=1 is
  * set (or one of the granular flags). Always resolves.
@@ -1375,7 +1551,13 @@ async function fetchExternalKnowledge(opts = {}) {
     env.COWORK_EXTERNAL_KNOWLEDGE === "1"
     || !!env.COWORK_PACKAGE_REGISTRY;
   if (!enabled) {
-    return { enabled: false, fetchedAt: null, packageCurrency: null, hasData: false };
+    return {
+      enabled: false,
+      fetchedAt: null,
+      packageCurrency: null,
+      securityAdvisories: null,
+      hasData: false,
+    };
   }
 
   const pkg = scanPackageJson({ cwd });
@@ -1384,6 +1566,7 @@ async function fetchExternalKnowledge(opts = {}) {
       enabled: true,
       fetchedAt: new Date().toISOString(),
       packageCurrency: null,
+      securityAdvisories: null,
       hasData: false,
       error: "no package.json found",
     };
@@ -1393,7 +1576,23 @@ async function fetchExternalKnowledge(opts = {}) {
     ? { ...pkg.dependencies, ...pkg.devDependencies }
     : pkg.dependencies;
 
-  const packageCurrency = await fetchPackageCurrency({ deps, fetchImpl, timeoutMs });
+  // Security advisories default to ON when T2 is enabled. Opt-out with "0".
+  const securityEnabled = env.COWORK_EXTERNAL_KNOWLEDGE_SECURITY !== "0";
+
+  // Fetch currency + advisories in parallel — both hit independent public APIs.
+  const [packageCurrency, securityAdvisories] = await Promise.all([
+    fetchPackageCurrency({ deps, fetchImpl, timeoutMs }),
+    securityEnabled
+      ? fetchSecurityAdvisories({ deps, fetchImpl, timeoutMs }).catch((e) => ({
+          scanned: 0, total: Object.keys(deps).length, entries: [],
+          summary: { critical: 0, high: 0, moderate: 0, low: 0, unknown: 0, packagesAffected: 0, totalVulns: 0, errored: 0, skipped: 0, fatal: String(e.message || e) },
+        }))
+      : Promise.resolve(null),
+  ]);
+
+  const hasCurrency = !!(packageCurrency && packageCurrency.entries.length);
+  const hasAdvisories = !!(securityAdvisories && securityAdvisories.summary && securityAdvisories.summary.totalVulns > 0);
+
   return {
     enabled: true,
     fetchedAt: new Date().toISOString(),
@@ -1401,7 +1600,8 @@ async function fetchExternalKnowledge(opts = {}) {
     projectVersion: pkg.version,
     engines: pkg.engines,
     packageCurrency,
-    hasData: !!(packageCurrency && packageCurrency.entries.length),
+    securityAdvisories,
+    hasData: hasCurrency || hasAdvisories,
   };
 }
 
@@ -1410,44 +1610,82 @@ async function fetchExternalKnowledge(opts = {}) {
  * nothing useful to report.
  */
 function formatExternalKnowledgeContext(ek) {
-  if (!ek || !ek.enabled || !ek.packageCurrency) return "";
+  if (!ek || !ek.enabled) return "";
   const pc = ek.packageCurrency;
-  if (!pc.entries.length) return "";
+  const sa = ek.securityAdvisories;
+  const hasCurrency = !!(pc && pc.entries && pc.entries.length);
+  const hasAdvisories = !!(sa && sa.summary && sa.summary.totalVulns > 0);
+  if (!hasCurrency && !hasAdvisories) return "";
 
   const lines = [];
-  lines.push(`\n## 스택 최신성 (T2 External Knowledge)`);
-  lines.push(`> npm registry 실시간 조회 결과 (상위 ${pc.scanned}/${pc.total} 개 direct dep). [확정] 자료.`);
 
-  const s = pc.summary;
-  const tags = [];
-  if (s.major) tags.push(`major behind: ${s.major}`);
-  if (s.minor) tags.push(`minor behind: ${s.minor}`);
-  if (s.patch) tags.push(`patch behind: ${s.patch}`);
-  if (s.deprecated) tags.push(`deprecated: ${s.deprecated}`);
-  if (s.errored) tags.push(`lookup 실패: ${s.errored}`);
-  lines.push(`- 요약: ${tags.length ? tags.join(", ") : "모든 패키지 최신 또는 ahead"}`);
+  if (hasCurrency) {
+    lines.push(`\n## 스택 최신성 (T2 External Knowledge)`);
+    lines.push(`> npm registry 실시간 조회 결과 (상위 ${pc.scanned}/${pc.total} 개 direct dep). [확정] 자료.`);
 
-  // Surface the most interesting items — deprecated + major/minor behind.
-  const flagged = pc.entries.filter(
-    (e) => e.deprecated || e.diff === "major" || e.diff === "minor",
-  );
-  if (flagged.length) {
-    lines.push(``);
-    lines.push(`### 주의 대상 패키지`);
-    for (const e of flagged.slice(0, 10)) {
-      if (!e.ok) continue;
-      if (e.deprecated) {
-        lines.push(`- ⚠️ \`${e.name}@${e.installed || e.installedSpec}\` — **deprecated**: ${e.deprecated.slice(0, 120)}`);
-      } else if (e.diff === "major") {
-        lines.push(`- ⛔ \`${e.name}\` installed=${e.installed}, latest=${e.latest} — **major** 뒤처짐. breaking change 가능성.`);
-      } else if (e.diff === "minor") {
-        lines.push(`- ⚠️ \`${e.name}\` installed=${e.installed}, latest=${e.latest} — minor 뒤처짐.`);
+    const s = pc.summary;
+    const tags = [];
+    if (s.major) tags.push(`major behind: ${s.major}`);
+    if (s.minor) tags.push(`minor behind: ${s.minor}`);
+    if (s.patch) tags.push(`patch behind: ${s.patch}`);
+    if (s.deprecated) tags.push(`deprecated: ${s.deprecated}`);
+    if (s.errored) tags.push(`lookup 실패: ${s.errored}`);
+    lines.push(`- 요약: ${tags.length ? tags.join(", ") : "모든 패키지 최신 또는 ahead"}`);
+
+    // Surface the most interesting items — deprecated + major/minor behind.
+    const flagged = pc.entries.filter(
+      (e) => e.deprecated || e.diff === "major" || e.diff === "minor",
+    );
+    if (flagged.length) {
+      lines.push(``);
+      lines.push(`### 주의 대상 패키지`);
+      for (const e of flagged.slice(0, 10)) {
+        if (!e.ok) continue;
+        if (e.deprecated) {
+          lines.push(`- ⚠️ \`${e.name}@${e.installed || e.installedSpec}\` — **deprecated**: ${e.deprecated.slice(0, 120)}`);
+        } else if (e.diff === "major") {
+          lines.push(`- ⛔ \`${e.name}\` installed=${e.installed}, latest=${e.latest} — **major** 뒤처짐. breaking change 가능성.`);
+        } else if (e.diff === "minor") {
+          lines.push(`- ⚠️ \`${e.name}\` installed=${e.installed}, latest=${e.latest} — minor 뒤처짐.`);
+        }
       }
     }
   }
 
-  lines.push(``);
-  lines.push(`diff 가 위 패키지를 사용하는 파일을 건드리면 버전 차이를 감안해 리뷰한다. 학습 데이터 기반 기억보다 위 수치를 우선한다.`);
+  if (hasAdvisories) {
+    const ss = sa.summary;
+    lines.push(`\n## 보안 취약점 (T2 Security Advisories — OSV.dev / GHSA / CVE)`);
+    lines.push(`> OSV.dev 실시간 조회. ${ss.packagesAffected}개 패키지에 ${ss.totalVulns}개 알려진 취약점. [확정] 자료.`);
+    const sevTags = [];
+    if (ss.critical) sevTags.push(`CRITICAL: ${ss.critical}`);
+    if (ss.high) sevTags.push(`HIGH: ${ss.high}`);
+    if (ss.moderate) sevTags.push(`MODERATE: ${ss.moderate}`);
+    if (ss.low) sevTags.push(`LOW: ${ss.low}`);
+    if (ss.unknown) sevTags.push(`UNKNOWN: ${ss.unknown}`);
+    if (sevTags.length) lines.push(`- 심각도: ${sevTags.join(", ")}`);
+
+    // Show top vulnerable packages with their highest-severity advisory first.
+    const vulnerable = sa.entries.filter((e) => e.ok && e.vulns && e.vulns.length).slice(0, 8);
+    if (vulnerable.length) {
+      lines.push(``);
+      lines.push(`### 영향받는 패키지`);
+      for (const e of vulnerable) {
+        const top = e.vulns[0];
+        const icon = top.severity === "CRITICAL" || top.severity === "HIGH" ? "⛔" : "⚠️";
+        const idStr = top.cve || top.ghsa || top.id || "advisory";
+        const extra = e.vulns.length > 1 ? ` (+${e.vulns.length - 1} more)` : "";
+        const summary = top.summary ? ` — ${top.summary.slice(0, 140)}` : "";
+        lines.push(`- ${icon} \`${e.name}@${e.version}\` · **${top.severity}** · [${idStr}]${extra}${summary}`);
+      }
+    }
+    lines.push(``);
+    lines.push(`diff 가 위 패키지를 건드리면 취약점 수정 여부를 함께 검토한다. 취약점이 BLOCKER 수준이면 리뷰 verdict에 반영.`);
+  } else if (hasCurrency) {
+    // Only add the currency trailer when there are no advisories.
+    lines.push(``);
+    lines.push(`diff 가 위 패키지를 사용하는 파일을 건드리면 버전 차이를 감안해 리뷰한다. 학습 데이터 기반 기억보다 위 수치를 우선한다.`);
+  }
+
   return lines.join("\n") + "\n";
 }
 
@@ -2760,6 +2998,11 @@ module.exports = {
   fetchPackageCurrency,
   fetchExternalKnowledge,
   formatExternalKnowledgeContext,
+  // T2 Security Advisories (PR-G4)
+  normalizeOsvSeverity,
+  severityRank,
+  fetchOsvAdvisories,
+  fetchSecurityAdvisories,
   detectLiveSources,
   liveSourceContext,
   buildIdentity,
