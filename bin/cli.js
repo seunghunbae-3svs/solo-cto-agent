@@ -10,11 +10,12 @@ const { syncCommand } = require("./sync");
 const { runWizard, hasWizardFlag } = require("./wizard");
 const { localReview, knowledgeCapture, dualReview, detectMode, sessionSave, sessionRestore, sessionList, recordFeedback } = require("./cowork-engine");
 // Lazy-load optional modules so missing files don't break older installs.
-let uiux, rework, watch, notify;
+let uiux, rework, watch, notify, inboundFeedback;
 try { uiux = require("./uiux-engine"); } catch (_) { uiux = null; }
 try { rework = require("./rework"); } catch (_) { rework = null; }
 try { watch = require("./watch"); } catch (_) { watch = null; }
 try { notify = require("./notify"); } catch (_) { notify = null; }
+try { inboundFeedback = require("./inbound-feedback"); } catch (_) { inboundFeedback = null; }
 
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CATALOG = path.join(ROOT, "failure-catalog.json");
@@ -1617,6 +1618,36 @@ async function main() {
       console.log(JSON.stringify(result, null, 2));
     } catch (e) {
       console.error(`❌ feedback failed: ${e.message}`);
+      process.exit(1);
+    }
+    return;
+  }
+
+  // ─── feedback-inbound (parse Slack/GitHub payload → recordFeedback) ─
+  if (cmd === "feedback-inbound") {
+    if (!inboundFeedback) { console.error("❌ inbound-feedback module not installed."); process.exit(1); }
+    const get = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : null; };
+    const source = get("--source") || "generic";
+    const payloadArg = get("--payload");
+    const payloadFile = get("--payload-file");
+    let payloadRaw = null;
+    try {
+      if (args.includes("--stdin")) {
+        payloadRaw = fs.readFileSync(0, "utf8");
+      } else if (payloadFile) {
+        payloadRaw = fs.readFileSync(path.resolve(payloadFile), "utf8");
+      } else if (payloadArg) {
+        payloadRaw = payloadArg;
+      } else {
+        console.error("❌ feedback-inbound requires --payload <json>, --payload-file <path>, or --stdin");
+        process.exit(1);
+      }
+      const payload = JSON.parse(payloadRaw);
+      const result = inboundFeedback.handleInbound({ source, payload });
+      console.log(JSON.stringify(result, null, 2));
+      if (!result.ok) process.exit(1);
+    } catch (e) {
+      console.error(`❌ feedback-inbound failed: ${e.message}`);
       process.exit(1);
     }
     return;
