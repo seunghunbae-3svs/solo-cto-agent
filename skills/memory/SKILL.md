@@ -164,3 +164,18 @@ This skill should make the next session lighter, not just longer.
 
 - 출력 포맷·팩트 태깅: `skills/_shared/agent-spec.md`
 - 임베드 컨텍스트: `skills/_shared/skill-context.md`
+
+---
+
+## CLI Hooks — personalization 명시 기록
+
+```bash
+solo-cto-agent feedback accept --location src/Btn.tsx:42 --severity BLOCKER
+solo-cto-agent feedback reject --location src/Nav.tsx:12 --severity SUGGESTION \
+  --note "이미 memoized — false positive"
+solo-cto-agent feedback show                                 # 누적 accept/reject 패턴
+solo-cto-agent knowledge                                     # 결정/에러 패턴 추출
+solo-cto-agent session save                                  # 세션 스냅샷
+```
+
+`feedback` 은 다음 review 의 가중치로 반영 (80/20 anti-bias rotation — 과거 패턴 과적합 방지). 상세: `docs/feedback-guide.md`.

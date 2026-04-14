@@ -178,3 +178,19 @@ UI 작업 보고도 나머지 스킬과 같은 톤이다.
 
 이 스킬의 결과물은 장식이 아니라 의도가 보이게 한다.
 
+---
+
+## CLI Hooks — UI/UX craft 점검
+
+```bash
+solo-cto-agent uiux-review code                              # 변경된 UI 코드 리뷰
+solo-cto-agent uiux-review tokens                            # 디자인 토큰 추출 + 일관성 리포트
+solo-cto-agent uiux-review vision --screenshot shot.png      # 6축 점수 (layout/typography/spacing/color/a11y/polish)
+solo-cto-agent uiux-review cross-verify --screenshot shot.png
+                                                             # 코드 ↔ 비전 교차검증
+solo-cto-agent uiux-review baseline save --screenshot shot.png --project tribo
+solo-cto-agent uiux-review baseline diff --screenshot shot.png --project tribo
+```
+
+Vision 리뷰는 기본 manual 전용. watch 자동 트리거에서는 제외 (비용 가드레일).
+

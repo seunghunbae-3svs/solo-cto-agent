@@ -152,8 +152,13 @@ Agent 축은 Mode 와 독립이다 — Semi-auto 안에서도 Cowork 단독 / Co
 
 | Command | Behavior |
 |---|---|
-| `solo-cto-agent review` | Local Claude review of `git diff` (staged / branch / file). No GitHub required. |
+| `solo-cto-agent review` | Local Claude review of `git diff` (staged / branch / file). No GitHub required. Supports `--json` / `--markdown` / `--solo` / `--dry-run`. |
 | `solo-cto-agent dual-review` | Claude + OpenAI cross-review locally. Auto-enabled when both keys present. |
+| `solo-cto-agent uiux-review code\|vision\|cross-verify\|baseline\|tokens` | UI/UX review — diff code audit, vision 6-axis scoring (layout / typography / spacing / color / a11y / polish), code ↔ vision cross-verify, screenshot baseline diff, design-token extraction. |
+| `solo-cto-agent apply-fixes --review <file.json>` | Parse `[FIX]` blocks from review JSON, validate with `git apply --check`, apply with `--apply` (clean-tree required). `--only BLOCKER,SUGGESTION`, `--max-fixes 5` circuit-breaker. |
+| `solo-cto-agent feedback accept\|reject --location <path>` | Record accept/reject verdicts into personalization — down/up-weights future reviews (80/20 anti-bias rotation). `feedback show` displays accumulated patterns. |
+| `solo-cto-agent watch [--auto] [--force]` | File watcher with tier gate. Only CTO tier + cowork+codex gets `--auto` by default (maker/builder manual-only, CTO+cowork-only needs `--force`). Emits scheduled-tasks manifest for Cowork MCP pickup. |
+| `solo-cto-agent notify --title <t> [--channels slack,telegram]` | Outbound notification to Slack / Telegram / Discord / file / console. Auto-detects channels from env vars. |
 | `solo-cto-agent knowledge` | Extract decisions / error patterns from recent commits into local knowledge articles. |
 | `solo-cto-agent sync --org <org>` | **Dry-run by default.** Fetch agent-scores / error-patterns from orchestrator repo and display. |
 | `solo-cto-agent sync --org <org> --apply` | Merge remote data into local cache. |
