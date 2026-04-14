@@ -17,6 +17,8 @@ try { rework = require("./rework"); } catch (_) { rework = null; }
 try { watch = require("./watch"); } catch (_) { watch = null; }
 try { notify = require("./notify"); } catch (_) { notify = null; }
 try { inboundFeedback = require("./inbound-feedback"); } catch (_) { inboundFeedback = null; }
+let pluginManager;
+try { pluginManager = require("./plugin-manager"); } catch (_) { pluginManager = null; }
 
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CATALOG = path.join(ROOT, "failure-catalog.json");
@@ -1814,6 +1816,89 @@ async function main() {
       process.exit(1);
     }
     return;
+  }
+
+  if (cmd === "plugin") {
+    if (!pluginManager) {
+      console.error("❌ plugin-manager module not available in this install.");
+      process.exit(1);
+    }
+    const sub = args[1] || "list";
+
+    if (sub === "list") {
+      const plugins = pluginManager.listPlugins();
+      if (args.includes("--json")) {
+        console.log(JSON.stringify(plugins, null, 2));
+      } else {
+        console.log(pluginManager.formatPluginListText(plugins));
+      }
+      return;
+    }
+
+    if (sub === "show") {
+      const name = args[2];
+      if (!name) {
+        console.error("❌ Usage: solo-cto-agent plugin show <name>");
+        process.exit(1);
+      }
+      const manifest = pluginManager.readManifest();
+      const plugin = pluginManager.findPlugin(manifest, name);
+      if (!plugin) {
+        console.error(`❌ Plugin not found: ${name}`);
+        process.exit(1);
+      }
+      console.log(JSON.stringify(plugin, null, 2));
+      return;
+    }
+
+    if (sub === "add") {
+      const pathIdx = args.indexOf("--path");
+      const nameIdx = args.indexOf("--name");
+      if (pathIdx < 0) {
+        console.error("❌ Usage: solo-cto-agent plugin add --path <dir> [--name <override>]");
+        console.error("   (npm install coming in a later release; use --path for local dirs.)");
+        process.exit(1);
+      }
+      const dir = path.resolve(args[pathIdx + 1]);
+      const read = pluginManager.readPackageJsonFromPath(dir);
+      if (!read.ok) {
+        console.error(`❌ ${read.error}`);
+        process.exit(1);
+      }
+      const pkg = nameIdx >= 0 ? { ...read.pkg, name: args[nameIdx + 1] } : read.pkg;
+      const source = `path:${dir}`;
+      const res = pluginManager.addPlugin({ pkg, source });
+      if (!res.ok) {
+        console.error("❌ Plugin validation failed:");
+        for (const e of res.errors) console.error(`   - ${e}`);
+        process.exit(1);
+      }
+      console.log(`✓ ${res.replaced ? "Updated" : "Added"} ${res.plugin.name}@${res.plugin.version} (${source})`);
+      console.log(`  agents: ${res.plugin.agents.join(", ")}`);
+      if (res.plugin.capabilities.length) {
+        console.log(`  capabilities: ${res.plugin.capabilities.join(", ")}`);
+      }
+      return;
+    }
+
+    if (sub === "remove" || sub === "rm") {
+      const name = args[2];
+      if (!name) {
+        console.error("❌ Usage: solo-cto-agent plugin remove <name>");
+        process.exit(1);
+      }
+      const res = pluginManager.removePlugin(name);
+      if (!res.removed) {
+        console.error(`❌ Plugin not found: ${name}`);
+        process.exit(1);
+      }
+      console.log(`✓ Removed ${name}`);
+      return;
+    }
+
+    console.error(`❌ Unknown plugin subcommand: ${sub}`);
+    console.error(`   Use: solo-cto-agent plugin list|show|add|remove`);
+    process.exit(1);
   }
 
   printHelp();
