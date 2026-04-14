@@ -19,6 +19,25 @@ user-invocable: true
 
 세 관점을 따로 돌린 후 단일 verdict로 합성한다.
 
+### Devil's Advocate Protocol
+
+Mode 1은 기본적으로 반박자 포지션이다. 친절한 확인이 아니라 의도적인 공격이다.
+
+- **Assume the idea will fail.** 어떻게 실패하는지 먼저 쓴다. 그다음에 반론을 쓴다.
+- **Steelman opposing view first.** 가장 강한 반대 논거를 본인이 직접 만들고, 그 뒤에만 방어 논거를 쓴다.
+- **Reverse burden of proof.** "왜 안 될까?"를 기본값으로 두고, 제안자가 "이래서 된다"를 증명하게 한다.
+- **Stop when the idea survives two passes.** 첫 패스에서 죽지 않은 약점만 두 번째 패스에서 본다. 같은 지적 3회 이상 반복 금지.
+
+### Three-Axis Pre-Check
+
+세 렌즈로 들어가기 전, spark의 3축 필터를 먼저 통과시킨다:
+
+1. **Regulatory × Timeline** — 라이선스 게이트 통과 가능? 타임라인 현실적?
+2. **Existing System Protection** — 이미 돌아가는 것을 깨뜨리지 않는가?
+3. **Unit Economics** — 실제 마진, 실제 수익원이 구체적인가?
+
+3축 중 하나라도 명백히 실패하면 렌즈 합성 없이 `[OVERALL] 0~3/10`으로 조기 반환한다. 나머지 렌즈를 돌리는 건 시간 낭비다.
+
 ### Lens 1 — First-Time Investor
 
 처음 보는 시리어스 투자자가 30초 안에 알아채는 것:

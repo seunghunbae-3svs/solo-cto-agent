@@ -67,6 +67,39 @@ Four types of memories that matter:
 
 ---
 
+## Quality Log (per-artifact)
+
+에이전트가 만든 결과물을 기록한다. 다음 세션에서 품질 추세를 보는 용도.
+
+한 엔트리 = 한 결과물. 기록할 것:
+
+- **Artifact**: 파일 경로 또는 세션 ID
+- **Type**: code | doc | deploy | review
+- **Outcome**: shipped | reverted | blocked | needs-rework
+- **Quality signal**: 사람 피드백 (accept / reject / silent) + 자동 시그널 (tests pass/fail, build ok/error)
+- **Lesson**: 이 결과물에서 남길 한 줄
+
+한 주에 3회 이상 같은 lesson이 반복되면 Layer 3으로 승격한다. 반복되는 품질 구멍이 durable 규칙으로 굳는 메커니즘.
+
+---
+
+## Error Pattern Ledger (failure-specific)
+
+반복되는 에러는 별도 원장에 모은다. Quality Log와 달리 **실패 재현 가능성**에 초점.
+
+한 엔트리 = 한 에러 패턴. 기록할 것:
+
+- **Error signature**: 에러 메시지의 스테이블한 부분 (정규식 가능)
+- **First seen / Last seen**: 날짜
+- **Occurrence count**: 누적 발생 횟수
+- **Root cause category**: code | env | schema | deploy | external | unknown
+- **Fix**: 가장 짧은 재현 가능한 수정
+- **Prevention**: 재발 방지책 (테스트 추가 / 린트 규칙 / 체크리스트 항목)
+
+**Promotion 규칙**: 같은 signature가 3회 이상 발생하면 build/ship의 Quick-Fix Catalog로 승격한다. 해결책이 카탈로그에 들어가면 Error Pattern Ledger에서는 "resolved: see build/ship"로 대체.
+
+---
+
 ## Memory record format
 
 Fields: topic, type (decision / pattern / preference / open-thread), summary, why it matters, trigger, when to revisit.

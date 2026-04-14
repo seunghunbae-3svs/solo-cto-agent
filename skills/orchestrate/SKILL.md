@@ -150,7 +150,7 @@ solo-cto-agent watch --auto                                  # CTO tier + cowork
 solo-cto-agent watch --auto --force                          # gate 우회 (사용자 책임)
 solo-cto-agent watch --dry-run                               # gate 결정만 리턴
 solo-cto-agent notify --title "..." --severity error \
-  --channels slack,telegram --meta project=tribo
+  --channels slack,telegram --meta project=myapp
 ```
 
 **Tier Gate (비용 가드레일, 2026-04-14 정책)**
