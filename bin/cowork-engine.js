@@ -42,6 +42,16 @@ const CONFIG = {
     claude: "claude-sonnet-4-20250514",
     codex: "codex-mini-latest",
   },
+  // Tier → model mapping. Haiku for light validation (maker),
+  // Sonnet for balanced dev work (builder), Opus for orchestration
+  // and deeper reasoning (cto). Env overrides documented in resolveModelForTier().
+  tierModels: {
+    claude: {
+      maker:   "claude-haiku-4-5-20251001",
+      builder: "claude-sonnet-4-5-20250929",
+      cto:     "claude-opus-4-5-20250929",
+    },
+  },
   // Tier × Mode 자동화 한계 (Semi-auto mode)
   tierLimits: {
     maker:   { maxRetries: 2, selfCrossReview: false, autoMcpProbe: false, maxIssuesShown: 5  },
@@ -49,6 +59,39 @@ const CONFIG = {
     cto:     { maxRetries: 3, selfCrossReview: true,  autoMcpProbe: true,  maxIssuesShown: 20 },
   },
 };
+
+/**
+ * Resolve the Claude model to use for a given tier.
+ *
+ * Resolution order:
+ *   1. CLAUDE_MODEL_<TIER> env (e.g. CLAUDE_MODEL_CTO) — tier-specific override
+ *   2. CLAUDE_MODEL env — global override (applies to all tiers)
+ *   3. CONFIG.tierModels.claude[tier] — tier default
+ *   4. CONFIG.defaultModel.claude — backstop (preserves historical behavior)
+ *
+ * A user with a paid Opus subscription can set CLAUDE_MODEL_CTO=claude-opus-... and
+ * keep Haiku for maker tier. A user who wants everything on one model can set CLAUDE_MODEL.
+ */
+function resolveModelForTier(tier, opts = {}) {
+  const env = opts.env || process.env;
+  const normalized = (tier || "").toLowerCase();
+
+  // 1. tier-specific env override
+  if (normalized) {
+    const specific = env[`CLAUDE_MODEL_${normalized.toUpperCase()}`];
+    if (specific && specific.trim()) return specific.trim();
+  }
+
+  // 2. global env override
+  if (env.CLAUDE_MODEL && env.CLAUDE_MODEL.trim()) return env.CLAUDE_MODEL.trim();
+
+  // 3. tier default from config
+  const tierMap = CONFIG.tierModels && CONFIG.tierModels.claude;
+  if (tierMap && tierMap[normalized]) return tierMap[normalized];
+
+  // 4. backstop
+  return CONFIG.defaultModel.claude;
+}
 
 // ============================================================================
 // EMBEDDED SKILL CONTEXT
@@ -592,14 +635,26 @@ function getRecentCommits(hours = 24) {
 }
 
 function estimateCost(inputTokens, outputTokens, model) {
-  // Rough estimates (as of 2026-04)
+  // Rough estimates per 1K tokens (as of 2026-04). Tier models added for PR-G2.
   const rates = {
-    "claude-sonnet-4-20250514": { input: 0.003, output: 0.015 }, // per 1K tokens
-    "claude-opus-4-20250514": { input: 0.015, output: 0.075 },
+    // Legacy / sonnet-4 family (backstop default)
+    "claude-sonnet-4-20250514": { input: 0.003, output: 0.015 },
+    "claude-opus-4-20250514":   { input: 0.015, output: 0.075 },
+    // Tier defaults (PR-G2)
+    "claude-haiku-4-5-20251001":  { input: 0.0008, output: 0.004 },
+    "claude-sonnet-4-5-20250929": { input: 0.003,  output: 0.015 },
+    "claude-opus-4-5-20250929":   { input: 0.015,  output: 0.075 },
     "codex-mini-latest": { input: 0.0005, output: 0.0015 },
   };
 
-  const rate = rates[model] || { input: 0.003, output: 0.015 };
+  // Prefix-based fallback so new minor model versions still get sane estimates
+  // rather than silently defaulting to sonnet rates.
+  let rate = rates[model];
+  if (!rate) {
+    if (/haiku/i.test(model))      rate = { input: 0.0008, output: 0.004 };
+    else if (/opus/i.test(model))  rate = { input: 0.015,  output: 0.075 };
+    else                           rate = { input: 0.003,  output: 0.015 };
+  }
   const cost =
     (inputTokens / 1000) * rate.input + (outputTokens / 1000) * rate.output;
   return cost.toFixed(4);
@@ -1474,10 +1529,11 @@ function formatTerminalOutput(review, sourceInfo, costInfo) {
 // ============================================================================
 
 async function localReview(options = {}) {
+  const callerSpecifiedModel = Object.prototype.hasOwnProperty.call(options, "model");
   const {
     diffSource = "staged",
     target = null,
-    model = CONFIG.defaultModel.claude,
+    model: callerModel = CONFIG.defaultModel.claude,
     dryRun = false,
     outputFormat = "terminal",
     crossCheck = null, // null = tier 기본값 따름, true/false = 강제
@@ -1486,6 +1542,10 @@ async function localReview(options = {}) {
   // Tier · agent · personalization · live-source 컨텍스트 결정
   const cwd = process.cwd();
   const tier = readTier();
+  // Tier-aware model resolution (PR-G2). Caller-specified model wins;
+  // otherwise pick the tier default (maker=Haiku / builder=Sonnet / cto=Opus)
+  // with env overrides (CLAUDE_MODEL, CLAUDE_MODEL_<TIER>) applied.
+  const model = callerSpecifiedModel ? callerModel : resolveModelForTier(tier);
   const mode = readMode();
   const agent = process.env.OPENAI_API_KEY ? "cowork+codex" : "cowork";
   const tierLimits = CONFIG.tierLimits[tier] || CONFIG.tierLimits.builder;
@@ -2070,10 +2130,11 @@ ${content}`;
 }
 
 async function dualReview(options = {}) {
+  const callerSpecifiedClaudeModel = Object.prototype.hasOwnProperty.call(options, "claudeModel");
   const {
     diffSource = "staged",
     target = null,
-    claudeModel = CONFIG.defaultModel.claude,
+    claudeModel: callerClaudeModel = CONFIG.defaultModel.claude,
     codexModel = CONFIG.defaultModel.codex,
   } = options;
 
@@ -2082,6 +2143,9 @@ async function dualReview(options = {}) {
   logInfo(`Source: ${diffSource} changes`);
 
   const cwd = process.cwd();
+  // Tier-aware Claude model resolution (PR-G2). Codex side unchanged.
+  const _dualTier = (typeof readTier === "function") ? readTier() : "builder";
+  const claudeModel = callerSpecifiedClaudeModel ? callerClaudeModel : resolveModelForTier(_dualTier);
   let diffBase = null;
   let diffTarget = null;
   let diff;
@@ -2709,6 +2773,10 @@ module.exports = {
   readSkillContext,
   readFailureCatalog,
   _setSkillDirOverride,
+  // Tier-aware model resolution (PR-G2)
+  resolveModelForTier,
+  estimateCost,
+  CONFIG,
 };
 
 // Run CLI if executed directly
