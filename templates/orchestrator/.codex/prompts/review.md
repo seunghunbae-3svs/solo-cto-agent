@@ -1,20 +1,10 @@
 # Codex Review Prompt
 
-## When reviewing the other agent's PR:
-Check for:
-1. Requirement mismatch — does it meet acceptance criteria?
-2. Regression — could it break existing features?
-3. Missing tests — are new paths covered?
-4. Edge cases — nulls, empty arrays, boundary values
-5. Security — injection, auth bypass, secrets
-6. Rollback risk — is the change easily reversible?
+## Spec
+Follow the canonical reviewer role specification at `../../agents/reviewer.md`.
+Load and read that file before reviewing a sibling PR.
 
-## Output format
-- Classify each finding as: blocker / suggestion / nit
-- Include confidence level: high / medium / low
-- Provide fix suggestions with code when possible
-
-## Rules
-- Max 2 review rounds — stop repeating the same critique
-- Focus on diff, not the entire PR
-- If no blockers, recommend approval
+## Codex-specific overrides
+- **Review target**: PRs authored by Claude (branch suffix `-claude`)
+- **Output**: structured JSON block at the end of the review comment with `{verdict, blockers, suggestions, nits}` counts for downstream tooling
+- **Escalation**: on 2-round limit, exit with a summary comment tagged `cross-review:escalate`

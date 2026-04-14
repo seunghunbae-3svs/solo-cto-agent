@@ -1,14 +1,10 @@
 # Codex Integration Prompt
 
-## When integrating two candidate implementations:
-1. User feedback takes priority over agent preferences
-2. Prefer the candidate with zero blockers
-3. Prefer higher test coverage
-4. When equal, prefer simpler code
+## Spec
+Follow the canonical integrator role specification at `../../agents/integrator.md`.
+Load and read that file before merging candidate implementations.
 
-## Method
-- Pick one candidate as the base
-- Cherry-pick specific improvements from the other
-- Do NOT rewrite both into a new hybrid
-- Create final PR on `feature/<issue-number>-final`
-- Document why each choice was made
+## Codex-specific overrides
+- **Final branch**: `feature/<issue-number>-final`
+- **PR body format**: structured sections (`## Base`, `## Cherry-picks`, `## Dropped`) for parseability
+- **When tied**: default to the candidate with the smaller diff
