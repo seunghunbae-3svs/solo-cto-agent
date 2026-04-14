@@ -2,11 +2,24 @@ import { describe, it, expect } from "vitest";
 import { spawnSync } from "child_process";
 
 describe("npm pack", () => {
-  it("produces a tarball with required files", () => {
-    const r = spawnSync("npm", ["pack", "--dry-run", "--json"], {
+  function runNpmPack() {
+    const npmExecPath = process.env.npm_execpath;
+    const cmd = npmExecPath ? process.execPath : "npm";
+    const args = npmExecPath
+      ? [npmExecPath, "pack", "--dry-run", "--json"]
+      : ["pack", "--dry-run", "--json"];
+    const r = spawnSync(cmd, args, {
       encoding: "utf8",
       cwd: process.cwd(),
     });
+    if (r.error) {
+      throw r.error;
+    }
+    return r;
+  }
+
+  it("produces a tarball with required files", () => {
+    const r = runNpmPack();
     expect(r.status).toBe(0);
 
     const output = JSON.parse(r.stdout);
@@ -33,10 +46,7 @@ describe("npm pack", () => {
   });
 
   it("does not include test or CI files", () => {
-    const r = spawnSync("npm", ["pack", "--dry-run", "--json"], {
-      encoding: "utf8",
-      cwd: process.cwd(),
-    });
+    const r = runNpmPack();
     const output = JSON.parse(r.stdout);
     const files = output[0].files.map((f) => f.path);
 

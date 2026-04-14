@@ -131,10 +131,36 @@ function writeFileIfMissing(filePath, content, force) {
   return true;
 }
 
+function copyDirRecursive(src, dest) {
+  ensureDir(dest);
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath);
+    } else if (entry.isSymbolicLink()) {
+      const link = fs.readlinkSync(srcPath);
+      try {
+        fs.symlinkSync(link, destPath);
+      } catch (_) {
+        // Fallback: treat symlink as a regular file copy when symlink creation fails.
+        const real = fs.readFileSync(srcPath);
+        fs.writeFileSync(destPath, real);
+      }
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
 function copyDirSafe(src, dest, force) {
   if (!fs.existsSync(src)) return false;
   if (fs.existsSync(dest) && !force) return false;
-  fs.cpSync(src, dest, { recursive: true, force: true });
+  if (fs.existsSync(dest)) {
+    fs.rmSync(dest, { recursive: true, force: true });
+  }
+  copyDirRecursive(src, dest);
   return true;
 }
 
