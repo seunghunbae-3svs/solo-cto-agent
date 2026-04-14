@@ -30,6 +30,7 @@ These are not feature tours. They describe the moment where the agent changes yo
 
 - [Session start briefing](founder-workflow/session-start-briefing.md) — 7-line brief instead of 15 minutes of re-explaining
 - [Idea critique before commitment](founder-workflow/idea-critique.md) — risk-first analysis surfaces a blocker in 2 minutes instead of 2 weeks
+- [Decision queue via Telegram](founder-workflow/decision-queue-telegram.md) — one-tap approve/revise/hold without hunting PRs
 
 ## How to read an example
 
