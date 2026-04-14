@@ -25,65 +25,97 @@ const { execSync } = require("child_process");
 // CONFIGURATION & CONSTANTS
 // ============================================================================
 
+// Lazy path getters — resolve $HOME at call time so tests can override.
+// Tests can also set COWORK_SKILL_DIR_OVERRIDE env var or via _setSkillDirOverride().
+let _skillDirOverride = null;
+function _setSkillDirOverride(p) { _skillDirOverride = p; }
+const _skillBase = () => _skillDirOverride
+  || process.env.COWORK_SKILL_DIR_OVERRIDE
+  || path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
 const CONFIG = {
-  skillDir: path.join(os.homedir(), ".claude", "skills", "solo-cto-agent"),
-  reviewsDir: path.join(os.homedir(), ".claude", "skills", "solo-cto-agent", "reviews"),
-  knowledgeDir: path.join(os.homedir(), ".claude", "skills", "solo-cto-agent", "knowledge"),
-  sessionsDir: path.join(os.homedir(), ".claude", "skills", "solo-cto-agent", "sessions"),
+  get skillDir() { return _skillBase(); },
+  get reviewsDir() { return path.join(_skillBase(), "reviews"); },
+  get knowledgeDir() { return path.join(_skillBase(), "knowledge"); },
+  get sessionsDir() { return path.join(_skillBase(), "sessions"); },
+  get personalizationFile() { return path.join(_skillBase(), "personalization.json"); },
   defaultModel: {
     claude: "claude-sonnet-4-20250514",
     codex: "codex-mini-latest",
   },
+  // Tier × Mode 자동화 한계 (Semi-auto mode)
+  tierLimits: {
+    maker:   { maxRetries: 2, selfCrossReview: false, autoMcpProbe: false, maxIssuesShown: 5  },
+    builder: { maxRetries: 3, selfCrossReview: true,  autoMcpProbe: true,  maxIssuesShown: 10 },
+    cto:     { maxRetries: 3, selfCrossReview: true,  autoMcpProbe: true,  maxIssuesShown: 20 },
+  },
 };
 
 // ============================================================================
-// EMBEDDED SKILL CONTEXT (mirrors codex-main/claude-worker.js)
-// Keep in sync with skills/_shared/skill-context.md
+// EMBEDDED SKILL CONTEXT
+// 정확한 본문은 skills/_shared/skill-context.md 와 동기화 (build-time check)
 // ============================================================================
 
-const SKILL_CONTEXT = `
-## Ship-Zero Protocol (배포 전 체크리스트)
-- Prisma: schema validate, generate 타이밍, postinstall 스크립트
-- NextAuth: import 경로(@/lib/), 콜백 로직, 세션 설정
-- Vercel 빌드: env 변수 존재 확인, build command, output directory
-- TypeScript: strict 모드, any 타입 제거, 타입 누락
-- Supabase: RLS 정책, service_role vs anon key 구분, N+1 쿼리
-
-## Project Dev Guide 에러 패턴
-- import 경로 에러: ./relative → @/absolute 변환 필수
-- Prisma + Drizzle 동시 사용 금지: 하나만 선택
-- NextAuth 콜백에서 session.user 확장 시 next-auth.d.ts types 파일 필요
-- Vercel 배포 실패 상위 원인: env 누락, prisma generate 타이밍, build command 불일치
-- Next.js 14/15 혼용 금지: params 동기/비동기 처리 규칙 다름
-- Tailwind v3/v4 문법 혼용 금지: PostCSS 설정과 import 방식 다름
-
-## 코딩 규칙
-- 최소 안전 수정: 요청 범위 밖 리팩토링 금지
-- 에러 처리: 조용한 실패 금지, 구조화된 에러 반환
-- PR 본문 필수: 변경 요약, 리스크 레벨, 롤백 방법, Preview 링크
-- 팩트 기반: 추정과 확정 구분 [확정] / [추정] / [미검증]
-- Circuit Breaker: 같은 에러 3회 재시도 실패 시 정지 후 보고
+// A. 운영 원칙 (스택 무관)
+const OPERATING_PRINCIPLES = `
+## 운영 원칙 (스택 무관)
+- Live Source of Truth: 배포·DB·코드·로그는 항상 라이브 소스 직접 조회. 문서 기억 의존 금지.
+  → 라이브 = [확정], 캐시 = [캐시], 추정 = [추정], 미확인 = [미검증]
+- 최소 안전 수정: 요청 범위 밖 리팩토링 금지. diff 밖 파일 언급 금지.
+- 에러 처리: 조용한 실패 금지. try-catch 는 실제 실패 지점에만. 구조화된 에러 반환.
+- 팩트 기반: 모든 수치·주장에 [확정]/[추정]/[미검증]/[캐시]/[OFFLINE] 태그.
+- PR 본문 필수: 요약 / 리스크(LOW·MEDIUM·HIGH) / 롤백 / Preview 링크.
+- Circuit Breaker: 같은 에러 3회 재시도 실패 시 정지 후 보고.
 `;
 
-const SKILL_REVIEW_CRITERIA = `
-## 리뷰 기준 (Ship-Zero Protocol + Project Dev Guide)
-1. Import 경로: ./relative 대신 @/ 절대경로 사용했는지
-2. Prisma/Drizzle: 혼재 사용 없는지, generate 타이밍 맞는지
-3. NextAuth: 콜백 로직, 세션 확장 시 types 파일 있는지
-4. Supabase: RLS 정책, service_role vs anon 구분, N+1 쿼리
-5. TypeScript: any 타입, 타입 누락, strict 모드 위반
-6. 에러 처리: try-catch 누락, 조용한 실패, 구조화 안 된 에러
-7. 보안: SQL injection, auth bypass, secret 노출
-8. 배포: env 변수 누락, build command, Vercel 설정
-9. Next.js 버전: 14는 params 동기, 15는 params Promise — 혼용 금지
-10. Tailwind 버전: v3/v4 문법 혼용 금지, PostCSS 설정 일치
+// B. Common Stack 패턴 (자주 등장하는 스택)
+const COMMON_STACK_PATTERNS = `
+## Common Stack 반복 에러 패턴 (사용자 stack 매칭 시 활성)
+- Next.js: import @/ 절대경로, 14/15 params 동기/Promise 혼용 금지, Tailwind v3/v4 혼용 금지, 'use client' 정확성
+- Prisma: Drizzle 와 동시 사용 금지, prisma generate 타이밍 (postinstall 또는 build pre-step), schema 변경 시 마이그레이션 필수
+- NextAuth: session.user 확장 시 next-auth.d.ts types 필요, callback URL 환경별 분리
+- Supabase: RLS 활성화 (비활성=BLOCKER), service_role 클라이언트 노출 금지, N+1 쿼리 점검
+- Vercel: env 변수 누락 / prisma generate 타이밍 / build command 불일치 = 빌드 실패 상위 3
 `;
 
-const AGENT_IDENTITY = `당신은 어시스턴트가 아니다. CTO급 co-founder다.
+// C. 리뷰 우선순위
+const REVIEW_PRIORITY = `
+## 리뷰 우선순위 (높음 → 낮음)
+1. 보안 (secret 노출, auth bypass, SQL injection, RLS 비활성) → BLOCKER
+2. 데이터 손실 위험 (마이그레이션 누락, 무차별 delete, 트랜잭션 누락) → BLOCKER
+3. 타입 안전성 (any, strict 위반) → SUGGESTION (의도 명확하면 NIT)
+4. 에러 처리 (조용한 실패, 구조화 안 됨) → SUGGESTION
+5. 스택 일관성 (Common Stack 패턴 위반) → SUGGESTION 또는 BLOCKER
+6. PR 본문 누락 → SUGGESTION
+7. 성능 (N+1, 불필요 re-render, 큰 번들) → SUGGESTION
+8. 스타일/일관성 → NIT
+`;
+
+// 통합 SKILL_CONTEXT (호환성 alias — 기존 코드와 외부 참조용)
+const SKILL_CONTEXT = OPERATING_PRINCIPLES + "\n" + COMMON_STACK_PATTERNS;
+const SKILL_REVIEW_CRITERIA = REVIEW_PRIORITY;
+
+// D. Tier 별 에이전트 아이덴티티
+// CLAUDE.md 의 "Maker Tier 에 강한 톤 적용 금지" 규칙 반영
+const AGENT_IDENTITY_BY_TIER = {
+  maker: `당신은 사용자의 desktop 에서 동작하는 페어 CTO 다. (Maker Tier — 학습/검증 단계)
+- 사용자가 명시적으로 호출한 작업만 수행한다.
+- 약점·리스크를 친절하게 짚되, 단정짓지 않는다. 검증 액션을 함께 제시한다.
+- "이건 틀렸다" 보다 "이 가정이 깨지면 ~" 식 조건부 표현 우선.
+- desktop runtime + 클라우드 amplifier (MCP, web search, scheduled task) 를 엮어 한 호출에서 가치를 최대로 뽑는다.`,
+  builder: `당신은 사용자의 desktop 에서 동작하는 페어 CTO 다. (Builder Tier — 실행/배포 단계)
 - 코드를 지키는 사람이지, 추가만 하는 사람이 아니다.
-- 유저가 신난다고 해도 틀린 아이디어는 막아선다.
+- 깨질 것을 먼저 보고, 만들 것을 나중에 본다.
+- 자동 적용 가능한 LOW 리스크 변경은 제안과 함께 가드(typecheck/test) 결과를 첨부한다.
+- desktop runtime + 클라우드 amplifier 의 라이브 소스 ([확정]) 를 우선 인용한다.`,
+  cto: `당신은 CTO급 co-founder 다. (CTO Tier — 멀티 에이전트 오케스트레이션)
 - 배포되는 것은 전부 본인 책임이라는 전제에서 움직인다.
-- 깨질 것을 먼저 보고, 만들 것을 나중에 본다.`;
+- 유저가 신난다고 해도 틀린 아이디어는 막아선다.
+- Cowork+Codex 또는 self cross-review 결과의 합의/불일치를 명시하고 우선순위를 정한다.
+- 정책상 CTO Tier 의 완전 자율 실행은 Full-auto + Dual 에서만. Semi-auto 에서는 사용자 명시 호출에 따라 동작.`,
+};
+
+// 호환용 (구 코드/테스트가 AGENT_IDENTITY 직접 참조하는 경우)
+const AGENT_IDENTITY = AGENT_IDENTITY_BY_TIER.builder;
 
 const COLORS = {
   reset: "\x1b[0m",
@@ -94,6 +126,243 @@ const COLORS = {
   blue: "\x1b[34m",
   gray: "\x1b[90m",
 };
+
+// ============================================================================
+// TIER · PERSONALIZATION · LIVE SOURCE LAYER (Cowork-specific)
+// ============================================================================
+
+/**
+ * SKILL.md 에서 tier 추출. 없으면 builder (안전한 기본).
+ * tier: 또는 mode 필드를 frontmatter 또는 본문에서 스캔.
+ */
+function readTier() {
+  const skillPath = path.join(CONFIG.skillDir, "SKILL.md");
+  try {
+    const text = fs.readFileSync(skillPath, "utf8");
+    const m = text.match(/^tier:\s*(maker|builder|cto)/im);
+    if (m) return m[1].toLowerCase();
+  } catch (_) {}
+  return "builder";
+}
+
+/**
+ * SKILL.md 의 mode 필드 (cowork-main / codex-main). 없으면 cowork-main.
+ */
+function readMode() {
+  const skillPath = path.join(CONFIG.skillDir, "SKILL.md");
+  try {
+    const text = fs.readFileSync(skillPath, "utf8");
+    const m = text.match(/^mode:\s*(cowork-main|codex-main)/im);
+    if (m) return m[1].toLowerCase();
+  } catch (_) {}
+  return "cowork-main";
+}
+
+/**
+ * 개인화 누적 데이터 로드. 누적 항목:
+ * - acceptedPatterns: 사용자가 수락한 제안 패턴 (location 또는 keyword)
+ * - rejectedPatterns: 사용자가 거부/무시한 제안 패턴
+ * - repeatErrors: 반복 발생 에러 (failure-catalog 보강용)
+ * - stylePrefs: { verbosity, commentDensity, naming } — 누적 휴리스틱
+ * - lastUpdated: ISO timestamp
+ */
+function loadPersonalization() {
+  try {
+    return JSON.parse(fs.readFileSync(CONFIG.personalizationFile, "utf8"));
+  } catch (_) {
+    return {
+      acceptedPatterns: [],
+      rejectedPatterns: [],
+      repeatErrors: [],
+      stylePrefs: {},
+      reviewCount: 0,
+      lastUpdated: null,
+    };
+  }
+}
+
+function savePersonalization(p) {
+  ensureDir(CONFIG.skillDir);
+  p.lastUpdated = new Date().toISOString();
+  fs.writeFileSync(CONFIG.personalizationFile, JSON.stringify(p, null, 2));
+}
+
+/**
+ * 리뷰 결과를 personalization 에 반영.
+ * - 새 reviewCount + 1
+ * - 새 BLOCKER/SUGGESTION 타입의 location keyword → 후속 추적용
+ * - 동일 location 이 N회 이상 반복 → repeatErrors 등록
+ */
+function updatePersonalizationFromReview(review) {
+  const p = loadPersonalization();
+  p.reviewCount = (p.reviewCount || 0) + 1;
+
+  // 각 issue 의 location 을 키워드 형태로 누적
+  for (const issue of review.issues || []) {
+    const key = (issue.location || "").split(":")[0]; // path 부분만
+    if (!key) continue;
+    const idx = p.repeatErrors.findIndex((e) => e.location === key && e.severity === issue.severity);
+    if (idx >= 0) {
+      p.repeatErrors[idx].count = (p.repeatErrors[idx].count || 1) + 1;
+      p.repeatErrors[idx].lastSeen = new Date().toISOString();
+    } else {
+      p.repeatErrors.push({
+        location: key,
+        severity: issue.severity,
+        count: 1,
+        lastSeen: new Date().toISOString(),
+      });
+    }
+  }
+
+  // 상위 50개만 유지
+  p.repeatErrors.sort((a, b) => (b.count || 0) - (a.count || 0));
+  p.repeatErrors = p.repeatErrors.slice(0, 50);
+
+  savePersonalization(p);
+  return p;
+}
+
+/**
+ * 개인화 누적 데이터를 프롬프트 주입용 텍스트 블록으로 변환.
+ * 빈 상태 (첫 사용) 면 빈 문자열 반환.
+ */
+function personalizationContext() {
+  const p = loadPersonalization();
+  if (!p.reviewCount) return "";
+
+  const top = (p.repeatErrors || [])
+    .filter((e) => (e.count || 0) >= 2)
+    .slice(0, 8)
+    .map((e) => `- ${e.location} (${e.severity}, ${e.count}회)`)
+    .join("\n");
+
+  const styleLines = Object.entries(p.stylePrefs || {})
+    .map(([k, v]) => `- ${k}: ${v}`)
+    .join("\n");
+
+  let out = `\n## 누적 개인화 컨텍스트 (사용자 히스토리 ${p.reviewCount}회 리뷰 기준)\n`;
+  if (top) out += `\n반복 발생 핫스팟 (우선 점검):\n${top}\n`;
+  if (styleLines) out += `\n사용자 스타일 선호:\n${styleLines}\n`;
+  if (!top && !styleLines) return "";
+  return out;
+}
+
+/**
+ * 라이브 소스 (MCP 커넥터) 가용 여부 감지.
+ * Semi-auto mode 에서는 desktop runtime 의 환경 또는 사용자 SKILL.md 의 mcp 필드를 본다.
+ * 환경변수 힌트: MCP_VERCEL=1, MCP_SUPABASE=1, MCP_GITHUB=1 등.
+ */
+/**
+ * Detect MCP live sources with provenance.
+ *
+ * Returns: { confirmed: [...], inferred: [...], all: [...] }
+ *   - confirmed: probed from ~/.claude/mcp.json or claude_desktop_config.json (Claude Desktop)
+ *                or solo-cto-agent SKILL.md `mcp:` field
+ *   - inferred:  env vars only (token presence ≠ MCP installed; only suggests credentials exist)
+ *
+ * Heuristic note: env-var detection used to claim "connected" — that's wrong because
+ * a token can exist without the MCP server being registered. Now downgraded to [추정].
+ */
+function detectLiveSources() {
+  const confirmed = new Set();
+  const inferred = new Set();
+
+  // Probe 1: Claude Desktop MCP config (most authoritative on Cowork)
+  const desktopConfigPaths = [
+    process.env.CLAUDE_DESKTOP_CONFIG,
+    path.join(os.homedir(), ".claude", "mcp.json"),
+    path.join(os.homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json"),
+    path.join(os.homedir(), "AppData", "Roaming", "Claude", "claude_desktop_config.json"),
+    path.join(os.homedir(), ".config", "Claude", "claude_desktop_config.json"),
+  ].filter(Boolean);
+  for (const p of desktopConfigPaths) {
+    try {
+      if (!fs.existsSync(p)) continue;
+      const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
+      const servers = cfg.mcpServers || cfg.mcp_servers || cfg.mcp || {};
+      Object.keys(servers).forEach((name) => {
+        const norm = name.toLowerCase();
+        if (norm.includes("github")) confirmed.add("github");
+        else if (norm.includes("vercel")) confirmed.add("vercel");
+        else if (norm.includes("supabase")) confirmed.add("supabase");
+        else if (norm.includes("figma")) confirmed.add("figma");
+        else if (norm.includes("gdrive") || norm.includes("google-drive") || norm.includes("google_drive")) confirmed.add("gdrive");
+        else if (norm.includes("gcal") || norm.includes("calendar")) confirmed.add("gcal");
+        else if (norm.includes("slack")) confirmed.add("slack");
+        else if (norm.includes("notion")) confirmed.add("notion");
+        else confirmed.add(norm);
+      });
+      break; // first found wins
+    } catch (_) { /* ignore parse error, try next */ }
+  }
+
+  // Probe 2: solo-cto-agent SKILL.md `mcp:` field (user-declared)
+  try {
+    const text = fs.readFileSync(path.join(CONFIG.skillDir, "SKILL.md"), "utf8");
+    const m = text.match(/^mcp:\s*\[([^\]]+)\]/im);
+    if (m) {
+      m[1].split(",").map((s) => s.trim().replace(/['"]/g, "")).forEach((s) => {
+        if (s) confirmed.add(s.toLowerCase());
+      });
+    }
+  } catch (_) {}
+
+  // Inferred: env-var hints (credentials exist, not the same as MCP being wired)
+  if (process.env.MCP_GITHUB || process.env.GITHUB_TOKEN) inferred.add("github");
+  if (process.env.MCP_VERCEL || process.env.VERCEL_TOKEN) inferred.add("vercel");
+  if (process.env.MCP_SUPABASE || process.env.SUPABASE_ACCESS_TOKEN) inferred.add("supabase");
+  if (process.env.MCP_FIGMA || process.env.FIGMA_TOKEN) inferred.add("figma");
+
+  // Drop inferred entries that are already confirmed
+  confirmed.forEach((c) => inferred.delete(c));
+
+  // Backward compat: flat array contains both (test suites + existing callers).
+  // Provenance attached as non-enumerable .confirmed / .inferred for context-aware printers.
+  const result = [...confirmed, ...inferred];
+  Object.defineProperty(result, "confirmed", { value: Array.from(confirmed), enumerable: false });
+  Object.defineProperty(result, "inferred", { value: Array.from(inferred), enumerable: false });
+  return result;
+}
+
+function liveSourceContext() {
+  const sources = detectLiveSources();
+  const confirmed = sources.confirmed || sources;
+  const inferred = sources.inferred || [];
+
+  if (!confirmed.length && !inferred.length) {
+    return `\n## 라이브 소스\nMCP 라이브 소스 없음 (Claude Desktop mcp.json 미발견 + env 힌트 없음).\n모든 외부 상태는 [추정] 또는 [미검증] 으로 표기.\n오프라인 폴백: 캐시된 failure-catalog 와 personalization 만 사용.\n`;
+  }
+
+  const lines = [`\n## 라이브 소스`];
+  if (confirmed.length) {
+    lines.push(`확정 MCP (Claude Desktop config 또는 SKILL.md mcp: 명시) — [확정] 자료로 인용 가능:`);
+    lines.push(`  ${confirmed.join(", ")}`);
+  }
+  if (inferred.length) {
+    lines.push(`추정 MCP (env 토큰만 존재 — MCP 서버 등록 여부 미확인) — [추정] 으로만 인용:`);
+    lines.push(`  ${inferred.join(", ")}`);
+  }
+  const has = (n) => confirmed.includes(n);
+  lines.push(``);
+  lines.push(`- 배포 상태: ${has("vercel") ? "Vercel MCP 직접 조회 가능 [확정]" : "라이브 MCP 없음 → [추정]"}`);
+  lines.push(`- DB 상태:   ${has("supabase") ? "Supabase MCP 직접 조회 가능 [확정]" : "라이브 MCP 없음 → [추정]"}`);
+  lines.push(`- 코드 상태: ${has("github") ? "GitHub MCP 직접 조회 가능 [확정]" : "로컬 git 만 → [캐시]"}`);
+  lines.push(`문서/이전 기억보다 위 라이브 소스를 우선한다. 추정 항목은 단정 표현 금지.`);
+  return lines.join("\n") + "\n";
+}
+
+/**
+ * Tier 에 맞는 에이전트 아이덴티티 + agent 구성 표시.
+ * agent: "cowork" | "cowork+codex"
+ */
+function buildIdentity(tier, agent) {
+  const id = AGENT_IDENTITY_BY_TIER[tier] || AGENT_IDENTITY_BY_TIER.builder;
+  const agentLine = agent === "cowork+codex"
+    ? "\n에이전트 구성: Cowork + Codex (dual). 합의/불일치를 명시한다."
+    : "\n에이전트 구성: Cowork 단독. 자기 검증 (self cross-review) 으로 단일 시점 의견의 한계를 보완한다.";
+  return id + agentLine;
+}
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -271,19 +540,21 @@ function _anthropicOnce(prompt, systemPrompt, model) {
   });
 }
 
-// 3-retry with rate-limit backoff (mirrors codex-main/claude-worker.js claude())
-async function callAnthropic(prompt, systemPrompt, model) {
+// Tier-aware retry with rate-limit backoff (mirrors codex-main/claude-worker.js claude()).
+// maxRetries is wired from CONFIG.tierLimits[tier].maxRetries by callers; defaults to 3.
+async function callAnthropic(prompt, systemPrompt, model, opts = {}) {
+  const maxRetries = Math.max(1, Math.min(6, opts.maxRetries || 3));
   let lastErr;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       return await _anthropicOnce(prompt, systemPrompt, model);
     } catch (e) {
       lastErr = e;
       const body = (e.body || e.message || "").toLowerCase();
       const isRateLimit = body.includes("rate_limit") || body.includes("overloaded") || e.statusCode === 429 || e.statusCode === 529;
-      if (attempt === 2) break;
+      if (attempt === maxRetries - 1) break;
       const waitMs = isRateLimit ? (attempt + 1) * 30000 : (attempt + 1) * 15000;
-      logWarn(`Anthropic ${isRateLimit ? "rate limited" : "error"}, waiting ${waitMs / 1000}s (attempt ${attempt + 1}/3)...`);
+      logWarn(`Anthropic ${isRateLimit ? "rate limited" : "error"}, waiting ${waitMs / 1000}s (attempt ${attempt + 1}/${maxRetries})...`);
       await new Promise((r) => setTimeout(r, waitMs));
     }
   }
@@ -429,6 +700,28 @@ function parseReviewResponse(text) {
   return { verdict, verdictKo: verdictLabel(verdict), issues, summary, nextAction };
 }
 
+function formatCrossCheck(cc) {
+  if (!cc) return "";
+  let out = `\n${COLORS.bold}[CROSS-CHECK]${COLORS.reset} ${cc.crossVerdict}\n`;
+  if (cc.addedIssues.length) {
+    out += `${COLORS.gray}+ 추가 발견 (${cc.addedIssues.length}):${COLORS.reset}\n`;
+    for (const i of cc.addedIssues) {
+      const icon = i.severity === "BLOCKER" ? `${COLORS.red}⛔${COLORS.reset}` : i.severity === "SUGGESTION" ? `${COLORS.yellow}⚠️${COLORS.reset}` : `${COLORS.blue}💡${COLORS.reset}`;
+      out += `  ${icon} [${i.location}] ${i.issue} → ${i.suggestion}\n`;
+    }
+  }
+  if (cc.removedItems.length) {
+    out += `${COLORS.gray}- 1차 false positive 의심 (${cc.removedItems.length}):${COLORS.reset}\n`;
+    for (const r of cc.removedItems) {
+      out += `  · [${r.location}] ${r.reason}\n`;
+    }
+  }
+  if (cc.upgradeBlock) out += `${COLORS.gray}↑ 심각도 상향:${COLORS.reset}\n  ${cc.upgradeBlock.replace(/\n/g, "\n  ")}\n`;
+  if (cc.downgradeBlock) out += `${COLORS.gray}↓ 심각도 하향:${COLORS.reset}\n  ${cc.downgradeBlock.replace(/\n/g, "\n  ")}\n`;
+  if (cc.metaReview) out += `${COLORS.gray}meta:${COLORS.reset} ${cc.metaReview}\n`;
+  return out;
+}
+
 function formatTerminalOutput(review, sourceInfo, costInfo) {
   const issueCounts = {
     BLOCKER: review.issues.filter((i) => i.severity === "BLOCKER").length,
@@ -491,12 +784,21 @@ async function localReview(options = {}) {
     model = CONFIG.defaultModel.claude,
     dryRun = false,
     outputFormat = "terminal",
+    crossCheck = null, // null = tier 기본값 따름, true/false = 강제
   } = options;
 
-  logSection("solo-cto-agent local-review");
-  logInfo(`Mode: solo (Claude)`);
+  // Tier · agent · personalization · live-source 컨텍스트 결정
+  const tier = readTier();
+  const mode = readMode();
+  const agent = process.env.OPENAI_API_KEY ? "cowork+codex" : "cowork";
+  const tierLimits = CONFIG.tierLimits[tier] || CONFIG.tierLimits.builder;
+  const useCrossCheck = crossCheck !== null ? crossCheck : tierLimits.selfCrossReview;
+
+  logSection("solo-cto-agent review");
+  logInfo(`Mode: ${mode} | Agent: ${agent} | Tier: ${tier}`);
   logInfo(`Source: ${diffSource} changes`);
   logInfo(`Model: ${model}`);
+  if (useCrossCheck) logInfo(`Self cross-review: ON (tier=${tier})`);
 
   // Get diff
   const diff = getDiff(diffSource, target);
@@ -510,18 +812,23 @@ async function localReview(options = {}) {
   // Load context
   const skillContext = readSkillContext();
   const failureCatalog = readFailureCatalog();
+  const personalCtx = personalizationContext();
+  const liveCtx = liveSourceContext();
+  const identity = buildIdentity(tier, agent);
 
   const errorPatterns = failureCatalog.patterns
     ?.map((p) => `- ${p.pattern}: ${p.fix}`)
     .join("\n") || "No patterns loaded";
 
-  // Build review prompt (Korean, codex-main parity)
-  const systemPrompt = `${AGENT_IDENTITY}
+  // Build review prompt (Korean, codex-main parity + cowork enhancements)
+  const systemPrompt = `${identity}
 
 당신은 Claude, 팀의 시니어 코드 리뷰어다. 아래 diff를 리뷰한다.
 
-${SKILL_CONTEXT}
-${SKILL_REVIEW_CRITERIA}
+${OPERATING_PRINCIPLES}
+${COMMON_STACK_PATTERNS}
+${REVIEW_PRIORITY}
+${liveCtx}${personalCtx}
 
 ## 심각도 분류
 - ⛔ BLOCKER  — 머지/배포 차단. 치명 버그, 보안, 데이터 손실 위험.
@@ -579,10 +886,10 @@ ${diff}
     return null;
   }
 
-  logInfo("Calling Anthropic API...");
+  logInfo(`Calling Anthropic API (maxRetries=${tierLimits.maxRetries})...`);
 
   try {
-    const response = await callAnthropic(userPrompt, systemPrompt, model);
+    const response = await callAnthropic(userPrompt, systemPrompt, model, { maxRetries: tierLimits.maxRetries });
     const review = parseReviewResponse(response.text);
 
     // Estimate tokens
@@ -601,7 +908,9 @@ ${diff}
 
     const reviewData = {
       timestamp: new Date().toISOString(),
-      mode: "solo",
+      mode,
+      agent,
+      tier,
       model,
       diffSource,
       verdict: review.verdict,
@@ -615,6 +924,39 @@ ${diff}
       },
       cost: totalCost,
     };
+
+    // Self cross-review (Cowork 단독 구성의 핵심 품질 게이트)
+    if (useCrossCheck && agent === "cowork") {
+      logInfo("Running self cross-review (devil's advocate pass)...");
+      try {
+        const cross = await selfCrossReview({
+          diff,
+          firstPass: review,
+          firstPassRaw: response.text,
+          systemPromptBase: identity,
+          model,
+          maxRetries: tierLimits.maxRetries,
+        });
+        reviewData.crossCheck = cross;
+        // 합의 BLOCKER 가 있으면 verdict 강화
+        if (cross.commonBlockers > 0 && reviewData.verdict !== "REQUEST_CHANGES") {
+          reviewData.verdict = "REQUEST_CHANGES";
+          reviewData.verdictUpgradedBy = "self-cross-review";
+        }
+        // 토큰/비용 합산
+        reviewData.tokens.input += cross.tokens.input;
+        reviewData.tokens.output += cross.tokens.output;
+        reviewData.cost = (parseFloat(reviewData.cost) + parseFloat(cross.cost)).toFixed(4);
+      } catch (err) {
+        logWarn(`Self cross-review failed: ${err.message} — 1차 결과만 보고`);
+        reviewData.crossCheckError = err.message;
+      }
+    }
+
+    // Personalization 누적 (반복 핫스팟 추적)
+    try {
+      updatePersonalizationFromReview(review);
+    } catch (_) { /* personalization 업데이트 실패는 리뷰 결과에 영향 없음 */ }
 
     fs.writeFileSync(reviewFile, JSON.stringify(reviewData, null, 2));
 
@@ -633,6 +975,9 @@ ${diff}
       };
       const output = formatTerminalOutput(review, { diffSource }, costInfo);
       log(output);
+      if (reviewData.crossCheck) {
+        log(formatCrossCheck(reviewData.crossCheck));
+      }
     }
 
     logSuccess(`Review saved to ${reviewFile}`);
@@ -641,6 +986,131 @@ ${diff}
     logError(`API call failed: ${err.message}`);
     throw err;
   }
+}
+
+/**
+ * Self Cross-Review (Cowork 단독의 핵심 품질 게이트)
+ *
+ * 1차 리뷰의 결과를 두 번째 패스 (devil's advocate 페르소나) 가 검증한다.
+ * - 1차가 놓친 BLOCKER 가 있는가?
+ * - 1차가 과대 평가한 항목이 있는가?
+ * - 1차의 false positive / false negative 의심 지점은?
+ *
+ * 두 패스의 합의·불일치를 정리해 단일 시점 의견의 한계를 보완.
+ * Cowork+Codex 가 없을 때 가장 큰 가치를 만든다.
+ */
+async function selfCrossReview({ diff, firstPass, firstPassRaw, systemPromptBase, model, maxRetries }) {
+  const advocateSystem = `${systemPromptBase}
+
+당신은 동일 diff 의 1차 리뷰 결과를 검증하는 **devil's advocate 리뷰어** 다.
+1차 리뷰는 자기 자신의 한 차례 응답이다. 자기 검증의 한계를 인정하고,
+의도적으로 다른 시각에서 본다. 동의를 위한 동의는 금지.
+
+검증 항목:
+1. 1차가 놓친 BLOCKER (보안, 데이터 손실, 명백한 버그) 가 있는가?
+2. 1차가 BLOCKER 로 본 항목 중 사실 SUGGESTION 이거나 false positive 인 것이 있는가?
+3. 1차가 SUGGESTION/NIT 로 묶었지만 실제로는 BLOCKER 인 항목은?
+4. 1차 summary 의 [확정]/[추정] 태그가 적절한가? (라이브 소스 없이 [확정] 단정 짓진 않았는지)
+
+## 출력 형식 (반드시 이대로)
+
+[CROSS_VERDICT] AGREE | DISAGREE | PARTIAL
+
+[ADD]                  ← 1차가 놓친 항목 (없으면 "없음")
+⛔/⚠️/💡 [path:line]
+  이슈.
+  → 수정.
+
+[REMOVE]               ← 1차의 false positive (없으면 "없음")
+[path:line]
+  사유.
+
+[UPGRADE]              ← 심각도 상향 (없으면 "없음")
+[path:line] SUGGESTION→BLOCKER
+  사유.
+
+[DOWNGRADE]            ← 심각도 하향 (없으면 "없음")
+[path:line] BLOCKER→SUGGESTION
+  사유.
+
+[META_REVIEW]
+1~2문장. 1차 리뷰 자체의 품질 평가.
+
+## 규칙
+- 한국어, 칭찬 금지, 간결.
+- 1차와 동일 항목 반복 금지. 1차에 추가/수정할 게 없으면 그냥 "없음".
+- 자기 검증의 한계 명시: 같은 모델·같은 컨텍스트의 한계가 있다.`;
+
+  const advocateUser = `## 1차 리뷰 결과 (검증 대상)
+
+VERDICT: ${firstPass.verdict}
+ISSUES (${firstPass.issues.length}개):
+${firstPass.issues.map((i) => `  ${i.severity === "BLOCKER" ? "⛔" : i.severity === "SUGGESTION" ? "⚠️" : "💡"} [${i.location}] ${i.issue}`).join("\n")}
+SUMMARY: ${firstPass.summary}
+
+## 1차 리뷰 원문
+${firstPassRaw}
+
+## 검증 대상 diff
+\`\`\`diff
+${diff}
+\`\`\`
+
+위 출력 형식 그대로, devil's advocate 시각에서 검증하라.`;
+
+  const response = await callAnthropic(advocateUser, advocateSystem, model, { maxRetries: maxRetries || 3 });
+  const text = response.text;
+
+  // Parse cross-check response
+  const crossVerdict = (text.match(/\[CROSS_VERDICT\][:\s]*([A-Z]+)/i) || [])[1] || "AGREE";
+
+  // ADD section: extract issue patterns
+  const addBlock = (text.match(/\[ADD\]([\s\S]*?)(?=\[REMOVE\]|\[UPGRADE\]|\[DOWNGRADE\]|\[META_REVIEW\]|$)/i) || [])[1] || "";
+  const addedIssues = [];
+  const addPattern = /(⛔|⚠️|💡)\s*\[([^\]]+)\]\s*\n\s*([^\n]+)\n\s*(?:→|->)\s*([^\n]+)/g;
+  let m;
+  while ((m = addPattern.exec(addBlock)) !== null) {
+    addedIssues.push({
+      severity: m[1] === "⛔" ? "BLOCKER" : m[1] === "⚠️" ? "SUGGESTION" : "NIT",
+      location: m[2].trim(),
+      issue: m[3].trim(),
+      suggestion: m[4].trim(),
+    });
+  }
+
+  // REMOVE section: false positives
+  const removeBlock = (text.match(/\[REMOVE\]([\s\S]*?)(?=\[UPGRADE\]|\[DOWNGRADE\]|\[META_REVIEW\]|$)/i) || [])[1] || "";
+  const removedItems = [];
+  const removePattern = /\[([^\]]+)\]\s*\n\s*([^\n[]+)/g;
+  while ((m = removePattern.exec(removeBlock)) !== null) {
+    if (m[1].trim().toLowerCase() === "없음") continue;
+    removedItems.push({ location: m[1].trim(), reason: m[2].trim() });
+  }
+
+  const upgradeBlock = (text.match(/\[UPGRADE\]([\s\S]*?)(?=\[DOWNGRADE\]|\[META_REVIEW\]|$)/i) || [])[1] || "";
+  const downgradeBlock = (text.match(/\[DOWNGRADE\]([\s\S]*?)(?=\[META_REVIEW\]|$)/i) || [])[1] || "";
+  const metaReview = ((text.match(/\[META_REVIEW\]([\s\S]*?)$/i) || [])[1] || "").trim();
+
+  const commonBlockers = addedIssues.filter((i) => i.severity === "BLOCKER").length
+    + firstPass.issues.filter((i) => i.severity === "BLOCKER" && !removedItems.find((r) => r.location === i.location)).length;
+
+  // Token cost
+  const inputTokens = Math.ceil((advocateSystem.length + advocateUser.length) / 4);
+  const outputTokens = Math.ceil(text.length / 4);
+  const cost = estimateCost(inputTokens, outputTokens, model);
+
+  return {
+    crossVerdict,
+    addedIssues,
+    removedItems,
+    upgradeBlock: upgradeBlock.trim(),
+    downgradeBlock: downgradeBlock.trim(),
+    metaReview,
+    commonBlockers,
+    raw: text,
+    tokens: { input: inputTokens, output: outputTokens },
+    cost,
+  };
 }
 
 async function knowledgeCapture(options = {}) {
@@ -1161,11 +1631,17 @@ async function main() {
         ? "markdown"
         : "terminal";
 
+      // Self cross-review override flags
+      let crossCheck = null;
+      if (args.includes("--cross-check")) crossCheck = true;
+      if (args.includes("--no-cross-check")) crossCheck = false;
+
       await localReview({
         diffSource,
         target,
         dryRun,
         outputFormat,
+        crossCheck,
       });
     } else if (command === "knowledge-capture") {
       const source = args.includes("--file")
@@ -1194,9 +1670,30 @@ async function main() {
       await dualReview({ diffSource, target });
     } else if (command === "detect-mode") {
       const mode = detectMode();
-      logInfo(`Current mode: ${mode}`);
+      const tier = readTier();
+      const skillMode = readMode();
+      const liveSources = detectLiveSources();
+      logInfo(`Agent: ${mode} | Tier: ${tier} | Mode: ${skillMode}`);
       log(`  ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "set" : "missing"}`);
-      log(`  OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? "set" : "missing"}`);
+      log(`  OPENAI_API_KEY:   ${process.env.OPENAI_API_KEY ? "set" : "missing"}`);
+      log(`  Live MCP sources: ${liveSources.length ? liveSources.join(", ") : "none"}`);
+    } else if (command === "personalization") {
+      const sub = args[1] || "show";
+      if (sub === "show") {
+        const p = loadPersonalization();
+        log(JSON.stringify(p, null, 2));
+      } else if (sub === "reset") {
+        if (fs.existsSync(CONFIG.personalizationFile)) {
+          fs.unlinkSync(CONFIG.personalizationFile);
+        }
+        logSuccess("Personalization reset");
+      } else if (sub === "context") {
+        log(personalizationContext() || "(empty — 첫 사용)");
+      } else {
+        logError(`Unknown personalization subcommand: ${sub}`);
+        log(`Use: personalization show|reset|context`);
+        process.exit(1);
+      }
     } else if (command === "session") {
       const subcommand = args[1] || "list";
 
@@ -1228,23 +1725,28 @@ ${COLORS.bold}Usage:${COLORS.reset}
   node bin/cowork-engine.js <command> [options]
 
 ${COLORS.bold}Commands:${COLORS.reset}
-  local-review       Run Claude-only code review
-  knowledge-capture  Extract session decisions into knowledge articles
-  dual-review        Run Claude + OpenAI cross-review
-  detect-mode        Check which API keys are configured
-  session save       Save current session context
-  session restore    Load most recent session context
-  session list       List recent sessions
-  help               Show this message
+  local-review            Run Claude review (auto self cross-review for builder/cto)
+  knowledge-capture       Extract session decisions into knowledge articles
+  dual-review             Run Claude + OpenAI cross-review (Cowork+Codex)
+  detect-mode             Show agent / tier / live MCP sources
+  personalization show    Show accumulated user style/preference data
+  personalization reset   Reset personalization data
+  personalization context Show prompt-injection block built from accumulation
+  session save            Save current session context
+  session restore         Load most recent session context
+  session list            List recent sessions
+  help                    Show this message
 
 ${COLORS.bold}Options:${COLORS.reset}
   local-review:
-    --staged         Review staged changes (default)
-    --branch         Review changes on current branch vs main
-    --file <path>    Review changes in specific file
-    --dry-run        Show prompt without calling API
-    --json           Output as JSON
-    --markdown       Output raw markdown
+    --staged           Review staged changes (default)
+    --branch           Review changes on current branch vs main
+    --file <path>      Review changes in specific file
+    --dry-run          Show prompt without calling API
+    --json             Output as JSON
+    --markdown         Output raw markdown
+    --cross-check      Force self cross-review ON (regardless of tier)
+    --no-cross-check   Force self cross-review OFF
 
   knowledge-capture:
     --session        Extract from recent commits (default)
@@ -1306,11 +1808,24 @@ module.exports = {
   sessionSave,
   sessionRestore,
   sessionList,
+  // Cowork-specific layer (substantive upgrade)
+  selfCrossReview,
+  readTier,
+  readMode,
+  loadPersonalization,
+  savePersonalization,
+  updatePersonalizationFromReview,
+  personalizationContext,
+  detectLiveSources,
+  liveSourceContext,
+  buildIdentity,
+  AGENT_IDENTITY_BY_TIER,
   // Utilities for testing
   parseReviewResponse,
   getDiff,
   readSkillContext,
   readFailureCatalog,
+  _setSkillDirOverride,
 };
 
 // Run CLI if executed directly
