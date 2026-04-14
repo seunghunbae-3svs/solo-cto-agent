@@ -192,6 +192,55 @@ describe("notify: helper convenience wrappers", () => {
     expect(env.meta.event).toBeNull();
   });
 
+  // PR-G9-ship-emit — notifyDeployResult event-tag routing.
+  it("notifyDeployResult success → event=deploy.ready, severity=info", async () => {
+    await notify.notifyDeployResult({
+      target: "production",
+      status: "success",
+      url: "https://myapp.com",
+      commit: "abc1234",
+      summary: "v1.2.3 live",
+    });
+    const env = JSON.parse(fs.readFileSync(tmpFile, "utf8").trim());
+    expect(env.meta.event).toBe("deploy.ready");
+    expect(env.severity).toBe("info");
+    expect(env.title).toContain("production");
+    expect(env.title).toContain("SUCCESS");
+    expect(env.body).toContain("https://myapp.com");
+    expect(env.meta.target).toBe("production");
+  });
+
+  it("notifyDeployResult failed → event=deploy.error, severity=error", async () => {
+    await notify.notifyDeployResult({
+      target: "preview",
+      status: "failed",
+      summary: "build log tail",
+    });
+    const env = JSON.parse(fs.readFileSync(tmpFile, "utf8").trim());
+    expect(env.meta.event).toBe("deploy.error");
+    expect(env.severity).toBe("error");
+    expect(env.title).toContain("preview");
+    expect(env.title).toContain("FAILED");
+  });
+
+  it("notifyDeployResult partial → event=deploy.error, severity=warn", async () => {
+    await notify.notifyDeployResult({
+      target: "staging",
+      status: "partial",
+      summary: "deployed but health-check flaky",
+    });
+    const env = JSON.parse(fs.readFileSync(tmpFile, "utf8").trim());
+    expect(env.meta.event).toBe("deploy.error");
+    expect(env.severity).toBe("warn");
+  });
+
+  it("notifyDeployResult with unknown status falls back to deploy.error/error", async () => {
+    await notify.notifyDeployResult({ target: "preview", status: "weird" });
+    const env = JSON.parse(fs.readFileSync(tmpFile, "utf8").trim());
+    expect(env.meta.event).toBe("deploy.error");
+    expect(env.severity).toBe("error");
+  });
+
   // The dualReview adapter in bin/cowork-engine.js maps verdictMatch=false
   // to crossVerdict="DISAGREE" so the event bucket is deterministic.
   it("dualReview adapter shape → review.dual-disagree", async () => {
