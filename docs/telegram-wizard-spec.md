@@ -1,8 +1,8 @@
-# Telegram Wizard — Draft Specification
+# Telegram Wizard — Specification
 
-> **Status:** DRAFT (PR-G7) · **Target release:** v0.9.0
+> **Status:** SHIPPED — wizard (PR-G7-impl) + subcommands (PR-G7-subcommands)
 > **Owners:** solo-cto-agent core
-> **Related:** `bin/notify.js` (existing Telegram channel), `bin/wizard.js` (existing init wizard)
+> **Related:** `bin/notify.js` (Telegram channel + notify-config consumer), `bin/notify-config.js` (event filter), `bin/wizard.js` (init wizard)
 
 ---
 

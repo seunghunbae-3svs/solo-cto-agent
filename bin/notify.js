@@ -24,6 +24,11 @@ const http = require("http");
 const fs = require("fs");
 const url = require("url");
 
+// notify-config is loaded lazily via try/require so this file stays usable
+// even in stripped-down installs (e.g., legacy 0.x pinned environments).
+let notifyConfig = null;
+try { notifyConfig = require("./notify-config"); } catch (_) { /* optional */ }
+
 const SEVERITIES = ["info", "warn", "error", "blocker"];
 
 function detectChannels() {
@@ -111,6 +116,29 @@ async function sendTelegram(envelope) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) return { ok: false, error: "TELEGRAM_BOT_TOKEN/CHAT_ID not set" };
+
+  // Consult notify-config (if available + present on disk).
+  // - If an event id is attached to the envelope and the user has disabled
+  //   that event in ~/.solo-cto-agent/notify.json, short-circuit silently.
+  // - If the user explicitly removed 'telegram' from cfg.channels (e.g.
+  //   via `solo-cto-agent telegram disable`), also short-circuit.
+  // Both checks are fail-open: a missing/unreadable config defaults to
+  // "send" so we never silently drop a notification on a fresh machine.
+  if (notifyConfig) {
+    try {
+      const cfg = notifyConfig.readConfig();
+      const eventId = envelope && envelope.meta && envelope.meta.event;
+      if (eventId && !notifyConfig.isEventEnabled(eventId, cfg)) {
+        return { ok: true, channel: "telegram", filtered: true, reason: `event '${eventId}' disabled in notify-config` };
+      }
+      // Only enforce the channels filter if the file actually exists.
+      // (defaultConfig() includes 'telegram', so a no-file install still sends.)
+      if (fs.existsSync(notifyConfig.configPath()) && !notifyConfig.isChannelEnabled("telegram", cfg)) {
+        return { ok: true, channel: "telegram", filtered: true, reason: "telegram disabled in notify-config" };
+      }
+    } catch (_) { /* fail-open */ }
+  }
+
   const text = formatPlain(envelope);
   try {
     await postJson(
@@ -218,11 +246,24 @@ async function notifyReviewResult(reviewData) {
   const blockers = (reviewData.issues || []).filter((i) => i.severity === "BLOCKER").length;
   const suggestions = (reviewData.issues || []).filter((i) => i.severity === "SUGGESTION").length;
   const severity = blockers > 0 ? "blocker" : (verdict === "REQUEST_CHANGES" ? "warn" : "info");
+
+  // Map to a notify-config event id (docs/telegram-wizard-spec.md §5).
+  // Cross-review disagreement gets its own bucket so users can mute the
+  // noisy "single-reviewer blocker" stream while keeping the high-signal
+  // "two reviewers disagreed" stream on.
+  const dualDisagreed = !!(reviewData.crossCheck
+    && reviewData.crossCheck.crossVerdict
+    && reviewData.crossCheck.crossVerdict !== verdict);
+  const event = dualDisagreed
+    ? "review.dual-disagree"
+    : (blockers > 0 ? "review.blocker" : null);
+
   return notify({
     severity,
     title: `Review ${verdict} — ${blockers} blocker / ${suggestions} suggestion`,
     body: reviewData.summary || "",
     meta: {
+      event,
       tier: reviewData.tier,
       agent: reviewData.agent,
       diffSource: reviewData.diffSource,
@@ -240,7 +281,10 @@ async function notifyApplyResult(applyData) {
     severity,
     title: `Apply-fixes — ${applied} applied / ${failed} failed`,
     body: applyData.summary || "",
-    meta: { reviewFile: applyData.reviewFile },
+    meta: {
+      event: failed > 0 ? "ci.failure" : "ci.success",
+      reviewFile: applyData.reviewFile,
+    },
   });
 }
 

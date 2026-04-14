@@ -1,5 +1,72 @@
 # Changelog
 
+## Unreleased — PR-G7-subcommands: telegram test/config/status/disable/verify + event filter
+
+**Theme**: closing the telegram wizard loop. The wizard (PR-G7-impl)
+gets you wired up; this PR adds the day-2 surface — toggle which event
+classes notify you, mute the whole channel without losing creds, run a
+non-interactive verify in CI, and tear it all down with one command.
+
+### New: `bin/notify-config.js`
+* Persistent event filter at `~/.solo-cto-agent/notify.json` (override
+  via `$SOLO_CTO_NOTIFY_CONFIG`).
+* Schema matches `docs/telegram-wizard-spec.md` §5: `channels`,
+  `events` (review.blocker / review.dual-disagree / ci.failure /
+  ci.success / deploy.ready / deploy.error), `format`.
+* Fail-open semantics: missing file → defaults; unknown event id →
+  enabled; corrupt JSON → defaults + `_error` marker.
+* Atomic disk writes via tmp-file rename. `0600` perms.
+* Empty `channels[]` is honored verbatim (so `telegram disable` can
+  truly mute the channel without the writer re-adding 'telegram').
+
+### New telegram subcommands
+* `solo-cto-agent telegram test` — one-shot send with current creds.
+  Bypasses the event filter (the whole point is to confirm the pipe).
+* `solo-cto-agent telegram verify` — non-interactive `getMe` +
+  optional `sendMessage` round-trip. Returns structured exit code for
+  CI scripts.
+* `solo-cto-agent telegram status` — dump cred sources (env vs `.env`
+  block vs shell profile), mask token, list active events.
+* `solo-cto-agent telegram disable` — strip `.env` block + shell
+  profile block + GitHub secrets (best-effort) + drop 'telegram' from
+  notify-config channels. Idempotent.
+* `solo-cto-agent telegram config` — toggle events / format. Three
+  modes: `--list`, `--event X --on|--off`, `--format compact|detailed`,
+  plus an interactive numbered menu when no flags + TTY.
+
+### Wizard updates
+* Step 5 now writes the default `notify.json` on first run so users
+  don't have to discover `telegram config` separately. Idempotent —
+  re-running the wizard never clobbers an existing config.
+
+### `bin/notify.js`
+* `sendTelegram` consults notify-config at emit time. If the envelope
+  carries `meta.event` and that event is disabled, the send is
+  short-circuited (returned as `{ok:true, filtered:true, reason}`).
+* `notifyReviewResult` and `notifyApplyResult` now tag envelopes with
+  the appropriate event id (`review.blocker` / `review.dual-disagree`
+  / `ci.failure` / `ci.success`).
+* Lazy-require of notify-config keeps the module usable in
+  stripped-down installs that don't ship the new file.
+
+### Tests
+* `tests/notify-config.test.mjs` — 14 tests. Defaults, partial-merge,
+  corrupt-recovery, format normalization, channel + event toggles.
+* `tests/telegram-subcommands.test.mjs` — 18 tests covering
+  `resolveCreds` / `telegramTest` / `telegramVerify` /
+  `telegramStatus` (with token masking assertion) / `telegramDisable`
+  / `telegramConfig`. All network calls stubbed via injected
+  `httpGetJson` / `httpPostJson`.
+* `tests/telegram-wizard.test.mjs` — `runWizard` tests now isolate
+  step-5 notify-config writes via `SOLO_CTO_NOTIFY_CONFIG` so the
+  suite never touches the real `~/.solo-cto-agent/`.
+* Total: 441 tests (up from 399 in PR #64).
+
+### Docs
+* `docs/telegram-wizard-spec.md` — status flipped from DRAFT → SHIPPED.
+
+---
+
 ## Unreleased — Toolkit upgrade: per-tool entry points + examples/
 
 **Theme**: repositioning from "skill pack" to "toolkit" by splitting the
