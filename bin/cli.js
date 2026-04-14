@@ -38,7 +38,7 @@ Usage:
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent upgrade --org <github-org> [--repos <repo1,repo2,...>]
   solo-cto-agent sync --org <github-org> [--apply] [--repos <repo1,repo2,...>]
-  solo-cto-agent review [--diff HEAD~1] [--agent claude] [--dry-run]
+  solo-cto-agent review [--diff HEAD~1] [--agent claude] [--dry-run] [--lang en|ko]
   solo-cto-agent learn [--force] [--category <name>]
   solo-cto-agent status
   solo-cto-agent lint [path]
@@ -73,6 +73,7 @@ Examples:
   npx solo-cto-agent sync --org myorg --apply              # apply: merge remote data into local
   npx solo-cto-agent review                                # local Claude review of last commit
   npx solo-cto-agent review --diff main..feature --dry-run # preview review prompt
+  npx solo-cto-agent review --lang ko                      # Korean output + prompt
   npx solo-cto-agent learn                                 # generate knowledge articles
 `);
 }
@@ -1208,8 +1209,10 @@ async function main() {
     const pathIndex = args.indexOf("--path");
     const reviewPath = pathIndex >= 0 ? args[pathIndex + 1] : ".";
     const dryRun = args.includes("--dry-run");
+    const langIndex = args.indexOf("--lang");
+    const lang = langIndex >= 0 ? args[langIndex + 1] : process.env.SOLO_CTO_LANG;
     const apiKey = process.env.ANTHROPIC_API_KEY;
-    await reviewCommand({ path: reviewPath, agent, diff, apiKey, dryRun });
+    await reviewCommand({ path: reviewPath, agent, diff, apiKey, dryRun, lang });
     return;
   }
 

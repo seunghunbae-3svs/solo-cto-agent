@@ -1,13 +1,13 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 
 /**
- * review.js — Local Multi-Agent Code Review Runner
+ * review.js - Local Multi-Agent Code Review Runner
  *
  * Purpose: Run code reviews without GitHub Actions on a local machine.
  * Export: async function reviewCommand(options)
  *
  * Usage:
- *   solo-cto-agent review [--path .] [--agent claude] [--diff HEAD~1] [--dry-run] [--api-key $KEY]
+ *   solo-cto-agent review [--path .] [--agent claude] [--diff HEAD~1] [--dry-run] [--api-key $KEY] [--lang en|ko]
  */
 
 const fs = require('fs');
@@ -15,18 +15,118 @@ const path = require('path');
 const { execSync } = require('child_process');
 const https = require('https');
 
+const SUPPORTED_LANGS = new Set(['en', 'ko']);
+const DEFAULT_LANG = 'en';
+const STRINGS = {
+  en: {
+    bannerTitle: 'solo-cto-agent Local Code Review',
+    agentFallback: 'Agent "{agent}" not yet implemented. Using "claude".',
+    stepCollect: '[1/4] Collecting diff .............. ',
+    stepCatalog: '[2/4] Checking failure catalog ..... ',
+    stepReview: '[3/4] Running Claude review ........ ',
+    stepReport: '[4/4] Generating report ............ ',
+    empty: '(empty)',
+    nothingToReview: 'Nothing to review.',
+    files: '{count} files',
+    patternsMatched: '{count} patterns matched',
+    dryRunHeader: '[DRY RUN] Review prompt:',
+    reviewComplete: 'review complete',
+    saved: 'saved',
+    reportLabel: 'Report',
+    verdictLabel: 'Verdict',
+    criticalLabel: 'Critical',
+    warningsLabel: 'Warnings',
+    approvedLabel: 'Approved',
+    patternsLabel: 'Known patterns matched',
+    diffTooLarge: 'Diff is very large (>50KB). Truncating for review.',
+    notGitRepo: 'Not a git repository. Initialize with `git init` first.',
+    diffFailed: 'Failed to get diff: {message}',
+    apiKeyMissing: 'ANTHROPIC_API_KEY environment variable is not set.',
+    apiKeyHint: 'Set it with: export ANTHROPIC_API_KEY="sk-ant-..."',
+    reportTitle: 'Code Review Report',
+    diffSummaryTitle: 'Diff Summary',
+    filesChangedTitle: 'Files Changed',
+    reviewResultsTitle: 'Review Results',
+    summaryTitle: 'Summary',
+    patternMatchesTitle: 'Pattern Matches',
+    summaryFallback: 'No summary provided.',
+    promptIntro: 'You are a senior code reviewer. Review this diff carefully.',
+    promptCatalog: 'Auto-flagged patterns from failure catalog:',
+    promptReviewChecklistTitle: 'Review the diff for:',
+    promptOutputTitle: 'Then give a final verdict:',
+    promptFormatTitle: 'Format your response as:',
+    promptOutputNote: 'Use the exact English labels shown below.'
+  },
+  ko: {
+    bannerTitle: 'solo-cto-agent 로컬 코드 리뷰',
+    agentFallback: '에이전트 "{agent}"는 아직 지원되지 않습니다. "claude"로 실행합니다.',
+    stepCollect: '[1/4] diff 수집 중 .............. ',
+    stepCatalog: '[2/4] failure catalog 검사 ..... ',
+    stepReview: '[3/4] Claude 리뷰 실행 ........ ',
+    stepReport: '[4/4] 리포트 생성 ............ ',
+    empty: '(빈 diff)',
+    nothingToReview: '검토할 내용이 없습니다.',
+    files: '{count} 파일',
+    patternsMatched: '{count}개 패턴 매치됨',
+    dryRunHeader: '[DRY RUN] 리뷰 프롬프트:',
+    reviewComplete: '리뷰 완료',
+    saved: '저장됨',
+    reportLabel: '리포트',
+    verdictLabel: '판정',
+    criticalLabel: '치명',
+    warningsLabel: '경고',
+    approvedLabel: '승인',
+    patternsLabel: '알려진 패턴 매치',
+    diffTooLarge: 'Diff가 큽니다 (>50KB). 일부만 리뷰합니다.',
+    notGitRepo: 'git 저장소가 아닙니다. 먼저 `git init` 하세요.',
+    diffFailed: 'diff를 가져오지 못했습니다: {message}',
+    apiKeyMissing: 'ANTHROPIC_API_KEY 환경 변수가 설정되지 않았습니다.',
+    apiKeyHint: '다음처럼 설정하세요: export ANTHROPIC_API_KEY="sk-ant-..."',
+    reportTitle: '코드 리뷰 리포트',
+    diffSummaryTitle: '변경 요약',
+    filesChangedTitle: '변경된 파일',
+    reviewResultsTitle: '리뷰 결과',
+    summaryTitle: '요약',
+    patternMatchesTitle: '패턴 매치',
+    summaryFallback: '요약이 없습니다.',
+    promptIntro: '당신은 시니어 코드 리뷰어입니다. 이 diff를 꼼꼼히 검토하세요.',
+    promptCatalog: 'failure catalog에서 자동 플래그된 패턴:',
+    promptReviewChecklistTitle: '다음 항목을 중심으로 검토하세요:',
+    promptOutputTitle: '마지막에 최종 판정을 내려주세요:',
+    promptFormatTitle: '응답은 아래 포맷을 그대로 사용하세요:',
+    promptOutputNote: '영문 라벨(VERDICT/CRITICAL/...)은 그대로 유지해야 합니다.'
+  }
+};
+
+function resolveLang(input) {
+  if (!input) return DEFAULT_LANG;
+  const normalized = String(input).trim().toLowerCase();
+  if (SUPPORTED_LANGS.has(normalized)) return normalized;
+  return DEFAULT_LANG;
+}
+
+function t(lang, key, vars) {
+  const table = STRINGS[lang] || STRINGS[DEFAULT_LANG];
+  let text = table[key] || STRINGS[DEFAULT_LANG][key] || '';
+  if (vars) {
+    Object.entries(vars).forEach(([name, value]) => {
+      text = text.replace(new RegExp(`\\{${name}\\}`, 'g'), String(value));
+    });
+  }
+  return text;
+}
+
 // ============================================================================
 // 1. COLLECT DIFF
 // ============================================================================
 
 function collectDiff(options = {}) {
-  const { diff = 'HEAD~1..HEAD', path: targetPath = '.' } = options;
+  const { diff = 'HEAD~1..HEAD', path: targetPath = '.', lang = DEFAULT_LANG } = options;
 
   try {
-    // Verify git repo
     execSync('git rev-parse --git-dir', { stdio: 'pipe' });
   } catch {
-    throw new Error('Not a git repository. Initialize with `git init` first.');
+    throw new Error(t(lang, 'notGitRepo'));
   }
 
   let cmd = `git diff ${diff}`;
@@ -38,16 +138,14 @@ function collectDiff(options = {}) {
   try {
     diffOutput = execSync(cmd, { encoding: 'utf-8' });
   } catch (error) {
-    throw new Error(`Failed to get diff: ${error.message}`);
+    throw new Error(t(lang, 'diffFailed', { message: error.message }));
   }
 
   if (!diffOutput.trim()) {
     return { files: [], stats: { totalFiles: 0, addedLines: 0, removedLines: 0 }, raw: '' };
   }
 
-  // Parse diff into files
   const files = [];
-  const fileRegex = /^diff --git a\/(.*?) b\/(.*?)$/gm;
   const hunks = diffOutput.split(/^diff --git/m).slice(1);
 
   let totalAdded = 0;
@@ -69,13 +167,12 @@ function collectDiff(options = {}) {
       name: fileName,
       additions,
       deletions,
-      patch: fullHunk.substring(0, 1500), // Truncate large patches
+      patch: fullHunk.substring(0, 1500)
     });
   });
 
-  // Warn if diff is too large
   if (diffOutput.length > 50000) {
-    console.warn('⚠️  Diff is very large (>50KB). Truncating for review.');
+    console.warn(`! ${t(lang, 'diffTooLarge')}`);
   }
 
   return {
@@ -83,9 +180,9 @@ function collectDiff(options = {}) {
     stats: {
       totalFiles: files.length,
       addedLines: totalAdded,
-      removedLines: totalRemoved,
+      removedLines: totalRemoved
     },
-    raw: diffOutput.substring(0, 50000),
+    raw: diffOutput.substring(0, 50000)
   };
 }
 
@@ -118,11 +215,11 @@ function checkFailureCatalog(diff) {
           id: pattern.id,
           name: pattern.name,
           severity: pattern.severity,
-          description: pattern.description,
+          description: pattern.description
         });
       }
     } catch {
-      // Ignore invalid regex
+      // ignore invalid regex
     }
   });
 
@@ -145,7 +242,7 @@ function getProjectContext() {
         stack = stackMatch[1].trim();
       }
     } catch {
-      // Ignore read errors
+      // ignore read errors
     }
   }
 
@@ -156,65 +253,25 @@ function getProjectContext() {
 // 4. BUILD REVIEW PROMPT
 // ============================================================================
 
-function buildReviewPrompt(diff, matchedPatterns, projectContext) {
+function buildReviewPrompt(diff, matchedPatterns, projectContext, lang) {
+  const locale = STRINGS[lang] || STRINGS[DEFAULT_LANG];
   const filesSummary = diff.files
     .map((f) => `  - ${f.name} (+${f.additions}/-${f.deletions})`)
     .join('\n');
 
   const catalogSection = matchedPatterns.length
-    ? `\n\nAuto-flagged patterns from failure catalog:\n${matchedPatterns
+    ? `\n\n${locale.promptCatalog}\n${matchedPatterns
         .map((p) => `  - ${p.id} (${p.severity}): ${p.description}`)
         .join('\n')}`
     : '';
 
   const patchSection = diff.files.map((f) => `\n--- ${f.name}\n${f.patch}`).join('\n');
 
-  return `You are a senior code reviewer. Review this diff carefully.
+  if (lang === 'ko') {
+    return `${locale.promptIntro}\n\nProject Stack: ${projectContext.stack}\n\nDiff Summary:\n  Total files: ${diff.stats.totalFiles}\n  Lines added: ${diff.stats.addedLines}\n  Lines removed: ${diff.stats.removedLines}\n\nFiles changed:\n${filesSummary}${catalogSection}\n\n${locale.promptReviewChecklistTitle}\n1. **보안**: RLS 정책, 인증 버그, 인젝션, 토큰 처리\n2. **성능**: 메모리 누수, N+1 쿼리, 불필요한 re-render, 캐시 미스\n3. **정확성**: 타입 안정성, 엣지 케이스, 경계 조건, 에러 처리\n4. **스타일 & 일관성**: 코드 품질, 네이밍, 문서, 스타일 위반\n5. **DB 스키마**: 새 테이블 RLS, 마이그레이션 안정성\n\n각 이슈에 대해:\n  파일 경로, 줄 번호(대략), 심각도(Critical/Warning), 액션 가능한 메시지.\n\n${locale.promptOutputTitle}\n  - APPROVE: 머지 가능\n  - CHANGES_REQUESTED: 반드시 수정 필요\n  - COMMENT: 비차단 제안\n\n${locale.promptFormatTitle}\n${locale.promptOutputNote}\n\nVERDICT: [APPROVE | CHANGES_REQUESTED | COMMENT]\n\nCRITICAL:\n  - [file:line] Issue description\n\nWARNINGS:\n  - [file:line] Issue description\n\nAPPROVED:\n  - Positive comment\n\nSUMMARY:\n  Brief explanation of verdict.\n\n--- DIFF CONTENT ---\n${patchSection}`;
+  }
 
-Project Stack: ${projectContext.stack}
-
-Diff Summary:
-  Total files: ${diff.stats.totalFiles}
-  Lines added: ${diff.stats.addedLines}
-  Lines removed: ${diff.stats.removedLines}
-
-Files changed:
-${filesSummary}
-${catalogSection}
-
-Review the diff for:
-1. **Security issues**: RLS policies, auth bugs, injection vulnerabilities, token handling
-2. **Performance**: Memory leaks, N+1 queries, unnecessary re-renders, cache misses
-3. **Correctness**: Type safety, edge cases, boundary conditions, error handling
-4. **Style & consistency**: Code quality, naming, documentation, style violations
-5. **Database schema**: RLS policies on new tables, migration safety
-
-For each issue, provide:
-  File path, line number (approximate), severity (Critical/Warning), and actionable message.
-
-Then give a final verdict:
-  - APPROVE: Code is ready to merge
-  - CHANGES_REQUESTED: Issues found that must be fixed
-  - COMMENT: Non-blocking suggestions
-
-Format your response as:
-
-VERDICT: [APPROVE | CHANGES_REQUESTED | COMMENT]
-
-CRITICAL:
-  - [file:line] Issue description
-
-WARNINGS:
-  - [file:line] Issue description
-
-APPROVED:
-  - Positive comment
-
-SUMMARY:
-  Brief explanation of verdict.
-
---- DIFF CONTENT ---
-${patchSection}`;
+  return `${locale.promptIntro}\n\nProject Stack: ${projectContext.stack}\n\nDiff Summary:\n  Total files: ${diff.stats.totalFiles}\n  Lines added: ${diff.stats.addedLines}\n  Lines removed: ${diff.stats.removedLines}\n\nFiles changed:\n${filesSummary}${catalogSection}\n\n${locale.promptReviewChecklistTitle}\n1. **Security issues**: RLS policies, auth bugs, injection vulnerabilities, token handling\n2. **Performance**: Memory leaks, N+1 queries, unnecessary re-renders, cache misses\n3. **Correctness**: Type safety, edge cases, boundary conditions, error handling\n4. **Style & consistency**: Code quality, naming, documentation, style violations\n5. **Database schema**: RLS policies on new tables, migration safety\n\nFor each issue, provide:\n  File path, line number (approximate), severity (Critical/Warning), and actionable message.\n\n${locale.promptOutputTitle}\n  - APPROVE: Code is ready to merge\n  - CHANGES_REQUESTED: Issues found that must be fixed\n  - COMMENT: Non-blocking suggestions\n\n${locale.promptFormatTitle}\n${locale.promptOutputNote}\n\nVERDICT: [APPROVE | CHANGES_REQUESTED | COMMENT]\n\nCRITICAL:\n  - [file:line] Issue description\n\nWARNINGS:\n  - [file:line] Issue description\n\nAPPROVED:\n  - Positive comment\n\nSUMMARY:\n  Brief explanation of verdict.\n\n--- DIFF CONTENT ---\n${patchSection}`;
 }
 
 // ============================================================================
@@ -224,7 +281,7 @@ ${patchSection}`;
 function callAnthropicAPI(prompt, apiKey) {
   return new Promise((resolve, reject) => {
     if (!apiKey) {
-      reject(new Error('ANTHROPIC_API_KEY environment variable is not set'));
+      reject(new Error('ANTHROPIC_API_KEY_MISSING'));
       return;
     }
 
@@ -234,9 +291,9 @@ function callAnthropicAPI(prompt, apiKey) {
       messages: [
         {
           role: 'user',
-          content: prompt,
-        },
-      ],
+          content: prompt
+        }
+      ]
     });
 
     const options = {
@@ -247,8 +304,8 @@ function callAnthropicAPI(prompt, apiKey) {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
         'content-type': 'application/json',
-        'content-length': Buffer.byteLength(payload),
-      },
+        'content-length': Buffer.byteLength(payload)
+      }
     };
 
     const req = https.request(options, (res) => {
@@ -291,16 +348,14 @@ function parseReviewResponse(response) {
     critical: [],
     warnings: [],
     approved: [],
-    summary: '',
+    summary: ''
   };
 
-  // Extract verdict
   const verdictMatch = response.match(/VERDICT:\s*(APPROVE|CHANGES_REQUESTED|COMMENT)/i);
   if (verdictMatch) {
     review.verdict = verdictMatch[1].toUpperCase();
   }
 
-  // Extract critical
   const criticalMatch = response.match(/CRITICAL:\n([\s\S]*?)(?=\n\nWARNINGS:|$)/);
   if (criticalMatch) {
     const lines = criticalMatch[1].split('\n').filter((l) => l.trim().startsWith('-'));
@@ -313,21 +368,18 @@ function parseReviewResponse(response) {
     });
   }
 
-  // Extract warnings
   const warningsMatch = response.match(/WARNINGS:\n([\s\S]*?)(?=\n\nAPPROVED:|$)/);
   if (warningsMatch) {
     const lines = warningsMatch[1].split('\n').filter((l) => l.trim().startsWith('-'));
     review.warnings = lines.map((l) => l.replace(/^-\s*/, ''));
   }
 
-  // Extract approved
   const approvedMatch = response.match(/APPROVED:\n([\s\S]*?)(?=\n\nSUMMARY:|$)/);
   if (approvedMatch) {
     const lines = approvedMatch[1].split('\n').filter((l) => l.trim().startsWith('-'));
     review.approved = lines.map((l) => l.replace(/^-\s*/, ''));
   }
 
-  // Extract summary
   const summaryMatch = response.match(/SUMMARY:\n([\s\S]*?)$/);
   if (summaryMatch) {
     review.summary = summaryMatch[1].trim();
@@ -340,16 +392,15 @@ function parseReviewResponse(response) {
 // 7. GENERATE REPORT
 // ============================================================================
 
-function generateReport(review, diff, matchedPatterns) {
+function generateReport(review, diff, matchedPatterns, lang) {
+  const locale = STRINGS[lang] || STRINGS[DEFAULT_LANG];
   const timestamp = new Date().toISOString().split('T')[0];
   const reviewsDir = path.join(process.env.HOME || process.env.USERPROFILE, '.claude', 'skills', 'solo-cto-agent', 'reviews');
 
-  // Ensure directory exists
   if (!fs.existsSync(reviewsDir)) {
     fs.mkdirSync(reviewsDir, { recursive: true });
   }
 
-  // Find next report number
   let reportNum = 1;
   const existing = fs.readdirSync(reviewsDir).filter((f) => f.startsWith(`${timestamp}-review-`));
   if (existing.length > 0) {
@@ -358,61 +409,23 @@ function generateReport(review, diff, matchedPatterns) {
 
   const reportPath = path.join(reviewsDir, `${timestamp}-review-${reportNum}.md`);
 
-  const markdownReport = `# Code Review Report
-
-**Date:** ${new Date().toLocaleString()}
-**Verdict:** ${review.verdict}
-
-## Diff Summary
-
-- **Total files:** ${diff.stats.totalFiles}
-- **Lines added:** ${diff.stats.addedLines}
-- **Lines removed:** ${diff.stats.removedLines}
-
-## Files Changed
-
-${diff.files.map((f) => `- ${f.name} (+${f.additions}/-${f.deletions})`).join('\n')}
-
-## Review Results
-
-### Verdict: ${review.verdict}
-
-${
-  review.critical.length > 0
-    ? `### Critical Issues (${review.critical.length})
-
-${review.critical.map((c) => `- **${c.issue}**: ${c.message}`).join('\n')}
-
-`
-    : ''
-}${
-  review.warnings.length > 0
-    ? `### Warnings (${review.warnings.length})
-
-${review.warnings.map((w) => `- ${w}`).join('\n')}
-
-`
-    : ''
-}${
-  review.approved.length > 0
-    ? `### Approved
-
-${review.approved.map((a) => `- ${a}`).join('\n')}
-
-`
-    : ''
-}${
-  matchedPatterns.length > 0
-    ? `## Pattern Matches
-
-${matchedPatterns.map((p) => `- **${p.id}** (${p.severity}): ${p.description}`).join('\n')}
-
-`
-    : ''
-}## Summary
-
-${review.summary || 'No summary provided.'}
-`;
+  const markdownReport = `# ${locale.reportTitle}\n\n**Date:** ${new Date().toLocaleString()}\n**${locale.verdictLabel}:** ${review.verdict}\n\n## ${locale.diffSummaryTitle}\n\n- **Total files:** ${diff.stats.totalFiles}\n- **Lines added:** ${diff.stats.addedLines}\n- **Lines removed:** ${diff.stats.removedLines}\n\n## ${locale.filesChangedTitle}\n\n${diff.files.map((f) => `- ${f.name} (+${f.additions}/-${f.deletions})`).join('\n')}\n\n## ${locale.reviewResultsTitle}\n\n### ${locale.verdictLabel}: ${review.verdict}\n\n${
+    review.critical.length > 0
+      ? `### ${locale.criticalLabel} (${review.critical.length})\n\n${review.critical.map((c) => `- **${c.issue}**: ${c.message}`).join('\n')}\n\n`
+      : ''
+  }${
+    review.warnings.length > 0
+      ? `### ${locale.warningsLabel} (${review.warnings.length})\n\n${review.warnings.map((w) => `- ${w}`).join('\n')}\n\n`
+      : ''
+  }${
+    review.approved.length > 0
+      ? `### ${locale.approvedLabel}\n\n${review.approved.map((a) => `- ${a}`).join('\n')}\n\n`
+      : ''
+  }${
+    matchedPatterns.length > 0
+      ? `## ${locale.patternMatchesTitle}\n\n${matchedPatterns.map((p) => `- **${p.id}** (${p.severity}): ${p.description}`).join('\n')}\n\n`
+      : ''
+  }## ${locale.summaryTitle}\n\n${review.summary || locale.summaryFallback}\n`;
 
   fs.writeFileSync(reportPath, markdownReport);
   return { path: reportPath, content: markdownReport };
@@ -422,15 +435,14 @@ ${review.summary || 'No summary provided.'}
 // 8. PRINT RESULTS
 // ============================================================================
 
-function printResults(review, diff, matchedPatterns, reportPath) {
-  console.log('\n╔══════════════════════════════════════════════════╗');
-  console.log('║        REVIEW RESULT                             ║');
-  console.log('╚══════════════════════════════════════════════════╝\n');
+function printResults(review, diff, matchedPatterns, reportPath, lang) {
+  const locale = STRINGS[lang] || STRINGS[DEFAULT_LANG];
+  console.log('\n== REVIEW RESULT ==\n');
 
-  console.log(`Verdict: ${review.verdict}\n`);
+  console.log(`${locale.verdictLabel}: ${review.verdict}\n`);
 
   if (review.critical.length > 0) {
-    console.log(`Critical (${review.critical.length}):`);
+    console.log(`${locale.criticalLabel} (${review.critical.length}):`);
     review.critical.forEach((c) => {
       console.log(`  - ${c.issue}: ${c.message}`);
     });
@@ -438,7 +450,7 @@ function printResults(review, diff, matchedPatterns, reportPath) {
   }
 
   if (review.warnings.length > 0) {
-    console.log(`Warnings (${review.warnings.length}):`);
+    console.log(`${locale.warningsLabel} (${review.warnings.length}):`);
     review.warnings.forEach((w) => {
       console.log(`  - ${w}`);
     });
@@ -446,7 +458,7 @@ function printResults(review, diff, matchedPatterns, reportPath) {
   }
 
   if (review.approved.length > 0) {
-    console.log(`Approved (${review.approved.length}):`);
+    console.log(`${locale.approvedLabel} (${review.approved.length}):`);
     review.approved.forEach((a) => {
       console.log(`  - ${a}`);
     });
@@ -454,14 +466,14 @@ function printResults(review, diff, matchedPatterns, reportPath) {
   }
 
   if (matchedPatterns.length > 0) {
-    console.log(`Known patterns matched (${matchedPatterns.length}):`);
+    console.log(`${locale.patternsLabel} (${matchedPatterns.length}):`);
     matchedPatterns.forEach((p) => {
       console.log(`  - "${p.id}" (${p.severity})`);
     });
     console.log();
   }
 
-  console.log(`Report: ${reportPath}\n`);
+  console.log(`${locale.reportLabel}: ${reportPath}\n`);
 }
 
 // ============================================================================
@@ -475,84 +487,74 @@ async function reviewCommand(options = {}) {
     diff = 'HEAD~1..HEAD',
     dryRun = false,
     apiKey = process.env.ANTHROPIC_API_KEY,
+    lang = resolveLang(options.lang || process.env.SOLO_CTO_LANG)
   } = options;
 
-  console.log('╔══════════════════════════════════════════════════╗');
-  console.log('║  solo-cto-agent — Local Code Review              ║');
-  console.log('╚══════════════════════════════════════════════════╝\n');
+  console.log(`\n== ${t(lang, 'bannerTitle')} ==\n`);
 
-  // Validate agent
   if (agent !== 'claude') {
-    console.log(`ℹ️  Agent "${agent}" not yet implemented. Using "claude".\n`);
+    console.log(`! ${t(lang, 'agentFallback', { agent })}\n`);
   }
 
   try {
-    // Step 1: Collect diff
-    console.log('[1/4] Collecting diff .............. ', { flush: true });
-    const diffData = collectDiff({ diff, path: targetPath });
+    console.log(t(lang, 'stepCollect'), { flush: true });
+    const diffData = collectDiff({ diff, path: targetPath, lang });
 
     if (diffData.files.length === 0) {
-      console.log('✅ (empty)\n');
-      console.log('Nothing to review.\n');
+      console.log(`${t(lang, 'empty')}\n`);
+      console.log(`${t(lang, 'nothingToReview')}\n`);
       return { verdict: 'APPROVE', files: 0 };
     }
 
-    console.log(`✅ ${diffData.stats.totalFiles} files\n`);
+    console.log(`${t(lang, 'files', { count: diffData.stats.totalFiles })}\n`);
 
-    // Step 2: Check failure catalog
-    console.log('[2/4] Checking failure catalog ..... ', { flush: true });
+    console.log(t(lang, 'stepCatalog'), { flush: true });
     const matchedPatterns = checkFailureCatalog(diffData);
-    console.log(`✅ ${matchedPatterns.length} patterns matched\n`);
+    console.log(`${t(lang, 'patternsMatched', { count: matchedPatterns.length })}\n`);
 
-    // Step 3: Get project context
     const projectContext = getProjectContext();
-
-    // Step 4: Build prompt
-    const prompt = buildReviewPrompt(diffData, matchedPatterns, projectContext);
+    const prompt = buildReviewPrompt(diffData, matchedPatterns, projectContext, lang);
 
     if (dryRun) {
-      console.log('[DRY RUN] Review prompt:\n');
+      console.log(`${t(lang, 'dryRunHeader')}\n`);
       console.log(prompt);
       return { dryRun: true };
     }
 
-    console.log('[3/4] Running Claude review ........ ', { flush: true });
+    console.log(t(lang, 'stepReview'), { flush: true });
 
     let reviewResponse;
     try {
       reviewResponse = await callAnthropicAPI(prompt, apiKey);
     } catch (error) {
-      if (error.message.includes('ANTHROPIC_API_KEY')) {
-        console.log('❌\n');
-        console.error('\nError: ANTHROPIC_API_KEY environment variable is not set.');
-        console.error('Set it with: export ANTHROPIC_API_KEY="sk-ant-..."');
+      if (error.message === 'ANTHROPIC_API_KEY_MISSING') {
+        console.log('\n');
+        console.error(`Error: ${t(lang, 'apiKeyMissing')}`);
+        console.error(t(lang, 'apiKeyHint'));
         process.exit(1);
       }
       throw error;
     }
 
-    console.log('✅ review complete\n');
+    console.log(`${t(lang, 'reviewComplete')}\n`);
 
-    // Step 5: Parse response
     const review = parseReviewResponse(reviewResponse);
 
-    // Step 6: Generate report
-    console.log('[4/4] Generating report ............ ', { flush: true });
-    const report = generateReport(review, diffData, matchedPatterns);
-    console.log('✅ saved\n');
+    console.log(t(lang, 'stepReport'), { flush: true });
+    const report = generateReport(review, diffData, matchedPatterns, lang);
+    console.log(`${t(lang, 'saved')}\n`);
 
-    // Print results
-    printResults(review, diffData, matchedPatterns, report.path);
+    printResults(review, diffData, matchedPatterns, report.path, lang);
 
     return {
       verdict: review.verdict,
       critical: review.critical.length,
       warnings: review.warnings.length,
       files: diffData.stats.totalFiles,
-      reportPath: report.path,
+      reportPath: report.path
     };
   } catch (error) {
-    console.error(`\n❌ Error: ${error.message}`);
+    console.error(`\nError: ${error.message}`);
     process.exit(1);
   }
 }
@@ -563,7 +565,6 @@ async function reviewCommand(options = {}) {
 
 module.exports = { reviewCommand };
 
-// CLI entry point
 if (require.main === module) {
   const args = process.argv.slice(2);
   const options = {};
@@ -582,6 +583,9 @@ if (require.main === module) {
       options.dryRun = true;
     } else if (args[i] === '--api-key') {
       options.apiKey = args[i + 1];
+      i += 1;
+    } else if (args[i] === '--lang') {
+      options.lang = args[i + 1];
       i += 1;
     }
   }
