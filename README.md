@@ -340,6 +340,8 @@ Works completely offline from CI/CD. Claude reviews the diff first. If an OpenAI
 
 **Ground-truth grounding (T3 — PR-E1).** If `VERCEL_TOKEN` is set and the repo has a `.vercel/project.json` (from `vercel link`) or `VERCEL_PROJECT_ID` is exported, every `review` and `dual-review` automatically fetches the last 10 deployments and injects a `## 최근 프로덕션 신호 (T3 Ground Truth)` block into the system prompt. The review model uses this as [확정] evidence — for example, if there's a recent `ERROR` deployment, the review explicitly cross-checks whether the current diff might be related. This is the cheapest way to escape the pure self-loop described in [`docs/external-loop-policy.md`](docs/external-loop-policy.md) — runtime behavior beats model opinion. Failures (missing token, unreachable API, timeout) never block the review; the section is simply omitted or marked `[미검증]`.
 
+**External knowledge (T2 — PR-E2).** Set `COWORK_EXTERNAL_KNOWLEDGE=1` (or `COWORK_PACKAGE_REGISTRY=1`) to activate npm-registry currency checks. Every `review` scans `package.json` `dependencies` (add `COWORK_EXTERNAL_KNOWLEDGE_INCLUDE_DEV=1` for `devDependencies` too), queries `registry.npmjs.org` with 5 s timeouts and concurrency-of-6, capped at 20 packages, and injects a `## 스택 최신성 (T2 External Knowledge)` block flagging deprecated packages, major/minor version lags. This closes the "model thinks it's still 2024" gap without any external token. Failures (registry outage, timeout, missing `package.json`) are surfaced per-package and never block the review.
+
 ### Knowledge Article Generation (Both tiers)
 
 Auto-generates durable knowledge articles from accumulated session memory:

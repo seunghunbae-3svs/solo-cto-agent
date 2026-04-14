@@ -1055,6 +1055,256 @@ function formatGroundTruthContext(gt) {
   return lines.join("\n") + "\n";
 }
 
+// ============================================================================
+// T2 External Knowledge — package currency / stack freshness (PR-E2)
+// ============================================================================
+// Pulls real npm registry data for the project's direct dependencies so the
+// review model knows the actual latest versions + deprecation status instead
+// of relying on (potentially stale) training-data knowledge. Opt-in via
+// COWORK_EXTERNAL_KNOWLEDGE=1 — registry traffic is public so no auth needed
+// but we still gate it behind the flag to keep offline/air-gapped runs clean.
+
+/**
+ * Scan `package.json` in the working dir. Returns normalized dep lists.
+ * Returns null if no package.json found or parse fails.
+ */
+function scanPackageJson(opts = {}) {
+  const cwd = opts.cwd || process.cwd();
+  const pkgPath = path.join(cwd, "package.json");
+  try {
+    if (!fs.existsSync(pkgPath)) return null;
+    const raw = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+    const dependencies = raw.dependencies || {};
+    const devDependencies = raw.devDependencies || {};
+    return {
+      name: raw.name || null,
+      version: raw.version || null,
+      engines: raw.engines || {},
+      dependencies,
+      devDependencies,
+      totalDeps: Object.keys(dependencies).length,
+      totalDevDeps: Object.keys(devDependencies).length,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Strip semver prefixes (^, ~, >=, etc) and return major.minor.patch as
+ * a plain string. Returns null for non-standard specifiers (git:, file:,
+ * workspace:, npm:alias@, link:, etc) since we can't meaningfully compare.
+ */
+function parsePinnedVersion(spec) {
+  if (!spec || typeof spec !== "string") return null;
+  if (/^(workspace|file|link|git|github|npm|https?|\.)/.test(spec)) return null;
+  const m = spec.match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!m) return null;
+  return `${m[1]}.${m[2]}.${m[3]}`;
+}
+
+/**
+ * Compare semver-ish versions. Returns { diff: "ahead"|"same"|"patch"|
+ * "minor"|"major"|"unknown" } where "patch/minor/major" means installed
+ * is BEHIND latest by that level.
+ */
+function compareVersions(installed, latest) {
+  const pi = parsePinnedVersion(installed);
+  const pl = parsePinnedVersion(latest);
+  if (!pi || !pl) return { diff: "unknown", installed, latest };
+  const [i1, i2, i3] = pi.split(".").map(Number);
+  const [l1, l2, l3] = pl.split(".").map(Number);
+  if (i1 > l1 || (i1 === l1 && i2 > l2) || (i1 === l1 && i2 === l2 && i3 > l3)) {
+    return { diff: "ahead", installed: pi, latest: pl };
+  }
+  if (i1 === l1 && i2 === l2 && i3 === l3) return { diff: "same", installed: pi, latest: pl };
+  if (i1 < l1) return { diff: "major", installed: pi, latest: pl };
+  if (i2 < l2) return { diff: "minor", installed: pi, latest: pl };
+  return { diff: "patch", installed: pi, latest: pl };
+}
+
+/**
+ * Fetch a single package's registry metadata. Public API — no auth.
+ * 5 s timeout. Returns { name, latest, deprecated } or { ok:false, error }.
+ */
+async function fetchNpmRegistry(name, opts = {}) {
+  const { fetchImpl, timeoutMs = 5000 } = opts;
+  const f = fetchImpl || (typeof fetch !== "undefined" ? fetch : null);
+  if (!f) return { ok: false, name, error: "fetch not available" };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await f(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
+      headers: { Accept: "application/vnd.npm.install-v1+json" },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return { ok: false, name, error: `registry http ${res.status}` };
+    const data = await res.json();
+    const latest = (data["dist-tags"] && data["dist-tags"].latest) || null;
+    // The abbreviated metadata includes per-version info in `versions`.
+    const versionInfo = latest && data.versions && data.versions[latest];
+    const deprecated = versionInfo && versionInfo.deprecated ? String(versionInfo.deprecated) : null;
+    return { ok: true, name, latest, deprecated };
+  } catch (e) {
+    clearTimeout(timer);
+    return { ok: false, name, error: e.name === "AbortError" ? "timeout" : String(e.message || e) };
+  }
+}
+
+/**
+ * Fetch currency info for a bag of deps. Returns report with entries sorted
+ * by staleness (major > minor > patch). Concurrency-limited to be polite
+ * to the public registry.
+ */
+async function fetchPackageCurrency(opts) {
+  const {
+    deps = {},
+    fetchImpl,
+    timeoutMs = 5000,
+    concurrency = 6,
+    limit = 20,
+  } = opts;
+  const names = Object.keys(deps).slice(0, limit);
+  const results = [];
+  // Simple concurrency pool.
+  let idx = 0;
+  async function worker() {
+    while (idx < names.length) {
+      const i = idx++;
+      const name = names[i];
+      const installedSpec = deps[name];
+      const reg = await fetchNpmRegistry(name, { fetchImpl, timeoutMs });
+      if (!reg.ok) {
+        results.push({ name, installedSpec, ok: false, error: reg.error });
+        continue;
+      }
+      const cmp = compareVersions(installedSpec, reg.latest);
+      results.push({
+        name,
+        installedSpec,
+        installed: cmp.installed,
+        latest: reg.latest,
+        diff: cmp.diff,
+        deprecated: reg.deprecated,
+        ok: true,
+      });
+    }
+  }
+  const workers = Array.from({ length: Math.min(concurrency, names.length) }, worker);
+  await Promise.all(workers);
+  // Sort: major > minor > patch > deprecated > same/ahead/unknown
+  const rank = { major: 0, minor: 1, patch: 2, same: 4, ahead: 5, unknown: 6 };
+  results.sort((a, b) => {
+    if (a.deprecated && !b.deprecated) return -1;
+    if (!a.deprecated && b.deprecated) return 1;
+    return (rank[a.diff] ?? 7) - (rank[b.diff] ?? 7);
+  });
+  return {
+    scanned: names.length,
+    total: Object.keys(deps).length,
+    entries: results,
+    summary: {
+      major: results.filter((r) => r.diff === "major").length,
+      minor: results.filter((r) => r.diff === "minor").length,
+      patch: results.filter((r) => r.diff === "patch").length,
+      deprecated: results.filter((r) => r.deprecated).length,
+      errored: results.filter((r) => !r.ok).length,
+    },
+  };
+}
+
+/**
+ * Top-level T2 orchestrator. Runs only when COWORK_EXTERNAL_KNOWLEDGE=1 is
+ * set (or one of the granular flags). Always resolves.
+ */
+async function fetchExternalKnowledge(opts = {}) {
+  const env = opts.env || process.env;
+  const cwd = opts.cwd || process.cwd();
+  const fetchImpl = opts.fetchImpl;
+  const timeoutMs = opts.timeoutMs || 5000;
+  const includeDev = env.COWORK_EXTERNAL_KNOWLEDGE_INCLUDE_DEV === "1";
+
+  const enabled =
+    env.COWORK_EXTERNAL_KNOWLEDGE === "1"
+    || !!env.COWORK_PACKAGE_REGISTRY;
+  if (!enabled) {
+    return { enabled: false, fetchedAt: null, packageCurrency: null, hasData: false };
+  }
+
+  const pkg = scanPackageJson({ cwd });
+  if (!pkg) {
+    return {
+      enabled: true,
+      fetchedAt: new Date().toISOString(),
+      packageCurrency: null,
+      hasData: false,
+      error: "no package.json found",
+    };
+  }
+
+  const deps = includeDev
+    ? { ...pkg.dependencies, ...pkg.devDependencies }
+    : pkg.dependencies;
+
+  const packageCurrency = await fetchPackageCurrency({ deps, fetchImpl, timeoutMs });
+  return {
+    enabled: true,
+    fetchedAt: new Date().toISOString(),
+    projectName: pkg.name,
+    projectVersion: pkg.version,
+    engines: pkg.engines,
+    packageCurrency,
+    hasData: !!(packageCurrency && packageCurrency.entries.length),
+  };
+}
+
+/**
+ * Render T2 payload as markdown for prompt injection. Empty string if
+ * nothing useful to report.
+ */
+function formatExternalKnowledgeContext(ek) {
+  if (!ek || !ek.enabled || !ek.packageCurrency) return "";
+  const pc = ek.packageCurrency;
+  if (!pc.entries.length) return "";
+
+  const lines = [];
+  lines.push(`\n## 스택 최신성 (T2 External Knowledge)`);
+  lines.push(`> npm registry 실시간 조회 결과 (상위 ${pc.scanned}/${pc.total} 개 direct dep). [확정] 자료.`);
+
+  const s = pc.summary;
+  const tags = [];
+  if (s.major) tags.push(`major behind: ${s.major}`);
+  if (s.minor) tags.push(`minor behind: ${s.minor}`);
+  if (s.patch) tags.push(`patch behind: ${s.patch}`);
+  if (s.deprecated) tags.push(`deprecated: ${s.deprecated}`);
+  if (s.errored) tags.push(`lookup 실패: ${s.errored}`);
+  lines.push(`- 요약: ${tags.length ? tags.join(", ") : "모든 패키지 최신 또는 ahead"}`);
+
+  // Surface the most interesting items — deprecated + major/minor behind.
+  const flagged = pc.entries.filter(
+    (e) => e.deprecated || e.diff === "major" || e.diff === "minor",
+  );
+  if (flagged.length) {
+    lines.push(``);
+    lines.push(`### 주의 대상 패키지`);
+    for (const e of flagged.slice(0, 10)) {
+      if (!e.ok) continue;
+      if (e.deprecated) {
+        lines.push(`- ⚠️ \`${e.name}@${e.installed || e.installedSpec}\` — **deprecated**: ${e.deprecated.slice(0, 120)}`);
+      } else if (e.diff === "major") {
+        lines.push(`- ⛔ \`${e.name}\` installed=${e.installed}, latest=${e.latest} — **major** 뒤처짐. breaking change 가능성.`);
+      } else if (e.diff === "minor") {
+        lines.push(`- ⚠️ \`${e.name}\` installed=${e.installed}, latest=${e.latest} — minor 뒤처짐.`);
+      }
+    }
+  }
+
+  lines.push(``);
+  lines.push(`diff 가 위 패키지를 사용하는 파일을 건드리면 버전 차이를 감안해 리뷰한다. 학습 데이터 기반 기억보다 위 수치를 우선한다.`);
+  return lines.join("\n") + "\n";
+}
+
 function formatCrossCheck(cc) {
   if (!cc) return "";
   let out = `\n${COLORS.bold}[CROSS-CHECK]${COLORS.reset} ${cc.crossVerdict}\n`;
@@ -1171,20 +1421,28 @@ async function localReview(options = {}) {
   const liveCtx = liveSourceContext();
   const identity = buildIdentity(tier, agent);
 
-  // T3 Ground Truth — fetch real runtime state (Vercel/Supabase) in parallel.
-  // Never blocks the review on failure; an empty/error payload just yields an
-  // empty GT context section so the review runs with whatever we have.
+  // T2 + T3 external signals — fetch in parallel, never block the review on
+  // failure. Empty/error payloads just yield empty context sections.
   let groundTruth = null;
+  let externalKnowledge = null;
   try {
-    groundTruth = await fetchGroundTruth();
+    [groundTruth, externalKnowledge] = await Promise.all([
+      fetchGroundTruth().catch((e) => { logWarn(`Ground truth fetch failed: ${e.message}`); return null; }),
+      fetchExternalKnowledge().catch((e) => { logWarn(`External knowledge fetch failed: ${e.message}`); return null; }),
+    ]);
     if (groundTruth && groundTruth.hasData) {
       const n = groundTruth.vercel && groundTruth.vercel.deployments ? groundTruth.vercel.deployments.length : 0;
       logInfo(`T3 ground truth: ${n} Vercel deployment${n === 1 ? "" : "s"} fetched`);
     }
+    if (externalKnowledge && externalKnowledge.hasData) {
+      const pc = externalKnowledge.packageCurrency;
+      logInfo(`T2 external knowledge: scanned ${pc.scanned}/${pc.total} deps · major=${pc.summary.major} minor=${pc.summary.minor} deprecated=${pc.summary.deprecated}`);
+    }
   } catch (e) {
-    logWarn(`Ground truth fetch failed: ${e.message} — review proceeds without T3`);
+    logWarn(`External-signal fetch failed: ${e.message} — review proceeds without T2/T3`);
   }
   const groundTruthCtx = formatGroundTruthContext(groundTruth);
+  const externalKnowledgeCtx = formatExternalKnowledgeContext(externalKnowledge);
 
   const errorPatterns = failureCatalog.patterns
     ?.map((p) => `- ${p.pattern}: ${p.fix}`)
@@ -1198,7 +1456,7 @@ async function localReview(options = {}) {
 ${OPERATING_PRINCIPLES}
 ${COMMON_STACK_PATTERNS}
 ${REVIEW_PRIORITY}
-${liveCtx}${groundTruthCtx}${personalCtx}
+${liveCtx}${groundTruthCtx}${externalKnowledgeCtx}${personalCtx}
 
 ## 심각도 분류
 - ⛔ BLOCKER  — 머지/배포 차단. 치명 버그, 보안, 데이터 손실 위험.
@@ -1334,6 +1592,8 @@ ${diff}
     reviewData.externalSignals = externalSignals;
     // T3 payload — raw fetched data for audit / downstream use.
     if (groundTruth) reviewData.groundTruth = groundTruth;
+    // T2 payload — scanned package currency snapshot.
+    if (externalKnowledge) reviewData.externalKnowledge = externalKnowledge;
 
     fs.writeFileSync(reviewFile, JSON.stringify(reviewData, null, 2));
 
@@ -1697,19 +1957,29 @@ async function dualReview(options = {}) {
     ?.map((p) => `- ${p.pattern}: ${p.fix}`)
     .join("\n") || "No patterns loaded";
 
-  // T3 Ground Truth — same parallel fetch as localReview. Both review passes
-  // (Claude + OpenAI) get the same grounded context for consistent cross-check.
+  // T2 + T3 external signals — same parallel fetch as localReview. Both
+  // review passes (Claude + OpenAI) get the same grounded context for a
+  // consistent cross-check.
   let groundTruth = null;
+  let externalKnowledge = null;
   try {
-    groundTruth = await fetchGroundTruth();
+    [groundTruth, externalKnowledge] = await Promise.all([
+      fetchGroundTruth().catch((e) => { logWarn(`Ground truth fetch failed: ${e.message}`); return null; }),
+      fetchExternalKnowledge().catch((e) => { logWarn(`External knowledge fetch failed: ${e.message}`); return null; }),
+    ]);
     if (groundTruth && groundTruth.hasData) {
       const n = groundTruth.vercel && groundTruth.vercel.deployments ? groundTruth.vercel.deployments.length : 0;
       logInfo(`T3 ground truth: ${n} Vercel deployment${n === 1 ? "" : "s"} fetched`);
     }
+    if (externalKnowledge && externalKnowledge.hasData) {
+      const pc = externalKnowledge.packageCurrency;
+      logInfo(`T2 external knowledge: scanned ${pc.scanned}/${pc.total} deps · major=${pc.summary.major} minor=${pc.summary.minor} deprecated=${pc.summary.deprecated}`);
+    }
   } catch (e) {
-    logWarn(`Ground truth fetch failed: ${e.message} — dual-review proceeds without T3`);
+    logWarn(`External-signal fetch failed: ${e.message} — dual-review proceeds without T2/T3`);
   }
   const groundTruthCtx = formatGroundTruthContext(groundTruth);
+  const externalKnowledgeCtx = formatExternalKnowledgeContext(externalKnowledge);
 
   // Dual-review prompt (identical spec for Claude + OpenAI — codex-main parity)
   const systemPrompt = `${AGENT_IDENTITY}
@@ -1718,7 +1988,7 @@ async function dualReview(options = {}) {
 
 ${SKILL_CONTEXT}
 ${SKILL_REVIEW_CRITERIA}
-${groundTruthCtx}
+${groundTruthCtx}${externalKnowledgeCtx}
 ## 심각도
 - ⛔ BLOCKER  머지 차단 (치명 버그, 보안, 데이터 손실)
 - ⚠️ SUGGESTION 강한 개선 권고
@@ -1853,6 +2123,7 @@ ${diff}
   const externalSignals = assessExternalSignals();
   dualReviewData.externalSignals = externalSignals;
   if (groundTruth) dualReviewData.groundTruth = groundTruth;
+  if (externalKnowledge) dualReviewData.externalKnowledge = externalKnowledge;
 
   fs.writeFileSync(reviewFile, JSON.stringify(dualReviewData, null, 2));
   logSuccess(`Dual review saved to ${reviewFile}`);
@@ -2239,6 +2510,14 @@ module.exports = {
   summarizeVercelDeployments,
   fetchGroundTruth,
   formatGroundTruthContext,
+  // T2 External Knowledge (PR-E2)
+  scanPackageJson,
+  parsePinnedVersion,
+  compareVersions,
+  fetchNpmRegistry,
+  fetchPackageCurrency,
+  fetchExternalKnowledge,
+  formatExternalKnowledgeContext,
   detectLiveSources,
   liveSourceContext,
   buildIdentity,
