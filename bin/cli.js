@@ -1064,6 +1064,7 @@ function doctorCommand() {
       const hasLocalReview = typeof engine.localReview === "function";
       const hasKnowledge = typeof engine.knowledgeCapture === "function";
       const hasDualReview = typeof engine.dualReview === "function";
+      const hasDetectDefaultBranch = typeof engine.detectDefaultBranch === "function";
       const sessionSave = typeof engine.sessionSave === "function";
       const sessionRestore = typeof engine.sessionRestore === "function";
       const sessionList = typeof engine.sessionList === "function";
@@ -1080,6 +1081,19 @@ function doctorCommand() {
       } else {
         console.log("   ⚠️  Session functions not available");
         issues.push({ level: "warn", msg: "Engine missing session functions" });
+      }
+
+      const isGitRepo = fs.existsSync(path.join(process.cwd(), ".git"));
+      if (hasDetectDefaultBranch && isGitRepo) {
+        try {
+          const base = engine.detectDefaultBranch({ cwd: process.cwd() });
+          console.log(`   ℹ️  Default branch: ${base}`);
+        } catch (err) {
+          console.log(`   ⚠️  Default branch detection failed: ${err.message}`);
+          issues.push({ level: "warn", msg: "Default branch detection failed" });
+        }
+      } else if (!isGitRepo) {
+        console.log("   ℹ️  Default branch: N/A (not a git repo)");
       }
     } catch (err) {
       console.log(`   ⚠️  Engine load failed: ${err.message}`);

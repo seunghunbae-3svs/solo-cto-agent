@@ -1484,6 +1484,7 @@ async function localReview(options = {}) {
   } = options;
 
   // Tier · agent · personalization · live-source 컨텍스트 결정
+  const cwd = process.cwd();
   const tier = readTier();
   const mode = readMode();
   const agent = process.env.OPENAI_API_KEY ? "cowork+codex" : "cowork";
@@ -1496,8 +1497,20 @@ async function localReview(options = {}) {
   logInfo(`Model: ${model}`);
   if (useCrossCheck) logInfo(`Self cross-review: ON (tier=${tier})`);
 
-  // Get diff
-  const diff = getDiff(diffSource, target);
+  // Resolve diff + base metadata
+  let diffBase = null;
+  let diffTarget = null;
+  let diff;
+  if (diffSource === "branch") {
+    diffBase = target || detectDefaultBranch({ cwd });
+    diff = getDiff("branch", diffBase, { cwd });
+    logInfo(`Base: ${diffBase}`);
+  } else if (diffSource === "file") {
+    diffTarget = target;
+    diff = getDiff("file", diffTarget, { cwd });
+  } else {
+    diff = getDiff("staged", null, { cwd });
+  }
   if (!diff || diff.trim().length === 0) {
     logWarn("No changes found");
     return null;
@@ -1653,6 +1666,8 @@ ${diff}
       tier,
       model,
       diffSource,
+      diffBase,
+      diffTarget,
       verdict: review.verdict,
       issueCount: review.issues.length,
       issues: review.issues,
@@ -2066,7 +2081,20 @@ async function dualReview(options = {}) {
   logInfo(`Mode: dual (Claude + OpenAI)`);
   logInfo(`Source: ${diffSource} changes`);
 
-  const diff = getDiff(diffSource, target);
+  const cwd = process.cwd();
+  let diffBase = null;
+  let diffTarget = null;
+  let diff;
+  if (diffSource === "branch") {
+    diffBase = target || detectDefaultBranch({ cwd });
+    diff = getDiff("branch", diffBase, { cwd });
+    logInfo(`Base: ${diffBase}`);
+  } else if (diffSource === "file") {
+    diffTarget = target;
+    diff = getDiff("file", diffTarget, { cwd });
+  } else {
+    diff = getDiff("staged", null, { cwd });
+  }
   if (!diff || diff.trim().length === 0) {
     logWarn("No changes found");
     return null;
@@ -2238,6 +2266,8 @@ ${diff}
     mode: "dual",
     models: { claude: claudeModel, openai: codexModel },
     diffSource,
+    diffBase,
+    diffTarget,
     finalVerdict,
     comparison,
     claudeReview,
