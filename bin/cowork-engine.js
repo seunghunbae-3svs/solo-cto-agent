@@ -834,18 +834,47 @@ function parseReviewResponse(text) {
  */
 function assessExternalSignals(opts = {}) {
   const env = opts.env || process.env;
+  // outcome (optional) — the ACTUAL result of the T2/T3 fetches. When supplied,
+  // a tier is only counted as active if (a) its env flag is set AND (b) the
+  // fetch produced data. Without outcome we fall back to env-only so callers
+  // that don't have fetch results (e.g. dry-run BEFORE fetches run) still get
+  // a best-effort answer.
+  //
+  // Dogfood discovery (PR-F2): the drive-run on palate-pilot + 3stripe-event
+  // showed that COWORK_EXTERNAL_KNOWLEDGE=1 in a repo with no (or nested)
+  // package.json silently produced no T2 context, yet `activeCount` still
+  // read "1/3". That's a false-confidence bug — the user thinks they closed
+  // the self-loop when they haven't. Outcome-aware assessment fixes it.
+  const outcome = opts.outcome || {};
+  const t1Env = !!env.OPENAI_API_KEY;
+  const t2Env =
+    env.COWORK_EXTERNAL_KNOWLEDGE === "1"
+    || !!env.COWORK_WEB_SEARCH
+    || !!env.COWORK_PACKAGE_REGISTRY;
+  const t3Env =
+    !!env.VERCEL_TOKEN
+    || !!env.SUPABASE_ACCESS_TOKEN
+    || env.COWORK_GROUND_TRUTH === "1";
+
+  // When outcome supplied, require successful application. When not supplied,
+  // defer to env flag (backward compatible for callers without fetch data).
+  const t2Applied = outcome.t2Applied !== undefined ? !!outcome.t2Applied : t2Env;
+  const t3Applied = outcome.t3Applied !== undefined ? !!outcome.t3Applied : t3Env;
+  // T1 is "applied" whenever the key exists — the dual-review caller decides
+  // whether to actually invoke it; the peer model's mere availability is the
+  // signal here.
+  const t1Applied = outcome.t1Applied !== undefined ? !!outcome.t1Applied : t1Env;
+
   const flags = {
-    t1PeerModel: !!env.OPENAI_API_KEY,
-    t2ExternalKnowledge:
-      env.COWORK_EXTERNAL_KNOWLEDGE === "1"
-      || !!env.COWORK_WEB_SEARCH
-      || !!env.COWORK_PACKAGE_REGISTRY,
-    t3GroundTruth:
-      !!env.VERCEL_TOKEN
-      || !!env.SUPABASE_ACCESS_TOKEN
-      || env.COWORK_GROUND_TRUTH === "1",
+    t1PeerModel: t1Applied,
+    t2ExternalKnowledge: t2Applied,
+    t3GroundTruth: t3Applied,
+    // Env-only view (useful for diagnostics: "env set but no data").
+    t1EnvSet: t1Env,
+    t2EnvSet: t2Env,
+    t3EnvSet: t3Env,
   };
-  const activeCount = Object.values(flags).filter(Boolean).length;
+  const activeCount = [t1Applied, t2Applied, t3Applied].filter(Boolean).length;
   flags.activeCount = activeCount;
   flags.isSelfLoop = activeCount === 0;
   return flags;
@@ -879,7 +908,15 @@ function formatPartialSignalHint(signals) {
   if (!signals.t2ExternalKnowledge) missing.push("T2 external knowledge");
   if (!signals.t3GroundTruth) missing.push("T3 ground truth");
   if (missing.length === 0) return "";
-  return `\n${COLORS.gray}ℹ️  Active external signals: ${signals.activeCount}/3. Missing: ${missing.join(", ")}.${COLORS.reset}\n`;
+  // PR-F2 — surface false-confidence cases: env flag set but tier didn't
+  // actually contribute. This is the palate-pilot / 3stripe-event bug.
+  const stale = [];
+  if (signals.t2EnvSet && !signals.t2ExternalKnowledge) stale.push("T2 (env set, no data)");
+  if (signals.t3EnvSet && !signals.t3GroundTruth) stale.push("T3 (env set, no data)");
+  const staleSuffix = stale.length
+    ? ` · ${COLORS.yellow}enabled-but-silent: ${stale.join(", ")}${COLORS.reset}${COLORS.gray}`
+    : "";
+  return `\n${COLORS.gray}ℹ️  Active external signals: ${signals.activeCount}/3. Missing: ${missing.join(", ")}.${staleSuffix}${COLORS.reset}\n`;
 }
 
 // ============================================================================
@@ -1486,6 +1523,16 @@ async function localReview(options = {}) {
       const pc = externalKnowledge.packageCurrency;
       logInfo(`T2 external knowledge: scanned ${pc.scanned}/${pc.total} deps · major=${pc.summary.major} minor=${pc.summary.minor} deprecated=${pc.summary.deprecated}`);
     }
+    // PR-F2 — honest diagnostics: env flag on but scan produced nothing.
+    // This is the exact false-confidence case surfaced by the palate-pilot /
+    // 3stripe-event drive-runs (COWORK_EXTERNAL_KNOWLEDGE=1, no package.json
+    // at repo root → silent no-op → "1/3 active" reading was a lie).
+    if (process.env.COWORK_EXTERNAL_KNOWLEDGE === "1" && !(externalKnowledge && externalKnowledge.hasData)) {
+      logWarn("T2 enabled (COWORK_EXTERNAL_KNOWLEDGE=1) but no package.json was scanned — signal not applied.");
+    }
+    if ((process.env.VERCEL_TOKEN || process.env.SUPABASE_ACCESS_TOKEN) && !(groundTruth && groundTruth.hasData)) {
+      logWarn("T3 enabled (VERCEL_TOKEN/SUPABASE_ACCESS_TOKEN set) but no runtime data was fetched — signal not applied.");
+    }
   } catch (e) {
     logWarn(`External-signal fetch failed: ${e.message} — review proceeds without T2/T3`);
   }
@@ -1647,7 +1694,15 @@ ${diff}
 
     // External-signal assessment — tells the user whether this review had any
     // non-self-loop backing (peer model / external knowledge / ground truth).
-    const externalSignals = assessExternalSignals();
+    // PR-F2: we pass the ACTUAL fetch outcome so "env set but scan empty" is
+    // reported as signal NOT applied. Otherwise the activeCount becomes a
+    // self-congratulation artifact.
+    const externalSignals = assessExternalSignals({
+      outcome: {
+        t2Applied: !!(externalKnowledge && externalKnowledge.hasData),
+        t3Applied: !!(groundTruth && groundTruth.hasData),
+      },
+    });
     reviewData.externalSignals = externalSignals;
     // T3 payload — raw fetched data for audit / downstream use.
     if (groundTruth) reviewData.groundTruth = groundTruth;
@@ -2037,6 +2092,13 @@ async function dualReview(options = {}) {
       const pc = externalKnowledge.packageCurrency;
       logInfo(`T2 external knowledge: scanned ${pc.scanned}/${pc.total} deps · major=${pc.summary.major} minor=${pc.summary.minor} deprecated=${pc.summary.deprecated}`);
     }
+    // PR-F2 — same honest-diagnostics check as localReview.
+    if (process.env.COWORK_EXTERNAL_KNOWLEDGE === "1" && !(externalKnowledge && externalKnowledge.hasData)) {
+      logWarn("T2 enabled (COWORK_EXTERNAL_KNOWLEDGE=1) but no package.json was scanned — signal not applied.");
+    }
+    if ((process.env.VERCEL_TOKEN || process.env.SUPABASE_ACCESS_TOKEN) && !(groundTruth && groundTruth.hasData)) {
+      logWarn("T3 enabled (VERCEL_TOKEN/SUPABASE_ACCESS_TOKEN set) but no runtime data was fetched — signal not applied.");
+    }
   } catch (e) {
     logWarn(`External-signal fetch failed: ${e.message} — dual-review proceeds without T2/T3`);
   }
@@ -2180,9 +2242,16 @@ ${diff}
     },
   };
 
-  // External-signal assessment. dual-review always has T1 (peer model) active,
-  // so this mostly surfaces whether T2/T3 are also present for full coverage.
-  const externalSignals = assessExternalSignals();
+  // External-signal assessment. dual-review always has T1 (peer model) active
+  // (both API keys were required to get here), so T1 is forced-applied.
+  // PR-F2 — pass outcome so T2/T3 reflect actual fetch success, not just env.
+  const externalSignals = assessExternalSignals({
+    outcome: {
+      t1Applied: true,
+      t2Applied: !!(externalKnowledge && externalKnowledge.hasData),
+      t3Applied: !!(groundTruth && groundTruth.hasData),
+    },
+  });
   dualReviewData.externalSignals = externalSignals;
   if (groundTruth) dualReviewData.groundTruth = groundTruth;
   if (externalKnowledge) dualReviewData.externalKnowledge = externalKnowledge;
