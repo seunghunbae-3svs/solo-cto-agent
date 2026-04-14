@@ -152,4 +152,63 @@ describe("notify: helper convenience wrappers", () => {
     const env = JSON.parse(fs.readFileSync(tmpFile, "utf8").trim());
     expect(env.severity).toBe("info");
   });
+
+  // PR-G8-review-emit — event-tag routing. The event field drives the
+  // notify-config filter in sendTelegram(), so we assert it's set on
+  // the envelope for the three interesting cases.
+  it("tags event=review.blocker when blockers but no cross disagreement", async () => {
+    await notify.notifyReviewResult({
+      verdict: "REQUEST_CHANGES",
+      issues: [{ severity: "BLOCKER", location: "x", issue: "y", suggestion: "z" }],
+      summary: "blocker found",
+      tier: "builder",
+      agent: "cowork",
+      crossCheck: { crossVerdict: "REQUEST_CHANGES" }, // agrees — not a disagree
+    });
+    const env = JSON.parse(fs.readFileSync(tmpFile, "utf8").trim());
+    expect(env.meta.event).toBe("review.blocker");
+  });
+
+  it("tags event=review.dual-disagree when crossVerdict differs", async () => {
+    await notify.notifyReviewResult({
+      verdict: "APPROVE",
+      issues: [],
+      summary: "primary approves",
+      tier: "builder",
+      agent: "cowork",
+      crossCheck: { crossVerdict: "REQUEST_CHANGES" },
+    });
+    const env = JSON.parse(fs.readFileSync(tmpFile, "utf8").trim());
+    expect(env.meta.event).toBe("review.dual-disagree");
+  });
+
+  it("tags event=null when verdict clean and no disagreement (filter skips quietly)", async () => {
+    await notify.notifyReviewResult({
+      verdict: "APPROVE",
+      issues: [{ severity: "SUGGESTION", location: "a", issue: "b", suggestion: "c" }],
+      summary: "fine",
+    });
+    const env = JSON.parse(fs.readFileSync(tmpFile, "utf8").trim());
+    expect(env.meta.event).toBeNull();
+  });
+
+  // The dualReview adapter in bin/cowork-engine.js maps verdictMatch=false
+  // to crossVerdict="DISAGREE" so the event bucket is deterministic.
+  it("dualReview adapter shape → review.dual-disagree", async () => {
+    await notify.notifyReviewResult({
+      verdict: "REQUEST_CHANGES",
+      issues: [
+        { severity: "BLOCKER", location: "x", issue: "claude saw", suggestion: "s" },
+      ],
+      summary: "dual-review • claude=REQUEST_CHANGES openai=APPROVE • agreement=NO",
+      crossCheck: { crossVerdict: "DISAGREE" },
+      tier: "dual",
+      agent: "dual",
+      diffSource: "staged",
+      cost: null,
+    });
+    const env = JSON.parse(fs.readFileSync(tmpFile, "utf8").trim());
+    expect(env.meta.event).toBe("review.dual-disagree");
+    expect(env.meta.tier).toBe("dual");
+  });
 });

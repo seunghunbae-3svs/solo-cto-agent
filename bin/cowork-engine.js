@@ -2064,6 +2064,17 @@ ${diff}
     }
 
     logSuccess(`Review saved to ${reviewFile}`);
+
+    // PR-G8-review-emit — fire a notify envelope so telegram/slack/discord
+    // channels receive the verdict. Non-blocking: a notify failure must
+    // never abort the review itself.
+    try {
+      const notifyMod = require("./notify");
+      await notifyMod.notifyReviewResult(reviewData).catch(() => {});
+    } catch (_) {
+      // notify module is optional at runtime
+    }
+
     return reviewData;
   } catch (err) {
     logError(`API call failed: ${err.message}`);
@@ -2626,6 +2637,39 @@ ${diff}
   // T1 is active here by definition (both keys present); hint about T2/T3 gaps.
   const hint = formatPartialSignalHint(externalSignals);
   if (hint) log(hint);
+
+  // PR-G8-review-emit — dualReview's schema differs from localReview
+  // (finalVerdict / comparison / per-reviewer issues). Adapt to the shape
+  // notifyReviewResult expects so the event taxonomy stays consistent.
+  // Verdict mismatch between Claude and OpenAI → "review.dual-disagree";
+  // otherwise use aggregated blockers → "review.blocker".
+  try {
+    const notifyMod = require("./notify");
+    const dualDisagreed = !comparison.verdictMatch;
+    const mergedIssues = [
+      ...((claudeReview && claudeReview.issues) || []),
+      ...((codexReview && codexReview.issues) || []),
+    ];
+    await notifyMod
+      .notifyReviewResult({
+        verdict: finalVerdict,
+        issues: mergedIssues,
+        summary: `dual-review • claude=${claudeReview && claudeReview.verdict} openai=${codexReview && codexReview.verdict} • agreement=${comparison.verdictMatch ? "YES" : "NO"}`,
+        crossCheck: {
+          // notifyReviewResult treats any crossVerdict !== verdict as
+          // "dual-disagree". Forcing a distinct sentinel here makes the
+          // event routing unambiguous.
+          crossVerdict: dualDisagreed ? "DISAGREE" : finalVerdict,
+        },
+        tier: "dual",
+        agent: "dual",
+        diffSource,
+        cost: null,
+      })
+      .catch(() => {});
+  } catch (_) {
+    // notify module is optional at runtime
+  }
 
   return dualReviewData;
 }
