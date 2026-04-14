@@ -8,7 +8,7 @@
 - demos/ removal
 - package validator
 - changelog updater
-- IDE configs (Cursor, Windsurf, Copilot)
+- Agent configs (Claude/Codex)
 - README normalization
 
 ## Completed (v0.4.0)

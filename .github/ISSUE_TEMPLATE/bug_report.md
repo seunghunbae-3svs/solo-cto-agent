@@ -14,6 +14,6 @@ labels: bug
 ## Environment
 - OS:
 - Node version:
-- Tool (Claude/Cursor/Windsurf/Copilot):
+- Tool (Claude/Codex):
 
 ## Logs / error output
