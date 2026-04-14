@@ -313,10 +313,13 @@ Run a Claude-powered code review directly from your terminal, no GitHub Actions 
 ANTHROPIC_API_KEY=sk-xxx solo-cto-agent review
 
 # Review a branch diff (dry-run: see the prompt without calling API)
-solo-cto-agent review --diff main..feature --dry-run
+solo-cto-agent review --branch --dry-run
 
-# Review specific directory
-solo-cto-agent review --path ./src --diff HEAD~3
+# Review a branch diff against a specific base (e.g., master)
+solo-cto-agent review --branch --target master
+
+# Review specific file
+solo-cto-agent review --file src/app/page.tsx
 ```
 
 The review checks your diff against the local failure catalog (known error patterns), then sends it to Claude for security, performance, correctness, and style analysis. Results are saved as markdown reports in `~/.claude/skills/solo-cto-agent/reviews/`. This is the same review quality as the CI/CD pipeline, but runs entirely locally — useful for private repos, offline work, or pre-push checks.

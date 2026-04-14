@@ -163,8 +163,12 @@ describe("B5 — log channel routing", () => {
       fs.appendFileSync(path.join(dir, "a.txt"), "edit\n");
       execSync("git add .", { cwd: dir });
       const r = execSync(
-        `ANTHROPIC_API_KEY=sk-placeholder node ${cliPath} review --staged --dry-run --json`,
-        { cwd: dir, encoding: "utf8" }
+        `node ${cliPath} review --staged --dry-run --json`,
+        {
+          cwd: dir,
+          encoding: "utf8",
+          env: { ...process.env, ANTHROPIC_API_KEY: "sk-placeholder" },
+        }
       );
       // With --json and --dry-run, stdout should have the dry-run summary on stderr.
       // stdout in dry-run is empty (no review body yet) — the important invariant

@@ -9,9 +9,9 @@
  *   - Mode B: Cowork+Codex Dual (Claude + Codex cross-review)
  *
  * Usage:
- *   node bin/cowork-engine.js local-review [--staged|--branch|--file <path>] [--dry-run] [--json]
+ *   node bin/cowork-engine.js local-review [--staged|--branch|--file <path>] [--target <branch>] [--dry-run] [--json]
  *   node bin/cowork-engine.js knowledge-capture [--session|--file <path>] [--project <tag>]
- *   node bin/cowork-engine.js dual-review [--staged|--branch] [--json]
+ *   node bin/cowork-engine.js dual-review [--staged|--branch] [--target <branch>] [--json]
  *   node bin/cowork-engine.js detect-mode
  */
 
@@ -546,8 +546,14 @@ function getDiff(source, target, opts = {}) {
     }
     return execSync(cmd, { encoding: "utf8", maxBuffer: 1024 * 1024 * 5, cwd });
   } catch (e) {
-    if (e.status === 128) {
+    const stderr = e && e.stderr ? e.stderr.toString() : "";
+    const msg = `${e && e.message ? e.message : ""} ${stderr}`.toLowerCase();
+    if (msg.includes("not a git repository")) {
       logError("Not a git repository");
+      return "";
+    }
+    if (msg.includes("ambiguous argument") || msg.includes("bad revision") || msg.includes("unknown revision")) {
+      logError("Base branch not found. Try --target <branch> (e.g., master) or ensure origin/HEAD is set.");
       return "";
     }
     return "";
@@ -2435,7 +2441,13 @@ async function main() {
         : "staged";
 
       const fileIdx = args.indexOf("--file");
-      const target = fileIdx >= 0 ? args[fileIdx + 1] : null;
+      const targetIdx = args.indexOf("--target");
+      let target = null;
+      if (diffSource === "branch") {
+        target = targetIdx >= 0 ? args[targetIdx + 1] : null;
+      } else if (diffSource === "file") {
+        target = fileIdx >= 0 ? args[fileIdx + 1] : null;
+      }
 
       const dryRun = args.includes("--dry-run");
       const outputFormat = args.includes("--json")
@@ -2443,6 +2455,7 @@ async function main() {
         : args.includes("--markdown")
         ? "markdown"
         : "terminal";
+      if (outputFormat === "json") setLogChannel("stderr");
 
       // Self cross-review override flags
       let crossCheck = null;
@@ -2456,6 +2469,7 @@ async function main() {
         outputFormat,
         crossCheck,
       });
+      if (outputFormat === "json") setLogChannel("stdout");
     } else if (command === "knowledge-capture") {
       const source = args.includes("--file")
         ? "file"
@@ -2478,7 +2492,8 @@ async function main() {
       await knowledgeCapture({ source, input, projectTag });
     } else if (command === "dual-review") {
       const diffSource = args.includes("--branch") ? "branch" : "staged";
-      const target = null;
+      const targetIdx = args.indexOf("--target");
+      const target = diffSource === "branch" && targetIdx >= 0 ? args[targetIdx + 1] : null;
 
       await dualReview({ diffSource, target });
     } else if (command === "detect-mode") {
@@ -2553,7 +2568,8 @@ ${COLORS.bold}Commands:${COLORS.reset}
 ${COLORS.bold}Options:${COLORS.reset}
   local-review:
     --staged           Review staged changes (default)
-    --branch           Review changes on current branch vs main
+    --branch           Review changes on current branch vs base (origin/HEAD or main)
+    --target <branch>  Override base branch for --branch (e.g., master)
     --file <path>      Review changes in specific file
     --dry-run          Show prompt without calling API
     --json             Output as JSON
@@ -2570,7 +2586,8 @@ ${COLORS.bold}Options:${COLORS.reset}
 
   dual-review:
     --staged         Review staged changes (default)
-    --branch         Review current branch
+    --branch         Review current branch vs base (origin/HEAD or main)
+    --target <branch> Override base branch for --branch (e.g., master)
 
 ${COLORS.bold}Examples:${COLORS.reset}
   # Review staged changes with Claude
