@@ -1622,6 +1622,26 @@ async function main() {
     return;
   }
 
+  // ─── external-loop (one-shot T2 + T3 ping, no diff review) ─
+  if (cmd === "external-loop") {
+    if (!watch) { console.error("❌ watch module not installed."); process.exit(1); }
+    try {
+      const result = await watch.externalLoopPing({});
+      if (args.includes("--json")) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log(watch.formatExternalLoopPing(result));
+      }
+      // Exit non-zero if inactive or alerts present so cron can react.
+      if (!result.ok) process.exit(2);
+      if (result.alerts && result.alerts.length) process.exit(1);
+    } catch (e) {
+      console.error(`❌ external-loop failed: ${e.message}`);
+      process.exit(1);
+    }
+    return;
+  }
+
   // ─── watch (file watcher with tier gate) ──────────────────
   if (cmd === "watch") {
     if (!watch) { console.error("❌ watch module not installed."); process.exit(1); }

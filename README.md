@@ -342,6 +342,8 @@ Works completely offline from CI/CD. Claude reviews the diff first. If an OpenAI
 
 **External knowledge (T2 — PR-E2).** Set `COWORK_EXTERNAL_KNOWLEDGE=1` (or `COWORK_PACKAGE_REGISTRY=1`) to activate npm-registry currency checks. Every `review` scans `package.json` `dependencies` (add `COWORK_EXTERNAL_KNOWLEDGE_INCLUDE_DEV=1` for `devDependencies` too), queries `registry.npmjs.org` with 5 s timeouts and concurrency-of-6, capped at 20 packages, and injects a `## 스택 최신성 (T2 External Knowledge)` block flagging deprecated packages, major/minor version lags. This closes the "model thinks it's still 2024" gap without any external token. Failures (registry outage, timeout, missing `package.json`) are surfaced per-package and never block the review.
 
+**Periodic refresh (PR-E5).** External signals need to stay fresh even when no code changes. `solo-cto-agent external-loop` runs a one-shot T2 + T3 ping (no diff review, no cost) and exits with code 0 (all clear), 1 (alerts present — deprecated packages, ERROR deployments, major-version drift), or 2 (no signals active). Use `--json` for machine output. `solo-cto-agent watch` now also emits periodic tasks into `~/.claude/skills/solo-cto-agent/scheduled-tasks.yaml`: `cowork-external-loop-daily` (24 h) when any T2/T3 signal is set, and `cowork-dual-review-weekly` (7 days) when `OPENAI_API_KEY` is set — gated by tier/agent policy so free-tier users don't pay for unexpected dual runs.
+
 ### Knowledge Article Generation (Both tiers)
 
 Auto-generates durable knowledge articles from accumulated session memory:

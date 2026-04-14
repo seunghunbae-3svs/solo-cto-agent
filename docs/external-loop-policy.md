@@ -46,7 +46,7 @@
 - prior session 에서 합성된 `knowledge` article — 같은 loop, 롤업일 뿐
 - 자기 orchestrator repo 에서 `sync --apply` — 자기 CI · 자기 agent · 자기 닫힌 loop
 
-**로드맵**: PR-E3 (경고 라벨) ✅ shipped. **PR-E1 (T3 Vercel 배포 + runtime 신호) ✅ shipped — `## 최근 프로덕션 신호` 블록이 review 프롬프트에 주입됨.** **PR-E2 (T2 npm registry 최신성 체크) ✅ shipped — `## 스택 최신성` 블록이 review 프롬프트에 주입됨.** PR-E5 (`watch` 주기 dual-review) · PR-E4 (Slack 버튼 → `feedback`) 순서로 planned.
+**로드맵**: PR-E3 (경고 라벨) ✅ shipped. **PR-E1 (T3 Vercel 배포 + runtime 신호) ✅ shipped — `## 최근 프로덕션 신호` 블록이 review 프롬프트에 주입됨.** **PR-E2 (T2 npm registry 최신성 체크) ✅ shipped — `## 스택 최신성` 블록이 review 프롬프트에 주입됨.** **PR-E5 (`watch` 주기 외부 루프 + 주간 dual-review) ✅ shipped — `solo-cto-agent external-loop` CLI + scheduled-tasks.yaml 자동 등록.** PR-E4 (Slack 버튼 → `feedback`) planned.
 
 **T3 활성화 방법** (PR-E1):
 
@@ -256,8 +256,8 @@ These layers are useful for personalization and continuity, but they do not add 
 | **PR-E3** | Self-loop warning label (this doc's subject) | ✅ shipped |
 | **PR-E1** | T3 injection — Vercel deploy status + runtime logs | ✅ shipped |
 | **PR-E2** | T2 injection — npm registry currency check | ✅ shipped |
+| **PR-E5** | `watch` schedules periodic external-loop refresh + weekly dual-review | ✅ shipped |
 | **PR-E1.5** | T3 Supabase log API integration | planned |
-| **PR-E5** | `watch` schedules periodic dual-review + T2 refresh | planned |
 | **PR-E4** | Inbound feedback channel (Slack button → `feedback`) | planned |
 
-With PR-E1 + PR-E2 shipped, "fully externally grounded" is achievable for any user with `OPENAI_API_KEY` + `VERCEL_TOKEN` + `COWORK_EXTERNAL_KNOWLEDGE=1`. PR-E1 covers the highest-signal tier (runtime truth beats model opinion); PR-E2 closes the "model thinks it's still 2024" gap on npm deps. Together they meaningfully break the self-loop even before PR-E5 (periodic) and PR-E4 (inbound feedback) ship.
+With PR-E1, PR-E2, and PR-E5 shipped, "fully externally grounded" is achievable for any user with `OPENAI_API_KEY` + `VERCEL_TOKEN` + `COWORK_EXTERNAL_KNOWLEDGE=1`. PR-E5 adds a `solo-cto-agent external-loop` command (one-shot T2+T3 ping with exit-code semantics for cron) and extends `watch` to emit scheduled-tasks manifest entries for daily external-loop refresh and weekly dual-review — so the external signals stay fresh even between code changes.
