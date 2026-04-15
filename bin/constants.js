@@ -25,7 +25,7 @@ const API_HOSTS = Object.freeze({
 
 const MODELS = Object.freeze({
   claude:     "claude-sonnet-4-20250514",
-  codex:      "codex-mini-latest",
+  codex:      "gpt-4o-mini",
   openai:     "gpt-4o",
   // Tier-specific defaults
   tier: Object.freeze({
@@ -102,7 +102,7 @@ const PRICING = Object.freeze({
   "claude-haiku-4-5-20251001":  { input: 0.0008,  output: 0.004  },
   "claude-sonnet-4-5-20250929": { input: 0.003,   output: 0.015  },
   "claude-opus-4-5-20250929":   { input: 0.015,   output: 0.075  },
-  "codex-mini-latest":          { input: 0.0005,  output: 0.0015 },
+  "gpt-4o-mini":          { input: 0.0005,  output: 0.0015 },
   "gpt-4o":                     { input: 0.005,   output: 0.015  },
   "claude-sonnet-4-6":          { input: 0.003,   output: 0.015  },
   "claude-opus-4-6":            { input: 0.015,   output: 0.075  },
