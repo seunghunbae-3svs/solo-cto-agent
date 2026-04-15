@@ -1,84 +1,118 @@
 # Using solo-cto-agent with Claude
 
-> This is the **primary** tool entry point. Claude Cowork is the fully-supported execution surface for `solo-cto-agent`.
-> Other tools (Cursor, Windsurf, Copilot) are not currently supported. Entry points for those may land as this project grows.
+> This is the primary entry point for the toolkit. The supported core operating surfaces are **Cowork** and **Codex**.
 
-## What you get with Claude
+`solo-cto-agent` has two runtime modes:
 
-Two execution surfaces, same agent spec:
-
-| Surface | What it is | When to use it |
+| Mode | What it means | Best for |
 |---|---|---|
-| **Claude Cowork (desktop)** | Semi-auto mode = `cowork-main`. Agent runs inside the Cowork runtime, uses MCP connectors + web search + scheduled tasks. | Everyday solo work: review, build, ship, idea critique, session brief. |
-| **CLI + API (`solo-cto-agent`)** | Direct invocation from terminal using `ANTHROPIC_API_KEY` (and optionally `OPENAI_API_KEY` for dual review). | CI/CD, scripts, running reviews outside Cowork, tier-controlled automation. |
+| `cowork-main` | Semi-auto. Local-first loop inside Claude Cowork and the CLI. | Solo work, manual sync, lower infra overhead. |
+| `codex-main` | Full-auto. GitHub Actions + orchestrator + automatic review/rework flow. | Multi-repo CI/CD, always-on review and routing. |
 
-Both surfaces call the same skills (`spark`, `review`, `memory`, `craft`, `build`, `ship`, `orchestrate`) and produce the same output shapes.
+## Core position
+
+This repo is a **CTO toolkit**, not a generic prompt pack.
+
+What is core:
+- Cowork
+- Codex
+- review / build / ship / orchestrate loops
+- install, verify, and operate from the CLI
+
+What is not core:
+- Gamma as a runtime
+- editor-specific wrappers outside Cowork/Codex
+- one-off presentation tooling
+
+Gamma users can still use the toolkit. The recommended pattern is to build and review the content here, then move the final narrative or deck into Gamma for publishing.
 
 ## Quick start
 
+### macOS / Linux
+
 ```bash
-# Install skills to ~/.claude/skills/
+npm install -g solo-cto-agent
 npx solo-cto-agent init --wizard
 
-# Local review on staged changes
-ANTHROPIC_API_KEY=sk-ant-... solo-cto-agent review
+# Get your keys first:
+# Anthropic: https://console.anthropic.com/settings/keys
+# OpenAI: https://platform.openai.com/api-keys
 
-# Dual review (Claude + Codex cross-check, auto-enabled when both keys present)
-ANTHROPIC_API_KEY=sk-ant-... OPENAI_API_KEY=sk-... solo-cto-agent dual-review
+export ANTHROPIC_API_KEY="sk-ant-..."
+export OPENAI_API_KEY="sk-..."   # optional for cowork-main, required for codex-main
+
+solo-cto-agent doctor
 ```
 
-For Cowork specifically, after `init --wizard` the skills load automatically on next Cowork session. See the [operating guide](cowork-main-install.md) for the desktop runtime details.
+### Windows PowerShell
 
-## Choose a tier
+```powershell
+npm install -g solo-cto-agent
+npx solo-cto-agent init --wizard
 
-Three tiers control **which skills and which workflows are installed**. You can change tiers later.
+# Get your keys first:
+# Anthropic: https://console.anthropic.com/settings/keys
+# OpenAI: https://platform.openai.com/api-keys
 
-| Tier | Skills | Required keys | Use case |
-|---|---|---|---|
-| **Maker** | `spark`, `review`, `memory`, `craft` | `ANTHROPIC_API_KEY` | Idea critique, session memory, UI polish. No build pipeline. |
-| **Builder** (default) | Maker + `build`, `ship` | `ANTHROPIC_API_KEY` · optional `OPENAI_API_KEY` | Full solo dev loop. Build, review, ship. |
-| **CTO** | Builder + `orchestrate` | `ANTHROPIC_API_KEY` + `OPENAI_API_KEY` | Dual review mandatory, multi-agent routing, UI/UX 4-stage gate, daily briefings. |
+$env:ANTHROPIC_API_KEY="sk-ant-..."
+$env:OPENAI_API_KEY="sk-..."   # optional for cowork-main, required for codex-main
 
-Tier matrix: [`tier-matrix.md`](tier-matrix.md). Tier scenarios: [`tier-examples.md`](tier-examples.md).
-
-## The loop
-
-Every skill runs the same checklist flow.
-
-```text
-Your request
-  → Read own work
-  → Produce a diff / content
-  → Self-review (single-agent)
-  → (optional) cross-review by second agent
-  → Verdict: APPROVE / REQUEST_CHANGES / COMMENT
-  → Circuit breaker if stuck (3 fails → stop + diagnose)
+solo-cto-agent doctor
 ```
 
-See [`external-loop-policy.md`](external-loop-policy.md) for the full self-loop + escalation policy (peer model / external knowledge / ground truth).
+## What to choose in the wizard
 
-## Where to go from here
+If you are unsure, use this rule:
+- choose `cowork-main` if you want a local-first loop and manual control
+- choose `codex-main` if you want full CI/CD automation and GitHub-driven review/rework
 
-1. **Read a real example.** Pick one from [`../examples/`](../examples/) that looks like your day. `build/`, `ship/`, `review/`, or `founder-workflow/`.
-2. **Run the install.** `npx solo-cto-agent init --wizard`. Pick Builder if you are unsure.
-3. **Run one review.** `solo-cto-agent review --staged` on a real change. Read the JSON / markdown output. Decide whether to keep going.
-4. **Wire Cowork (optional).** Open Cowork after install. The skills auto-load. Try `업무 시작` / `start session` for the memory brief.
+If you choose `codex-main`, also install:
+- GitHub CLI: [cli.github.com](https://cli.github.com/)
+- GitHub PAT for cross-repo dispatch: [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
 
-## Deep dives
+Then continue with:
 
-| Doc | Topic | Language |
+```bash
+solo-cto-agent setup-pipeline --org <github-org> --repos <repo1,repo2>
+```
+
+## First commands that matter
+
+```bash
+# Check install + missing setup
+solo-cto-agent doctor
+
+# Run a local review in a git repo
+solo-cto-agent review
+
+# Run dual review when both keys are set
+solo-cto-agent dual-review
+```
+
+## Tier summary
+
+| Tier | Includes | Use when |
 |---|---|---|
-| [`cowork-main-install.md`](cowork-main-install.md) | Cowork desktop operating guide (install, daily loop, troubleshooting) | 한국어 |
-| [`cto-policy.md`](cto-policy.md) | CTO tier operating policy (dual-review mandatory, escalation rules) | 한국어 |
-| [`tier-matrix.md`](tier-matrix.md) · [`tier-examples.md`](tier-examples.md) | Tier capability tables + scenarios | 한국어 |
-| [`external-loop-policy.md`](external-loop-policy.md) | Self-loop / external signal policy (T1 peer · T2 knowledge · T3 ground truth) | 한국어 |
-| [`feedback-guide.md`](feedback-guide.md) | Feedback accept/reject + personalization | 한국어 |
-| [`plugin-api-v2.md`](plugin-api-v2.md) | Plugin spec (capability-scoped ctx, hook dispatch) | English |
-| [`skill-slimming.md`](skill-slimming.md) | How skills stay under the context budget | 한국어 |
+| Maker | `spark`, `review`, `memory`, `craft` | idea validation and lightweight review loops |
+| Builder | Maker + `build`, `ship` | you are shipping real code |
+| CTO | Builder + `orchestrate` | you want routing, dual-agent review, and full operating policy |
 
-## Compatibility and limits
+Default recommendation:
+- most solo builders: `Builder`
+- fully automated GitHub workflow: `CTO` + `codex-main`
 
-- **Node:** 18+ required for the CLI. Cowork desktop ships its own runtime — not your local Node.
-- **OS:** macOS / Linux tested. Windows works via WSL; native Windows paths supported by the CLI but Cowork-side skills assume POSIX shells in scripts.
-- **API quotas:** the CLI makes one API call per review (two in dual mode). Nothing batched, nothing re-invoked on failure beyond the circuit-breaker 3-attempt limit.
-- **Secrets:** no secret is written to disk by the agent. `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` come from your shell environment. Cowork uses its own credential store.
+## Compatibility
+
+- **macOS:** supported directly. Best first-class shell path today.
+- **Windows:** supported for the CLI. Use PowerShell environment variables during setup.
+- **Linux:** supported.
+- **Gamma:** supported only as a downstream publishing surface. Not a runtime target.
+
+## Where to go next
+
+- Main overview: [README.md](../README.md)
+- Cowork operating guide: [cowork-main-install.md](./cowork-main-install.md)
+- Tier matrix: [tier-matrix.md](./tier-matrix.md)
+- Tier examples: [tier-examples.md](./tier-examples.md)
+- CTO policy: [cto-policy.md](./cto-policy.md)
+- External loop policy: [external-loop-policy.md](./external-loop-policy.md)
