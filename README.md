@@ -565,6 +565,15 @@ A: The orchestrator holds cross-repo logic (agent routing, score tracking, visua
 **Q: How much do the API calls cost?**
 A: Typical per-PR cost depends on your review depth. A Claude auto-review of a medium PR (under 500 lines changed) uses roughly 5K-15K input tokens and 1K-3K output tokens. At Anthropic's Sonnet pricing that is well under $0.10 per review. If you add Codex cross-review (CTO tier), add roughly $0.05-0.15 per review for the OpenAI side. A solo dev doing 2-3 PRs per day can stay comfortably under $5/month on Anthropic and $5/month on OpenAI. Visual checks (Playwright screenshots) use no API tokens - they run in GitHub Actions compute only.
 
+**Q: How do I set up the 3-pass auto-review on my repos?**
+A: Copy the workflow below to `.github/workflows/solo-cto-review.yml` in your repo and add `ANTHROPIC_API_KEY` to your repo secrets. Every PR will automatically get a 3-pass review:
+
+- **Pass 1 — Code Review**: structure, security, performance, bugs
+- **Pass 2 — Cross-Check**: validates Pass 1 findings, catches missed issues
+- **Pass 3 — UI/UX Review**: accessibility, responsiveness, usability
+
+Final verdict: **APPROVE** (merge-ready) or **REQUEST_CHANGES** (fix and push to re-trigger). See the [workflow file](examples/solo-cto-review.yml) for the full YAML.
+
 **Q: Can I use this without GitHub Actions?**
 A: The skills (init, build, review, craft, etc.) work independently of CI/CD. You can install them and use them in your editor without ever running setup-pipeline. The CI/CD automation is an optional layer on top.
 
@@ -593,6 +602,7 @@ A: Everything works - skills activate, build checks run, reviews trigger. The sy
 A: No. `status` reads only local files. `sync` is manual and opt-in - you run it explicitly when you want CI/CD data pulled from GitHub. Error pattern merging from `sync` is dry-run by default; use `sync --apply` to actually write changes. No background network activity, no telemetry.
 
 ---
+
 
 
 
