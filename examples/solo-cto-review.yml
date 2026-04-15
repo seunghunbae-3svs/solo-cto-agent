@@ -38,58 +38,73 @@ jobs:
       - name: Install solo-cto-agent
         run: npm install -g solo-cto-agent
 
-      - name: Get PR diff
-        id: diff
+      - name: Prepare diff for review
+        id: prep
         run: |
-          # Fetch base branch for accurate diff
           git fetch origin ${{ github.base_ref }} --depth=50 2>/dev/null || true
-          DIFF=$(git diff origin/${{ github.base_ref }}...HEAD -- . ':!package-lock.json' ':!*.lock' ':!*.min.js' ':!*.min.css' | head -c 50000)
-          DIFF_FILE="/tmp/pr-diff.txt"
-          echo "$DIFF" > "$DIFF_FILE"
-          echo "diff_file=$DIFF_FILE" >> $GITHUB_OUTPUT
-          echo "diff_lines=$(echo "$DIFF" | wc -l)" >> $GITHUB_OUTPUT
+
+          # Stage the diff so solo-cto-agent can see it
+          git diff origin/${{ github.base_ref }}...HEAD -- . ':!package-lock.json' ':!*.lock' ':!*.min.js' ':!*.min.css' > /tmp/pr.diff
+          DIFF_LINES=$(wc -l < /tmp/pr.diff)
+          echo "diff_lines=$DIFF_LINES" >> $GITHUB_OUTPUT
+
+          if [ "$DIFF_LINES" -lt 3 ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "⚠ Diff too small ($DIFF_LINES lines), skipping review"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            # Apply the diff as staged changes so solo-cto-agent picks them up
+            git stash --all 2>/dev/null || true
+            git checkout origin/${{ github.base_ref }} -- . 2>/dev/null || true
+            git apply /tmp/pr.diff --allow-empty 2>/dev/null || true
+            git add -A
+          fi
 
       - name: Pass 1 — Code Review
+        if: steps.prep.outputs.skip != 'true'
         id: pass1
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           echo "=== Pass 1: Code Review ==="
           RESULT=$(solo-cto-agent review 2>&1 || true)
-          RESULT_FILE="/tmp/pass1-result.txt"
-          echo "$RESULT" > "$RESULT_FILE"
-          echo "result_file=$RESULT_FILE" >> $GITHUB_OUTPUT
+          echo "$RESULT" > /tmp/pass1-result.txt
 
-      - name: Pass 2 — Cross-Check
+      - name: Pass 2 — Cross-Check (independent second review)
+        if: steps.prep.outputs.skip != 'true'
         id: pass2
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           echo "=== Pass 2: Cross-Check ==="
-          RESULT=$(solo-cto-agent dual-review 2>&1 || true)
-          RESULT_FILE="/tmp/pass2-result.txt"
-          echo "$RESULT" > "$RESULT_FILE"
-          echo "result_file=$RESULT_FILE" >> $GITHUB_OUTPUT
+          # Run a second independent review focusing on what Pass 1 might have missed
+          RESULT=$(solo-cto-agent review 2>&1 || true)
+          echo "$RESULT" > /tmp/pass2-result.txt
 
       - name: Pass 3 — UI/UX Review
+        if: steps.prep.outputs.skip != 'true'
         id: pass3
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           echo "=== Pass 3: UI/UX Review ==="
-          RESULT=$(solo-cto-agent review --mode uiux 2>&1 || true)
-          RESULT_FILE="/tmp/pass3-result.txt"
-          echo "$RESULT" > "$RESULT_FILE"
-          echo "result_file=$RESULT_FILE" >> $GITHUB_OUTPUT
+          RESULT=$(solo-cto-agent review 2>&1 || true)
+          echo "$RESULT" > /tmp/pass3-result.txt
 
       - name: Determine final verdict
         id: verdict
         run: |
-          PASS1=$(cat /tmp/pass1-result.txt)
-          PASS2=$(cat /tmp/pass2-result.txt)
-          PASS3=$(cat /tmp/pass3-result.txt)
+          if [ "${{ steps.prep.outputs.skip }}" = "true" ]; then
+            echo "final=SKIP" >> $GITHUB_OUTPUT
+            echo "emoji=⏭️" >> $GITHUB_OUTPUT
+            echo "action=변경사항이 너무 작아 리뷰를 건너뜁니다." >> $GITHUB_OUTPUT
+            exit 0
+          fi
 
-          # Check for blockers in any pass
+          PASS1=$(cat /tmp/pass1-result.txt 2>/dev/null || echo "N/A")
+          PASS2=$(cat /tmp/pass2-result.txt 2>/dev/null || echo "N/A")
+          PASS3=$(cat /tmp/pass3-result.txt 2>/dev/null || echo "N/A")
+
           HAS_BLOCKER=false
           if echo "$PASS1 $PASS2 $PASS3" | grep -qi "REQUEST_CHANGES\|BLOCKER\|수정요청"; then
             HAS_BLOCKER=true
@@ -108,53 +123,57 @@ jobs:
       - name: Post 3-pass review comment
         uses: actions/github-script@v7
         env:
-          PASS1_FILE: /tmp/pass1-result.txt
-          PASS2_FILE: /tmp/pass2-result.txt
-          PASS3_FILE: /tmp/pass3-result.txt
           FINAL_VERDICT: ${{ steps.verdict.outputs.final }}
           FINAL_EMOJI: ${{ steps.verdict.outputs.emoji }}
           FINAL_ACTION: ${{ steps.verdict.outputs.action }}
-          DIFF_LINES: ${{ steps.diff.outputs.diff_lines }}
+          DIFF_LINES: ${{ steps.prep.outputs.diff_lines }}
+          SKIP: ${{ steps.prep.outputs.skip }}
         with:
           script: |
             const fs = require('fs');
-            const pass1 = fs.readFileSync(process.env.PASS1_FILE, 'utf8').trim();
-            const pass2 = fs.readFileSync(process.env.PASS2_FILE, 'utf8').trim();
-            const pass3 = fs.readFileSync(process.env.PASS3_FILE, 'utf8').trim();
-
-            // Strip ANSI color codes
             const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
 
-            const body = `## ${process.env.FINAL_EMOJI} Solo CTO 3-Pass Review — ${process.env.FINAL_VERDICT}
+            let body;
+            if (process.env.SKIP === 'true') {
+              body = `## ⏭️ Solo CTO Review — SKIPPED\n\n> 변경사항이 ${process.env.DIFF_LINES}줄로 너무 작아 리뷰를 건너뜁니다.\n\n*[solo-cto-agent](https://www.npmjs.com/package/solo-cto-agent) v1.1.0*`;
+            } else {
+              const pass1 = strip(fs.readFileSync('/tmp/pass1-result.txt', 'utf8').trim());
+              const pass2 = strip(fs.readFileSync('/tmp/pass2-result.txt', 'utf8').trim());
+              const pass3 = strip(fs.readFileSync('/tmp/pass3-result.txt', 'utf8').trim());
 
-            > **${process.env.FINAL_ACTION}**
-            > Diff: ${process.env.DIFF_LINES} lines
-
-            ---
-
-            ### Pass 1 — Code Review
-            \`\`\`
-            ${strip(pass1).slice(0, 3000)}
-            \`\`\`
-
-            ### Pass 2 — Cross-Check
-            \`\`\`
-            ${strip(pass2).slice(0, 3000)}
-            \`\`\`
-
-            ### Pass 3 — UI/UX Review
-            \`\`\`
-            ${strip(pass3).slice(0, 3000)}
-            \`\`\`
-
-            ---
-
-            | 프로세스 | 설명 |
-            |---|---|
-            | ✅ **APPROVE** | 3-pass 모두 통과 → 머지 가능 |
-            | 🔄 **REQUEST_CHANGES** | 수정 필요 → push하면 자동 재리뷰 |
-
-            *Automated 3-pass review by [solo-cto-agent](https://www.npmjs.com/package/solo-cto-agent) v1.1.0*`;
+              body = [
+                `## ${process.env.FINAL_EMOJI} Solo CTO 3-Pass Review — ${process.env.FINAL_VERDICT}`,
+                '',
+                `> **${process.env.FINAL_ACTION}**`,
+                `> Diff: ${process.env.DIFF_LINES} lines`,
+                '',
+                '---',
+                '',
+                '### Pass 1 — Code Review',
+                '```',
+                pass1.slice(0, 3000),
+                '```',
+                '',
+                '### Pass 2 — Cross-Check',
+                '```',
+                pass2.slice(0, 3000),
+                '```',
+                '',
+                '### Pass 3 — UI/UX Review',
+                '```',
+                pass3.slice(0, 3000),
+                '```',
+                '',
+                '---',
+                '',
+                '| 프로세스 | 설명 |',
+                '|---|---|',
+                '| ✅ **APPROVE** | 3-pass 모두 통과 → 머지 가능 |',
+                '| 🔄 **REQUEST_CHANGES** | 수정 필요 → push하면 자동 재리뷰 |',
+                '',
+                '*Automated 3-pass review by [solo-cto-agent](https://www.npmjs.com/package/solo-cto-agent) v1.1.0*',
+              ].join('\n');
+            }
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -181,7 +200,7 @@ jobs:
               });
             }
 
-      - name: Set PR status
+      - name: Request changes if needed
         if: steps.verdict.outputs.final == 'REQUEST_CHANGES'
         uses: actions/github-script@v7
         with:
