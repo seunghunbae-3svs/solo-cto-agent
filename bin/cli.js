@@ -59,6 +59,7 @@ Usage:
   solo-cto-agent telegram wizard [--lang <en|ko>]
   solo-cto-agent --help
   solo-cto-agent --version | -V
+  solo-cto-agent --completions <bash|zsh>      # output shell completions
   solo-cto-agent --lang <en|ko> <command>      # override CLI locale (or SOLO_CTO_LANG env)
 
 Commands:
@@ -1497,6 +1498,21 @@ async function main() {
   if (cmd === "--version" || cmd === "-V") {
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
     console.log(pkg.version);
+    return;
+  }
+
+  if (cmd === "--completions") {
+    const shell = args[1] || "bash";
+    const completionsDir = path.join(ROOT, "completions");
+    const file = shell === "zsh"
+      ? path.join(completionsDir, "solo-cto-agent.zsh")
+      : path.join(completionsDir, "solo-cto-agent.bash");
+    if (fs.existsSync(file)) {
+      console.log(fs.readFileSync(file, "utf8"));
+    } else {
+      console.error(`Completion file not found: ${file}`);
+      process.exit(1);
+    }
     return;
   }
 

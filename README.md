@@ -296,6 +296,18 @@ Then open the skill file and replace the placeholders with your actual stack. Ex
 Codex is a first-class target. Use the SKILL.md files directly as your instruction source. No extra Codex-specific files are required - Cowork reads SKILL.md natively, and Codex (via OpenAI API) is invoked through the CLI when both keys are set.
 
 
+## Shell completions
+
+Tab completion for all commands, flags, and options.
+
+```bash
+# Bash — add to ~/.bashrc
+source <(solo-cto-agent --completions bash)
+
+# Zsh — add to ~/.zshrc
+source <(solo-cto-agent --completions zsh)
+```
+
 ## How I use autonomy
 
 Most agent workflows feel too timid in the wrong places and too reckless in the dangerous ones. So I split behavior into 3 levels.
