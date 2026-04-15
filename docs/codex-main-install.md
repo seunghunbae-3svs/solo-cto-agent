@@ -1,154 +1,201 @@
-# Codex-Main Setup Guide
+# Codex-Main Install Guide
 
-> `codex-main` = **Full-auto mode**. GitHub Actions가 PR/이슈마다 자동으로 Claude + Codex 리뷰를 실행하고, rework을 디스패치하고, agent-scores를 추적합니다.
+`codex-main` is the full-auto mode of `solo-cto-agent`.
 
-Semi-auto (cowork-main)와 다른 점: 로컬 CLI 실행이 아니라 **CI/CD에서 자동 실행**됩니다. 로컬 `review` / `dual-review` 명령도 동일하게 작동합니다.
+It is designed for users who want GitHub Actions to run the review loop automatically:
+- PRs are detected from connected product repositories
+- review results are posted back to GitHub
+- Telegram sends decision prompts and preview links
+- approval can trigger the next step without going back to the terminal
 
----
+`cowork-main` is the local/semi-auto mode. This document covers `codex-main` only.
+
+## What this mode does
+
+After setup is complete:
+1. the orchestrator repo is created from the package template
+2. product repos get the required workflow files
+3. you add the listed secrets once
+4. you deploy the orchestrator to Vercel
+5. Telegram sends a setup-complete message asking whether to start the first baseline review
+6. if you approve, the orchestrator scans open PRs and posts the first review summaries
 
 ## Prerequisites
 
-| 항목 | 필요 여부 | 발급처 |
-|---|---|---|
-| Node.js 18+ | 필수 | https://nodejs.org/ |
-| git | 필수 | https://git-scm.com/ |
-| GitHub org 또는 개인 계정 | 필수 | https://github.com/ |
-| ANTHROPIC_API_KEY | 필수 | https://console.anthropic.com/settings/keys |
-| OPENAI_API_KEY | 필수 (dual-review) | https://platform.openai.com/api-keys |
-| ORCHESTRATOR_PAT | 필수 (GitHub PAT, repo scope) | GitHub Settings > Developer settings > Personal access tokens |
-| TELEGRAM_BOT_TOKEN + CHAT_ID | 선택 | `solo-cto-agent telegram wizard` |
-| VERCEL_TOKEN | 선택 (배포 훅) | https://vercel.com/account/tokens |
+You need these installed locally:
+- Node.js 18+: [https://nodejs.org/](https://nodejs.org/)
+- Git: [https://git-scm.com/](https://git-scm.com/)
+- GitHub CLI: [https://cli.github.com/](https://cli.github.com/)
+- Vercel CLI: [https://vercel.com/docs/cli](https://vercel.com/docs/cli)
 
----
+You also need these accounts/tokens:
+- Anthropic API key: [https://console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)
+- OpenAI API key: [https://platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+- GitHub PAT with `repo` + `workflow`: [https://github.com/settings/tokens](https://github.com/settings/tokens)
+- Telegram bot token: create one with [https://t.me/BotFather](https://t.me/BotFather)
+- Telegram chat id: can be captured by `solo-cto-agent telegram wizard`
 
-## Step-by-step
-
-### 1. Install + Init
+## Step 1. Install the package
 
 ```bash
 npm install -g solo-cto-agent
 solo-cto-agent init --wizard
 ```
 
-wizard에서 `[1] codex-main`을 선택합니다. 프로젝트 스택 정보를 입력하면 `~/.claude/skills/solo-cto-agent/SKILL.md`에 `mode: codex-main`이 세팅됩니다.
+Choose `codex-main` when the wizard asks for the mode.
 
-### 2. Setup Pipeline
+The wizard creates `~/.claude/skills/solo-cto-agent/SKILL.md` and then runs `solo-cto-agent doctor`.
 
-이 커맨드가 orchestrator repo를 자동 생성하고, product repo에 워크플로우를 설치합니다.
+## Step 2. Generate the orchestrator and repo workflows
 
 ```bash
-solo-cto-agent setup-pipeline --org <github-org> --repos <repo1,repo2>
+solo-cto-agent setup-pipeline --org <github-owner> --tier cto --repos <repo1,repo2>
 ```
 
-실행 결과:
-- `dual-agent-review-orchestrator/` 디렉터리 생성 (orchestrator repo)
-  - `.github/workflows/` — claude-auto, codex-auto, cross-review, rework-auto 등
-  - `ops/agents/` — codex-worker.js, claude-worker.js, cross-reviewer.js 등
-  - `ops/scripts/` — 유틸리티 스크립트
-- 각 product repo에 `.github/workflows/` 설치
-  - codex-auto.yml, claude-auto.yml, cross-review-dispatch.yml 등
+Example:
 
-CTO tier (multi-agent routing 포함):
 ```bash
-solo-cto-agent setup-pipeline --org <github-org> --tier cto --repos <repo1,repo2>
+solo-cto-agent setup-pipeline --org acme --tier cto --repos storefront,admin-app
 ```
 
-### 3. GitHub Secrets 설정
+This creates:
+- `dual-agent-review-orchestrator/`
+- `dual-agent-review-orchestrator/ops/config/projects.json`
+- product repo workflow files under each connected repository
 
-orchestrator repo와 각 product repo의 **Settings > Secrets and variables > Actions**에 아래 시크릿을 추가합니다.
+The generated `projects.json` is the source of truth for:
+- connected repositories
+- Telegram repo aliases
+- baseline review bootstrap
+- status and decision queue messages
 
-**Orchestrator repo:**
-```
-ANTHROPIC_API_KEY    — Claude API 키
-OPENAI_API_KEY       — OpenAI API 키
-GITHUB_TOKEN         — (자동 제공, 추가 불필요)
-TELEGRAM_BOT_TOKEN   — (선택) 알림용
-TELEGRAM_CHAT_ID     — (선택) 알림용
-```
-
-**각 Product repo:**
-```
-ORCHESTRATOR_PAT     — GitHub PAT (repo scope). orchestrator로 dispatch 보낼 때 사용.
-TELEGRAM_BOT_TOKEN   — (선택) PR 알림용
-TELEGRAM_CHAT_ID     — (선택) PR 알림용
-VERCEL_TOKEN         — (선택) 배포 상태 체크용
-VERCEL_ORG_ID        — (선택)
-VERCEL_PROJECT_ID    — (선택)
-```
-
-PAT 발급: GitHub > Settings > Developer settings > Personal access tokens > Generate new token (classic) > `repo` scope 체크.
-
-### 4. Push + 확인
+## Step 3. Create the orchestrator repository
 
 ```bash
 cd dual-agent-review-orchestrator
-git add -A && git commit -m "init orchestrator"
-git remote add origin https://github.com/<org>/dual-agent-review-orchestrator.git
-git push -u origin main
+git init
+git add -A
+git commit -m "init codex-main orchestrator"
+gh repo create dual-agent-review-orchestrator --private --source . --push
 ```
 
-Product repo에서 PR을 하나 만들면 `claude-auto.yml`이 자동 실행됩니다. Issue에 `agent-codex` 라벨을 붙이면 `codex-auto.yml`이 트리거됩니다.
+If you want a different repo name, pass `--orchestrator-name <name>` to `setup-pipeline`.
 
-### 5. Doctor로 확인
+## Step 4. Add GitHub Actions secrets
+
+### Orchestrator repo secrets
+
+Add these to the orchestrator repository:
+- `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY`
+- `ORCHESTRATOR_PAT`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+
+Optional but recommended:
+- `VERCEL_TOKEN`
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
+
+### Product repo secrets
+
+Add these to every connected product repository:
+- `ORCHESTRATOR_PAT`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+
+Optional for preview/deploy awareness:
+- `VERCEL_TOKEN`
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
+
+## Step 5. Deploy the orchestrator
 
 ```bash
-solo-cto-agent doctor
+cd dual-agent-review-orchestrator
+vercel link
+vercel --prod
 ```
 
-codex-main 모드에서는 ANTHROPIC_API_KEY + OPENAI_API_KEY 모두 필요합니다.
+Once the production deployment succeeds, the `setup-onboarding` workflow sends a Telegram message asking whether to start the first baseline review.
 
----
+## Step 6. Start the first review from Telegram
 
-## 실행 플로우 (자동)
+Expected Telegram message:
+- setup complete notice
+- connected repos list
+- `Start review` button
+- `Later` button
 
-```
-PR 생성/업데이트
-  → product repo: claude-auto.yml 실행 → Claude 리뷰
-  → product repo: cross-review-dispatch.yml → orchestrator에 dispatch
-  → orchestrator: cross-reviewer.js → 양쪽 비교
-  → orchestrator: rework-auto.yml → 필요시 자동 수정 PR 생성
-  → orchestrator: telegram-notify.yml → 결과 알림
-```
+If you press `Start review`:
+- the orchestrator dispatches a bootstrap run
+- open PRs are scanned
+- Claude/OpenAI review runs when keys are configured
+- a review summary is posted to GitHub and Telegram
+- decision buttons are attached for each PR
 
-Issue 기반:
-```
-Issue에 'agent-codex' 라벨
-  → product repo: codex-auto.yml → orchestrator에 dispatch
-  → orchestrator: codex-worker.js → 작업 실행
-  → 결과 → Issue comment + 알림
-```
+## What to expect after setup
 
----
+For each open PR, the baseline flow should produce:
+- a PR comment in GitHub
+- a Telegram summary with verdict, blockers, next action, preview link
+- decision buttons: `Approve`, `Revise`, `Hold`
 
-## 로컬 명령 (codex-main에서도 동일하게 사용)
+If no open PR exists yet, the bootstrap summary still reports repo health and tells you that no PR was found.
 
-```bash
-solo-cto-agent review                    # 로컬 Claude 리뷰
-solo-cto-agent dual-review               # 로컬 Claude + OpenAI 크로스 리뷰
-solo-cto-agent knowledge --project myapp # 세션 지식 추출
-solo-cto-agent notify deploy-ready ...   # 배포 알림
-solo-cto-agent doctor                    # 상태 확인
-```
+## Real validation target
 
----
+A valid `codex-main` install is not just a successful scaffold.
+It is considered working only when all of these are true:
+- `setup-pipeline` generates the orchestrator and workflow files
+- `setup-onboarding` sends the Telegram prompt after production deploy
+- `Start review` dispatches the bootstrap review job
+- at least one PR receives a review summary comment
+- Telegram receives the result and decision buttons
+
+## Current validation status
+
+The flow below has already been exercised on the live orchestrator owned by `seunghunbae-3svs`.
+
+Proven:
+- package install from a packed tarball
+- `setup-pipeline` scaffold generation
+- `setup-onboarding.yml` prompt run sending the Telegram setup message
+- onboarding approval callback dispatching the bootstrap review workflow
+- bootstrap review posting real PR comments on connected repos
+
+Evidence:
+- prompt run: [24452919850](https://github.com/seunghunbae-3svs/dual-agent-review-orchestrator/actions/runs/24452919850)
+- bootstrap smoke: [24453233629](https://github.com/seunghunbae-3svs/dual-agent-review-orchestrator/actions/runs/24453233629)
+- approval callback -> bootstrap: [24453476069](https://github.com/seunghunbae-3svs/dual-agent-review-orchestrator/actions/runs/24453476069)
+
+Known remaining gap:
+- the production-deployment trigger for the onboarding prompt is not yet proven because the current orchestrator Vercel preview deployments are failing
+- until that is fixed, the prompt path is validated via workflow dispatch, not via a successful production deploy hook
 
 ## Troubleshooting
 
-| 증상 | 원인 | 해결 |
-|---|---|---|
-| PR에 리뷰 안 붙음 | Secrets 미설정 | repo Settings > Secrets에 ANTHROPIC_API_KEY 추가 |
-| dispatch 실패 | ORCHESTRATOR_PAT 만료/미설정 | PAT 재발급 후 product repo Secret 업데이트 |
-| codex-auto 트리거 안 됨 | 라벨 이름 불일치 | Issue에 정확히 `agent-codex` 라벨 사용 |
-| rework PR 안 생김 | orchestrator 워크플로우 비활성 | orchestrator repo > Actions 탭에서 워크플로우 Enable |
+### Telegram prompt did not arrive
+Check:
+- `TELEGRAM_BOT_TOKEN` exists in the orchestrator repo
+- `TELEGRAM_CHAT_ID` exists in the orchestrator repo
+- the Vercel production deploy actually succeeded
+- the `setup-onboarding` workflow ran successfully
 
----
+### Bootstrap review ran but no AI review was generated
+Check:
+- `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY`
+- whether the connected repos actually have open PRs
 
-## cowork-main으로 전환하기
+### Product repos are not dispatching back to the orchestrator
+Check:
+- `ORCHESTRATOR_PAT` is set in each product repo
+- the repo name in `ops/config/projects.json` matches the real repo
+- the generated workflow files were committed and pushed
 
-```bash
-solo-cto-agent init --wizard
-# Mode 선택에서 [2] cowork-main 선택
-```
-
-CI/CD 워크플로우는 그대로 두어도 무방합니다 (트리거되지 않으면 비용 없음).
-cowork-main 가이드: `docs/cowork-main-install.md`
+### Preview links are missing
+Check:
+- PR body for preview URLs
+- deployment statuses on the product repo commit
+- optional Vercel-related secrets if you want richer deployment awareness

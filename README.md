@@ -43,6 +43,8 @@ These are not hypothetical docs-only flows. They were run from a packed CLI tarb
 | Install | `npm pack` -> `npm install -g solo-cto-agent-1.1.0.tgz` | Passed |
 | cowork-main first day | `doctor`, `review --staged`, `sync --org ...` | Passed with actionable key/setup guidance |
 | codex-main first setup | `setup-pipeline --org ... --tier cto --repos ...` | Passed; generated orchestrator + product workflows |
+| codex-main onboarding prompt | `setup-onboarding.yml` prompt run on live orchestrator | Passed; Telegram prompt sent |
+| codex-main approval -> review | live webhook `ONBOARD|RUN_REVIEW` callback -> workflow dispatch -> bootstrap review | Passed; review workflow ran and posted PR comments |
 | Safety check | `init --wizard` in a non-TTY shell | Passed; refused cleanly without partial initialization |
 
 Raw evidence and command transcripts:

@@ -21,6 +21,8 @@ This file records actual install and smoke-test runs for `solo-cto-agent`, using
 | cowork-main first review | `solo-cto-agent review --staged` without key | Passed with actionable refusal |
 | cowork-main sync | `solo-cto-agent sync --org seunghunbae-3svs` | Passed |
 | codex-main generation | `solo-cto-agent setup-pipeline --org seunghunbae-3svs --tier cto --repos app1,app2 --orchestrator-name dual-agent-review-orchestrator` | Passed |
+| codex-main onboarding prompt | Live `setup-onboarding.yml` workflow dispatch (`action=prompt`) | Passed |
+| codex-main approval -> baseline review | Simulated Telegram onboarding approval routed through live webhook -> GitHub Actions bootstrap run | Passed |
 
 ## Transcript summary
 
@@ -143,6 +145,50 @@ Interpretation:
 - codex-main packaging is usable by a real installer.
 - The generated workflow surface matches the documented full-auto model.
 
+### 7. codex-main onboarding prompt on live orchestrator
+
+Live workflow run:
+
+- Run: `24452919850`
+- URL: `https://github.com/seunghunbae-3svs/dual-agent-review-orchestrator/actions/runs/24452919850`
+
+Observed result summary:
+- `setup-onboarding.yml` completed successfully
+- job log contained `Onboarding prompt sent.`
+- the prompt path used real orchestrator secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
+
+Interpretation:
+- The Telegram setup-complete prompt is not just documented.
+- The actual orchestrator script sent the onboarding message successfully.
+
+### 8. codex-main approval -> bootstrap review on live orchestrator
+
+Live workflow runs:
+
+- Manual bootstrap smoke: `24453233629`
+- URL: `https://github.com/seunghunbae-3svs/dual-agent-review-orchestrator/actions/runs/24453233629`
+- Simulated Telegram approval callback -> dispatched bootstrap run: `24453476069`
+- URL: `https://github.com/seunghunbae-3svs/dual-agent-review-orchestrator/actions/runs/24453476069`
+
+Observed result summary:
+- fixed fenced-JSON parsing in `bootstrap-review.js`
+- workflow completed successfully
+- scanned connected repos from `ops/config/projects.json`
+- reviewed live open PRs on `tribo-store`
+- posted `Baseline Review (codex-main setup)` comments back to GitHub
+- updated orchestrator variable `SOLO_CTO_BOOTSTRAP_LAST_RUN_AT`
+
+Important detail:
+- the second run was triggered by calling the live webhook handler with an `ONBOARD|RUN_REVIEW` callback payload
+- GitHub workflow dispatch was real
+- PR comment posting was real
+- `answerCallbackQuery` was stubbed in the local test harness only because Telegram requires a real callback id that cannot be minted outside Telegram
+
+Interpretation:
+- The actual approval path is wired correctly.
+- `setup prompt -> user approval -> review workflow -> PR result` is now proven end-to-end at the GitHub/orchestrator layer.
+- The remaining unproven part is the production-deploy-triggered prompt, because current Vercel preview deployments for the orchestrator are failing and need a separate deploy fix.
+
 ## What this proves
 
 ### Proven today
@@ -154,13 +200,16 @@ Interpretation:
 | A user can run cowork-main locally after install | Proven, assuming Anthropic key is set |
 | A user can sync orchestrator data without manually exporting a GitHub token if `gh` is already logged in | Proven |
 | A user can generate codex-main automation scaffolding from the packaged CLI | Proven |
+| A live orchestrator can send the setup prompt to Telegram | Proven |
+| A Telegram onboarding approval can dispatch the baseline review workflow | Proven |
+| A bootstrap review can post real PR comments on connected repos | Proven |
 
 ### Not proven by this run
 
 | Claim | Status |
 |---|---|
 | Full codex-main end-to-end dispatch on live repos | Not covered here |
-| Telegram delivery from generated workflows | Not covered here |
+| Production-deploy trigger for the onboarding prompt | Not yet proven |
 | Vercel preview and rework loop on a live product repo | Not covered here |
 
 ## Same capabilities vs same operating level
@@ -183,3 +232,4 @@ Short version:
 - Some Windows console output still contains mojibake in decorative text.
 - Docs are stronger than before, but they still need cleanup to remove corrupted Korean sections and outdated examples.
 - The next validation step should be a live `codex-main` end-to-end run against one real product repo.
+- Current live blocker outside the review loop: the orchestrator's Vercel deployments are erroring, so the prompt had to be validated via workflow dispatch rather than a successful production deployment hook.

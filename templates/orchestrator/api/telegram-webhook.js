@@ -1,4 +1,6 @@
-﻿// BDA Orchestrator Telegram Bot Command Handler
+﻿// solo-cto-agent Orchestrator Telegram Bot Command Handler
+
+const { loadProjectConfig, resolveProjectKey, resolveProjectKeyByRepo } = require('../ops/lib/project-config');
 
 const GITHUB_TOKEN = process.env.ORCHESTRATOR_PAT || process.env.GITHUB_TOKEN;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -8,16 +10,10 @@ const ORCH_REPO = process.env.ORCH_REPO || '{{ORCHESTRATOR_REPO}}';
 const DECISION_LOG_PATH = 'ops/orchestrator/decision-log.json';
 const TELEGRAM_SETTINGS_PATH = 'ops/orchestrator/telegram-settings.json';
 
-const PROJECTS = {
-  {{PRODUCT_REPO_4}}: { repo: '{{PRODUCT_REPO_4}}', aliases: ['이벤트배지', '이벤트뱃지', '{{PRODUCT_REPO_4}}', 'badge', 'eb'] },
-  '3stripe': { repo: '{{PRODUCT_REPO_5}}', aliases: ['3stripe', '3스트라이프', '방송', 'broadcast', '3s'] },
-  golf: { repo: '{{PRODUCT_REPO_2}}', aliases: ['골프', '골프나우', 'golf', 'gn'] },
-  tribo: { repo: '{{PRODUCT_REPO_1}}', aliases: ['트리보', '트리보스토어', '셀러', 'tribo', 'ts'] },
-  palate: { repo: '{{PRODUCT_REPO_3}}', aliases: ['팔레트', '팔레트파일럿', '맛집', 'pp'] },
-  orchestrator: { repo: '{{ORCHESTRATOR_REPO}}', aliases: ['오케스트레이터', 'orchestrator', 'dao'] },
-};
+const PROJECT_CONFIG = loadProjectConfig({ owner: GITHUB_OWNER, orchestratorRepo: ORCH_REPO });
+const PROJECTS = PROJECT_CONFIG.projectMap;
+const PROJECT_ORDER = PROJECT_CONFIG.projectOrder;
 
-const PROJECT_ORDER = ['tribo', 'golf', 'palate', '{{PRODUCT_REPO_4}}', '3stripe', 'orchestrator'];
 const ISSUE_KEYWORDS = [
   '안됨', '안돼', '오류', '에러', '버그', '문제', '로딩', '깨짐', '불가',
   '요청', '추가', '개선', '수정', '필요', '누락', '반영', '없음', '느림',
@@ -203,24 +199,11 @@ async function getDecisionStatus(repo, prNumber) {
 
 // Resolve project key from alias
 function resolveProject(input) {
-  if (!input) return null;
-  const normalized = normalizeText(input);
-  for (const [key, proj] of Object.entries(PROJECTS)) {
-    if (normalizeText(key) === normalized) return key;
-    if (normalizeText(proj.repo) === normalized) return key;
-    for (const alias of proj.aliases) {
-      if (normalizeText(alias) === normalized) return key;
-    }
-  }
-  return null;
+  return resolveProjectKey(input, PROJECT_CONFIG);
 }
 
 function resolveProjectByRepo(repoName) {
-  if (!repoName) return null;
-  for (const [key, proj] of Object.entries(PROJECTS)) {
-    if (proj.repo === repoName) return key;
-  }
-  return null;
+  return resolveProjectKeyByRepo(repoName, PROJECT_CONFIG);
 }
 
 function parseProjectIndex(text) {
@@ -241,6 +224,13 @@ function parseDecisionCallback(data) {
   const action = parts[3];
   if (!repo || Number.isNaN(prNumber) || !action) return null;
   return { repo, prNumber, action };
+}
+
+function parseOnboardingCallback(data) {
+  if (!data) return null;
+  const parts = data.split('|');
+  if (parts.length < 2 || parts[0] !== 'ONBOARD') return null;
+  return { action: parts[1] };
 }
 
 function parseFeedbackTarget(text) {
@@ -354,6 +344,13 @@ async function triggerRework(repo, prNumber) {
   } catch {}
 }
 
+async function dispatchOrchestratorEvent(eventType, payload = {}) {
+  await gh(`/repos/${GITHUB_OWNER}/${ORCH_REPO}/dispatches`, 'POST', {
+    event_type: eventType,
+    client_payload: payload,
+  });
+}
+
 // GitHub API
 async function gh(endpoint, method = 'GET', body = null) {
   const res = await fetch(`https://api.github.com${endpoint}`, {
@@ -362,12 +359,15 @@ async function gh(endpoint, method = 'GET', body = null) {
       Authorization: `Bearer ${GITHUB_TOKEN}`,
       Accept: 'application/vnd.github.v3+json',
       'Content-Type': 'application/json',
-      'User-Agent': 'BDA-Orchestrator',
+      'User-Agent': 'solo-cto-agent-telegram',
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
   if (!res.ok) throw new Error(`GitHub ${res.status}: ${await res.text()}`);
-  return res.json();
+  if (res.status === 204) return null;
+  const text = await res.text();
+  if (!text) return null;
+  return JSON.parse(text);
 }
 
 function detectLocaleFromText(text) {
@@ -423,9 +423,12 @@ function formatSettings(settings) {
 }
 
 function buildWelcomeMessage(locale) {
+  const projectHint = PROJECT_CONFIG.products.length
+    ? PROJECT_CONFIG.products.map((project) => project.repo).join(', ')
+    : L(locale, 'no repos connected yet', '아직 연결된 프로젝트 없음');
   return L(locale,
-    `👋 Welcome to BDA\n\nQuick setup:\n/setup report=6h format=compact approval=buttons\n\nKey commands:\n/status  | /pending | /setup\n"project 1 status"\n"PR17 detail"\n"tribo approve"\n\nDecision keywords:\napprove / revise / hold / detail\n\nTip: approvals auto-merge when possible.\nHelp: /help`,
-    `👋 BDA 설치 완료\n\n빠른 설정:\n/setup report=6h format=compact approval=buttons\n\n주요 명령:\n/현황  | /pending | /setup\n"프로젝트 1 현황"\n"PR17 확인"\n"트리보 승인"\n\n결정 키워드:\n승인 / 수정 / 보류 / 확인\n\n팁: 승인 시 자동 머지됩니다.\n도움말: /help`
+    `👋 Welcome to solo-cto-agent\n\nConnected repos:\n${projectHint}\n\nQuick setup:\n/setup report=6h format=compact approval=buttons\n\nKey commands:\n/status | /pending | /setup\n"project 1 status"\n"PR17 detail"\n"repo-name approve"\n"start review"\n\nTip: approvals auto-merge when possible.\nHelp: /help`,
+    `👋 solo-cto-agent 연결 완료\n\n연결된 프로젝트:\n${projectHint}\n\n빠른 설정:\n/setup report=6h format=compact approval=buttons\n\n주요 명령:\n/현황 | /pending | /setup\n"프로젝트 1 현황"\n"PR17 확인"\n"repo-name 승인"\n"리뷰 시작"\n\n팁: 가능하면 승인 시 자동 머지됩니다.\n도움말: /help`
   );
 }
 
@@ -670,7 +673,7 @@ async function buildStatusSummary(locale, includeDate = false) {
     `\n🧩 오케스트레이터 이슈: ${issues.length} open`
   );
   msg += L(locale,
-    `\nCommand: "project 1 status" or /review tribo`,
+    `\nCommand: "project 1 status" or "repo-name review"`,
     `\n명령: “프로젝트 1 현황” 또는 /review tribo`
   );
   msg += L(locale,
@@ -1008,9 +1011,10 @@ async function cmdIssue(chatId, projectKey, title, locale) {
 }
 
 async function cmdHelp(chatId, locale) {
+  const repoExamples = PROJECT_CONFIG.products.map((project, index) => `${index + 1}) ${project.repo}`).join('\n');
   return reply(chatId, L(locale,
-    `🧭 <b>BDA Commands</b>\n\n"status" or /status\n"decision queue" or /pending\n"project 1 status"\n"tribo review"\n"tribo approve" (auto-merge)\n"tribo merge"\n"PR17 approve"\n"PR17 detail" or "PR17 blocker check"\n"{{PRODUCT_REPO_4}} PR1 rework"\n"{{PRODUCT_REPO_4}} PR1 compare" (report)\n"tribo seller page not loading" -> create issue\n\nSetup: /setup report=6h format=compact approval=buttons\n\nAliases: tribo, golf, palate, {{PRODUCT_REPO_4}}, 3stripe\n\nLanguage: /lang en | /lang ko`,
-    `🧭 <b>BDA 명령어</b>\n\n"현황" 또는 /현황\n"결정 대기" 또는 /pending\n"프로젝트 1 현황"\n"트리보 리뷰"\n"트리보 승인" (승인 시 자동 머지)\n"트리보 merge"\n"PR17 승인"\n"PR17 확인" 또는 "PR17 blocker 확인"\n"{{PRODUCT_REPO_4}} PR1 재작업"\n"{{PRODUCT_REPO_4}} PR1 비교" (비교 리포트)\n"트리보 셀러 페이지 로딩 안됨" → 이슈 자동 생성\n\n설정: /setup report=6h format=compact approval=buttons\n\n프로젝트 별칭: 트리보, 골프, 팔레트, 이벤트배지, 3스트라이프\n\n언어: /lang en | /lang ko`
+    `🧭 <b>solo-cto-agent commands</b>\n\n"status" or /status\n"decision queue" or /pending\n"project 1 status"\n"repo-name review"\n"repo-name approve" (auto-merge)\n"PR17 approve"\n"PR17 detail" or "PR17 blocker check"\n"repo-name PR17 rework"\n"repo-name PR17 compare"\n"start review"\n\nSetup: /setup report=6h format=compact approval=buttons\n\nConnected repos:\n${repoExamples}\n\nLanguage: /lang en | /lang ko`,
+    `🧭 <b>solo-cto-agent 명령어</b>\n\n"현황" 또는 /현황\n"결정 대기" 또는 /pending\n"프로젝트 1 현황"\n"repo-name 리뷰"\n"repo-name 승인" (가능 시 자동 머지)\n"PR17 승인"\n"PR17 확인" 또는 "PR17 blocker 확인"\n"repo-name PR17 재작업"\n"repo-name PR17 비교"\n"리뷰 시작"\n\n설정: /setup report=6h format=compact approval=buttons\n\n연결된 프로젝트:\n${repoExamples}\n\n언어: /lang en | /lang ko`
   ));
 }
 
@@ -1043,6 +1047,28 @@ async function cmdSetup(chatId, text, locale) {
   ));
 }
 
+async function cmdSetupOnboardingStart(chatId, locale) {
+  const eventType = PROJECT_CONFIG.onboarding?.bootstrapEvent || 'setup-bootstrap-run';
+  await dispatchOrchestratorEvent(eventType, {
+    chat_id: String(chatId),
+    locale,
+    source: 'telegram',
+  });
+  return reply(chatId, L(
+    locale,
+    `🚀 Baseline review started.\n\nProjects: ${PROJECT_CONFIG.products.map((project) => project.repo).join(', ')}\n\nYou'll receive a Telegram summary as soon as the first pass finishes.`,
+    `🚀 기준선 리뷰를 시작했습니다.\n\n대상 프로젝트: ${PROJECT_CONFIG.products.map((project) => project.repo).join(', ')}\n\n첫 점검이 끝나면 Telegram으로 결과를 보내드리겠습니다.`
+  ));
+}
+
+async function cmdSetupOnboardingLater(chatId, locale) {
+  return reply(chatId, L(
+    locale,
+    `⏸️ Review start postponed.\n\nWhen you're ready, send "start review" or use /pending after PRs exist.`,
+    `⏸️ 리뷰 시작을 보류했습니다.\n\n준비되면 "리뷰 시작"이라고 보내시거나, PR이 생긴 뒤 /pending 으로 확인해주세요.`
+  ));
+}
+
 async function cmdPending(chatId, locale) {
   const queue = await buildDecisionQueue(4);
   if (!queue.length) return reply(chatId, L(locale, '✅ No pending decisions', '✅ 현재 결정 대기 없음'));
@@ -1072,6 +1098,8 @@ function parseNaturalLanguage(text) {
   const blockerSignal = /blocker|블로커|조치/.test(lower);
 
   if (/브리핑|데일리/.test(lower)) return { cmd: 'briefing' };
+  if (/start review|run review|baseline review|리뷰 시작|기준선 리뷰|프로젝트 리뷰 시작/.test(lower)) return { cmd: 'setup-start' };
+  if (/later|나중에|보류$/.test(lower) && /review|리뷰/.test(lower)) return { cmd: 'setup-later' };
   if (/결정\s*대기|결정큐|결정\s*필요|pending|decision/.test(lower)) return { cmd: 'pending' };
   if (/언어|language|lang/.test(lower) && /한국|korean|ko/.test(lower)) return { cmd: 'lang', locale: 'ko' };
   if (/언어|language|lang/.test(lower) && /영어|english|en/.test(lower)) return { cmd: 'lang', locale: 'en' };
@@ -1099,7 +1127,7 @@ function parseNaturalLanguage(text) {
 // Main handler
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
-    return res.status(200).json({ ok: true, message: 'BDA webhook active' });
+    return res.status(200).json({ ok: true, message: 'solo-cto-agent webhook active' });
   }
 
   try {
@@ -1112,6 +1140,20 @@ module.exports = async (req, res) => {
         return res.status(200).json({ ok: true });
       }
       const locale = await resolveLocale(chatId, callback.message?.text || '');
+
+      const setupAction = parseOnboardingCallback(data);
+      if (setupAction) {
+        if (setupAction.action === 'RUN_REVIEW') {
+          await cmdSetupOnboardingStart(chatId, locale);
+          await markDecisionMessageDone(chatId, callback.message?.message_id, callback.message?.text || '', 'RUN_REVIEW');
+          await answerCallbackQuery(callback.id, L(locale, 'Baseline review started', '기준선 리뷰 시작'));
+          return res.status(200).json({ ok: true });
+        }
+        await cmdSetupOnboardingLater(chatId, locale);
+        await markDecisionMessageDone(chatId, callback.message?.message_id, callback.message?.text || '', 'LATER');
+        await answerCallbackQuery(callback.id, L(locale, 'Saved for later', '나중에 시작하도록 저장'));
+        return res.status(200).json({ ok: true });
+      }
 
       const parsed = parseDecisionCallback(data);
       if (!parsed) {
@@ -1253,7 +1295,7 @@ module.exports = async (req, res) => {
         case '/블로커':
         case '/조치':
           if (!projectKey || !parts[2]) {
-            await reply(chatId, L(locale, 'Example: /blocker {{PRODUCT_REPO_4}} 1', '예: /blocker {{PRODUCT_REPO_4}} 1'));
+            await reply(chatId, L(locale, 'Example: /blocker repo-name 1', '예: /blocker {{PRODUCT_REPO_4}} 1'));
           } else {
             await cmdBlocker(chatId, projectKey, parseInt(parts[2], 10), locale);
           }
@@ -1262,7 +1304,7 @@ module.exports = async (req, res) => {
         case '/재작업':
         case '/리워크':
           if (!projectKey || !parts[2]) {
-            await reply(chatId, L(locale, 'Example: /rework {{PRODUCT_REPO_4}} 1 (reason)', '예: /rework {{PRODUCT_REPO_4}} 1 (사유)'));
+            await reply(chatId, L(locale, 'Example: /rework repo-name 1 (reason)', '예: /rework {{PRODUCT_REPO_4}} 1 (사유)'));
           } else {
             await cmdRework(chatId, projectKey, parseInt(parts[2], 10), parts.slice(3).join(' '), locale);
           }
@@ -1271,7 +1313,7 @@ module.exports = async (req, res) => {
         case '/비교':
         case '/report':
           if (!projectKey || !parts[2]) {
-            await reply(chatId, L(locale, 'Example: /compare {{PRODUCT_REPO_4}} 1', '예: /compare {{PRODUCT_REPO_4}} 1'));
+            await reply(chatId, L(locale, 'Example: /compare repo-name 1', '예: /compare {{PRODUCT_REPO_4}} 1'));
           } else {
             await cmdCompare(chatId, projectKey, parseInt(parts[2], 10), locale);
           }
@@ -1299,6 +1341,8 @@ module.exports = async (req, res) => {
       switch (parsed.cmd) {
         case 'status': await cmdStatus(chatId, locale); break;
         case 'briefing': await cmdBriefing(chatId, locale); break;
+        case 'setup-start': await cmdSetupOnboardingStart(chatId, locale); break;
+        case 'setup-later': await cmdSetupOnboardingLater(chatId, locale); break;
         case 'pending': await cmdPending(chatId, locale); break;
         case 'project-status': await cmdProjectStatus(chatId, parsed.project, locale); break;
         case 'review': await cmdReview(chatId, parsed.project, locale); break;
@@ -1317,7 +1361,7 @@ module.exports = async (req, res) => {
       }
     } else {
       await reply(chatId, L(locale,
-        `🧩 I didn't understand that.\n\nTry "status", "project 1 status", or "tribo approve".\nUse /help for all commands.`,
+        `🧩 I didn't understand that.\n\nTry "status", "project 1 status", or "repo-name approve".\nUse /help for all commands.`,
         `🧩 인식하지 못한 메시지입니다.\n\n"현황", "프로젝트 1 현황", "트리보 승인"처럼 보내주세요.\n/help 로 전체 명령어 확인`
       ));
     }
@@ -1328,3 +1372,4 @@ module.exports = async (req, res) => {
 
   return res.status(200).json({ ok: true });
 };
+

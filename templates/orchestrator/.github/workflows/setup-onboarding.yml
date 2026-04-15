@@ -1,0 +1,77 @@
+﻿name: Setup Onboarding
+
+on:
+  deployment_status:
+  repository_dispatch:
+    types: [setup-bootstrap-run]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: prompt or bootstrap
+        required: true
+        default: prompt
+      chat_id:
+        description: Telegram chat id for manual bootstrap runs
+        required: false
+      locale:
+        description: Locale for the bootstrap summary
+        required: false
+        default: en
+      force_prompt:
+        description: Send onboarding prompt even if it was already sent
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  prompt:
+    if: >
+      (
+        github.event_name == 'deployment_status' &&
+        github.event.deployment_status.state == 'success' &&
+        github.event.deployment_status.environment == 'Production' &&
+        github.event.deployment_status.environment_url != ''
+      ) || (
+        github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'prompt'
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Send setup onboarding prompt
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          ORCH_REPO: ${{ github.event.repository.name }}
+          FORCE_PROMPT: ${{ github.event.inputs.force_prompt || 'false' }}
+        run: node ops/scripts/setup-onboarding.js
+
+  bootstrap:
+    if: >
+      github.event_name == 'repository_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'bootstrap')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run baseline review
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BOOTSTRAP_CHAT_ID: ${{ github.event.inputs.chat_id || github.event.client_payload.chat_id || secrets.TELEGRAM_CHAT_ID }}
+          BOOTSTRAP_LOCALE: ${{ github.event.inputs.locale || github.event.client_payload.locale || 'en' }}
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          ORCH_REPO: ${{ github.event.repository.name }}
+        run: node ops/scripts/bootstrap-review.js
