@@ -20,6 +20,8 @@ _solo-cto-agent() {
     'doctor:Complete system health check'
     'notify:Send event-tagged notification'
     'telegram:Telegram notification setup'
+    'deep-review:Managed Agent deep-review with sandboxed execution (CTO tier)'
+    'routine:Claude Code Routines — cloud-based scheduled reviews (CTO tier)'
   )
 
   _arguments -C \
@@ -90,6 +92,24 @@ _solo-cto-agent() {
         telegram)
           _arguments '1:action:(wizard)' \
             '--lang[Language]:lang:(en ko)'
+          ;;
+        deep-review)
+          _arguments \
+            '--staged[Review staged changes]' \
+            '--branch[Review branch diff]' \
+            '--file[Review specific file]:file:_files' \
+            '--target[Base branch]:branch:' \
+            '--dry-run[Preview without API call]' \
+            '--json[Output as JSON]' \
+            '--force[Bypass tier gate]'
+          ;;
+        routine)
+          _arguments '1:action:(fire schedules)' \
+            '--trigger[Routine trigger ID]:trigger:' \
+            '--text[Context text]:text:' \
+            '--dry-run[Preview without sending]' \
+            '--json[Output as JSON]' \
+            '--force[Bypass tier gate]'
           ;;
         lint)
           _arguments '1:path:_files'
