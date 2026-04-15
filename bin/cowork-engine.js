@@ -372,6 +372,10 @@ function loadPersonalization() {
   }
 }
 
+/**
+ * Persist personalization data to disk.
+ * @param {object} p - Personalization object (hotspots, stylePrefs, lastUpdated)
+ */
 function savePersonalization(p) {
   ensureDir(CONFIG.skillDir);
   p.lastUpdated = new Date().toISOString();
@@ -715,6 +719,13 @@ function detectDefaultBranch(opts = {}) {
   return "main";
 }
 
+/**
+ * Get a git diff as a string.
+ * @param {"staged"|"branch"|"file"} source - Diff source type
+ * @param {string|null} target - Branch name, file path, or null (for staged)
+ * @param {{cwd?: string}} opts - Working directory override
+ * @returns {string} Unified diff output
+ */
 function getDiff(source, target, opts = {}) {
   const cwd = opts.cwd || process.cwd();
   try {
@@ -751,6 +762,10 @@ function getDiff(source, target, opts = {}) {
   }
 }
 
+/**
+ * Read SKILL.md from the skill directory. Returns empty string on failure.
+ * @returns {string} Skill file content
+ */
 function readSkillContext() {
   const skillPath = path.join(CONFIG.skillDir, "SKILL.md");
   try {
@@ -760,6 +775,10 @@ function readSkillContext() {
   }
 }
 
+/**
+ * Load the failure catalog (patterns + schema). Returns { patterns, schema } or empty.
+ * @returns {{patterns?: Array<{pattern: string, fix: string}>, schema?: object}}
+ */
 function readFailureCatalog() {
   const catPath = path.join(CONFIG.skillDir, "failure-catalog.json");
   try {
@@ -782,6 +801,13 @@ function getRecentCommits(hours = 24) {
   }
 }
 
+/**
+ * Estimate API cost in USD based on token counts and model pricing.
+ * @param {number} inputTokens - Number of input tokens
+ * @param {number} outputTokens - Number of output tokens
+ * @param {string} model - Model identifier (e.g. "claude-sonnet-4-20250514")
+ * @returns {string} Estimated cost as a decimal string (e.g. "0.0123")
+ */
 function estimateCost(inputTokens, outputTokens, model) {
   // Rough estimates per 1K tokens (as of 2026-04). Tier models added for PR-G2.
   const rates = {
@@ -1928,6 +1954,18 @@ function formatTerminalOutput(review, sourceInfo, costInfo) {
 // MAIN FUNCTIONS
 // ============================================================================
 
+/**
+ * Run a local code review via the Anthropic API.
+ * Supports staged, branch, or file diffs. Large diffs are automatically
+ * split into chunks and reviewed independently (multi-chunk review).
+ * @param {object} options
+ * @param {"staged"|"branch"|"file"} [options.diffSource="staged"] - Diff source type
+ * @param {string} [options.target] - Base branch or file path
+ * @param {boolean} [options.dryRun=false] - Preview without API call
+ * @param {"json"|"markdown"|"terminal"} [options.outputFormat="terminal"] - Output format
+ * @param {string} [options.cwd] - Working directory
+ * @returns {Promise<object|null>} Review data object, or null for dry-run/empty diff
+ */
 async function localReview(options = {}) {
   const callerSpecifiedModel = Object.prototype.hasOwnProperty.call(options, "model");
   const {
@@ -2401,6 +2439,15 @@ ${diff}
   };
 }
 
+/**
+ * Extract decisions and knowledge from a session or file via Claude API.
+ * @param {object} options
+ * @param {boolean} [options.isSession=false] - Capture from current session
+ * @param {string} [options.filePath] - Capture from specific file
+ * @param {boolean} [options.manual=false] - Manual text input mode
+ * @param {string} [options.project] - Project tag for categorization
+ * @returns {Promise<object>} Captured knowledge data
+ */
 async function knowledgeCapture(options = {}) {
   const { source = "session", input = null, projectTag = null } = options;
 
@@ -2572,6 +2619,16 @@ ${content}`;
   }
 }
 
+/**
+ * Run a dual-agent cross-review (Claude + OpenAI). Both APIs review the
+ * same diff independently, results are compared for agreement/disagreement.
+ * @param {object} options
+ * @param {"staged"|"branch"} [options.diffSource="staged"] - Diff source type
+ * @param {string} [options.target] - Base branch for branch diff
+ * @param {"json"|"terminal"} [options.outputFormat="terminal"] - Output format
+ * @param {string} [options.cwd] - Working directory
+ * @returns {Promise<object>} Combined dual-review data
+ */
 async function dualReview(options = {}) {
   const callerSpecifiedClaudeModel = Object.prototype.hasOwnProperty.call(options, "claudeModel");
   const {
@@ -2897,6 +2954,13 @@ ${diff}
   return dualReviewData;
 }
 
+/**
+ * Save current session context to a timestamped JSON file.
+ * @param {object} options
+ * @param {string} [options.project] - Project tag
+ * @param {string} [options.cwd] - Working directory
+ * @returns {string} Path to the saved session file
+ */
 function sessionSave(options = {}) {
   const {
     projectTag = null,
@@ -2932,6 +2996,13 @@ function sessionSave(options = {}) {
   return sessionFile;
 }
 
+/**
+ * Restore the most recent (or specified) session context.
+ * @param {object} options
+ * @param {string} [options.sessionFile] - Specific session file to restore
+ * @param {string} [options.project] - Filter by project tag
+ * @returns {object|null} Restored session data, or null if not found
+ */
 function sessionRestore(options = {}) {
   const { sessionFile = null } = options;
 
@@ -2958,6 +3029,13 @@ function sessionRestore(options = {}) {
   }
 }
 
+/**
+ * List saved sessions, optionally filtered by project tag.
+ * @param {object} options
+ * @param {number} [options.limit=10] - Max sessions to return
+ * @param {string} [options.project] - Filter by project tag
+ * @returns {Array<{file: string, timestamp: string, project?: string}>}
+ */
 function sessionList(options = {}) {
   const { limit = 10 } = options;
 
@@ -3014,6 +3092,11 @@ function sessionList(options = {}) {
   return sessions;
 }
 
+/**
+ * Detect the current operating mode by checking environment and file state.
+ * Returns mode info: cowork-main vs codex-main, available features, etc.
+ * @returns {{mode: string, hasGitHub: boolean, hasOrchestrator: boolean, features: string[]}}
+ */
 function detectMode() {
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
