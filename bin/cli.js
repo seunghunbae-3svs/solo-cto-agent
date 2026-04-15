@@ -1694,6 +1694,43 @@ function upgradeCommand(org, repos, orchName) {
     }
   }
 
+  // Step 5: Refresh managed-repos manifest
+  console.log("[5/5] Refreshing template audit manifest...");
+  const orchManifestEntry = makeManagedRepoEntry({
+    packageRoot: ROOT,
+    tiersData,
+    type: "orchestrator",
+    tier: "cto",
+    mode: "codex-main",
+    owner: org,
+    repoName: orchestratorRepo,
+    repoPath: orchDir,
+    orchestratorName: orchestratorRepo,
+    replacements,
+  });
+  upsertOrchestratorManagedRepo(orchDir, orchManifestEntry);
+  registerManagedRepoForLocal(orchManifestEntry);
+
+  for (const repo of productRepoList) {
+    const repoDir = path.resolve(repo);
+    if (!fs.existsSync(repoDir)) continue;
+    const productEntry = makeManagedRepoEntry({
+      packageRoot: ROOT,
+      tiersData,
+      type: "product-repo",
+      tier: "cto",
+      mode: "codex-main",
+      owner: org,
+      repoName: path.basename(repo),
+      repoPath: repoDir,
+      orchestratorName: orchestratorRepo,
+      replacements,
+    });
+    upsertOrchestratorManagedRepo(orchDir, productEntry);
+    registerManagedRepoForLocal(productEntry);
+  }
+  console.log("   ✅ Manifest refreshed for orchestrator" + (productRepoList.length ? ` + ${productRepoList.length} product repos` : ""));
+
   console.log("");
   console.log("═══ UPGRADE COMPLETE ═══");
   console.log("");
