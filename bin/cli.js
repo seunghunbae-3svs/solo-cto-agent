@@ -1144,12 +1144,59 @@ function doctorCommand(opts = {}) {
     console.log("      → Get one at: https://platform.openai.com/api-keys");
   }
 
+  // Detect codex-main mode from SKILL.md for stricter key requirements.
+  let isCodexMain = false;
+  if (skillOk) {
+    try {
+      const skillContent = fs.readFileSync(skillPath, "utf8");
+      const mm = skillContent.match(/mode:\s*([^\n]+)/);
+      isCodexMain = mm && mm[1].trim() === "codex-main";
+    } catch (_) { /* already handled above */ }
+  }
+
+  if (isCodexMain && !hasOpenAI) {
+    console.log("   ❌ OPENAI_API_KEY not set (required for codex-main dual-review)");
+    console.log("      → Get one at: https://platform.openai.com/api-keys");
+    console.log("      → Then run:   export OPENAI_API_KEY=\"sk-...\"");
+    issues.push({ level: "error", msg: "OPENAI_API_KEY required in codex-main mode" });
+    criticalCount++;
+  }
+
   const detectedMode = hasAnthropic && hasOpenAI ? "dual" : hasAnthropic ? "solo" : "none";
   console.log(`   ℹ️  Detected mode: ${detectedMode}`);
 
   if (detectedMode === "none") {
     issues.push({ level: "error", msg: "No API keys found — set ANTHROPIC_API_KEY to use reviews" });
     criticalCount++;
+  }
+
+  // ─── Codex-Main Pipeline Check ──────────────────
+  if (isCodexMain) {
+    console.log("");
+    console.log("🚀 Codex-Main Pipeline");
+
+    const hasOrchPAT = !!process.env.ORCHESTRATOR_PAT;
+    if (hasOrchPAT) {
+      console.log("   ✅ ORCHESTRATOR_PAT is set");
+    } else {
+      console.log("   ⚠️  ORCHESTRATOR_PAT not set (needed for cross-repo dispatch)");
+      console.log("      → GitHub > Settings > Developer settings > Personal access tokens");
+      console.log("      → Generate token (classic) with 'repo' scope");
+      issues.push({ level: "warn", msg: "ORCHESTRATOR_PAT not set — cross-repo dispatch won't work" });
+    }
+
+    // Check if orchestrator directory exists nearby.
+    const orchDir = path.join(process.cwd(), "..", "dual-agent-orchestrator");
+    const orchDirCwd = path.join(process.cwd(), "dual-agent-orchestrator");
+    const orchExists = fs.existsSync(orchDir) || fs.existsSync(orchDirCwd);
+    if (orchExists) {
+      console.log("   ✅ dual-agent-orchestrator directory found");
+    } else {
+      console.log("   ⚠️  dual-agent-orchestrator not found nearby");
+      console.log("      → Run: solo-cto-agent setup-pipeline --org <your-org> --repos <repo1,repo2>");
+      console.log("      → Guide: docs/codex-main-install.md");
+      issues.push({ level: "warn", msg: "Orchestrator repo not found — run setup-pipeline" });
+    }
   }
 
   // ─── Lint Check ─────────────────────────────────
