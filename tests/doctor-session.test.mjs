@@ -63,6 +63,37 @@ user-invocable: true
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("doctor");
   });
+
+  it("supports doctor --quick with actionable links", () => {
+    const r = run(["doctor", "--quick"], { HOME: tmpDir, USERPROFILE: tmpDir });
+    expect([0, 1]).toContain(r.status);
+    expect(r.stdout).toContain("doctor --quick");
+    expect(r.stdout).toContain("https://console.anthropic.com/settings/keys");
+  });
+
+  it("shows codex-main setup links when mode is codex-main", () => {
+    run(["init"], { HOME: tmpDir, USERPROFILE: tmpDir });
+    const skillPath = path.join(tmpDir, ".claude", "skills", "solo-cto-agent", "SKILL.md");
+    fs.writeFileSync(
+      skillPath,
+      `---
+name: solo-cto-agent
+description: "test"
+mode: codex-main
+user-invocable: true
+---
+
+# Project Stack
+| Item | Value |
+|---|---|
+| OS | Windows |
+`
+    );
+    const r = run(["doctor", "--quick"], { HOME: tmpDir, USERPROFILE: tmpDir });
+    expect(r.stdout).toContain("GitHub CLI");
+    expect(r.stdout).toContain("GitHub PAT");
+    expect(r.stdout).toContain("docs/codex-main-install.md");
+  });
 });
 
 describe("cli session", () => {

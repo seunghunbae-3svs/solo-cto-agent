@@ -274,9 +274,9 @@ Style: {{YOUR_STYLE}}
   console.log(`   skills installed: ${installed.length ? installed.join(", ") : "none (already exist)"}`);
   if (skipped.length) console.log(`   skills skipped: ${skipped.join(", ")}`);
   console.log("");
-  console.log("Running doctor to check remaining setup...");
+  console.log("Running doctor --quick to check remaining setup...");
   console.log("");
-  doctorCommand({ exitOnError: false });
+  doctorCommand({ exitOnError: false, quick: true });
 }
 
 // ─── setup-pipeline: Full Pipeline Deploy ───────────────────
@@ -1050,6 +1050,7 @@ function lintCommand(targetPath) {
 // ─── doctor: System Health Check ─────────────────────────────
 
 function doctorCommand(opts = {}) {
+  const isQuick = opts.quick === true;
   const targetDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
   const skillPath = path.join(targetDir, "SKILL.md");
   const catalogPath = path.join(targetDir, "failure-catalog.json");
@@ -1057,51 +1058,54 @@ function doctorCommand(opts = {}) {
   const coworkEnginePath = path.join(ROOT, "bin", "cowork-engine.js");
 
   const issues = [];
-  let criticalCount = 0;
+  const isWindows = process.platform === "win32";
+  const anthropicSet = isWindows
+    ? '$env:ANTHROPIC_API_KEY="sk-ant-..."'
+    : 'export ANTHROPIC_API_KEY="sk-ant-..."';
+  const openAISet = isWindows
+    ? '$env:OPENAI_API_KEY="sk-..."'
+    : 'export OPENAI_API_KEY="sk-..."';
+  const patSet = isWindows
+    ? '$env:ORCHESTRATOR_PAT="github_pat_..."'
+    : 'export ORCHESTRATOR_PAT="github_pat_..."';
 
   console.log("");
-  console.log("solo-cto-agent doctor — health check");
-  console.log("─".repeat(40));
+  console.log(`solo-cto-agent doctor${isQuick ? " --quick" : ""} - health check`);
+  console.log("-".repeat(40));
   console.log("");
 
-  // ─── Skills Check ───────────────────────────────
-  console.log("📦 Skills");
+  console.log("Skills");
   const skillOk = fs.existsSync(skillPath);
+  let isCodexMain = false;
   if (skillOk) {
     try {
       const content = fs.readFileSync(skillPath, "utf8");
       const wizardConfigured = content.includes("| Item | Value |") || !content.includes("{{YOUR_");
-      const hasMode = content.includes("mode:");
+      const modeMatch = content.match(/mode:\s*([^\n]+)/);
+      const mode = modeMatch ? modeMatch[1].trim() : null;
+      isCodexMain = mode === "codex-main";
+
       if (wizardConfigured) {
-        console.log("   ✅ SKILL.md installed & configured");
-        if (hasMode) {
-          const modeMatch = content.match(/mode:\s*([^\n]+)/);
-          const mode = modeMatch ? modeMatch[1].trim() : "unknown";
-          console.log(`   ✅ Mode detected: ${mode}`);
-        } else {
-          console.log("   ⚠️  No mode field in SKILL.md");
-          issues.push({ level: "warn", msg: "No mode: field in SKILL.md (cowork-main or codex-main)" });
-        }
+        console.log("   OK SKILL.md installed & configured");
+        console.log(`   OK Mode detected: ${mode || "missing"}`);
+        if (!mode) issues.push({ level: "warn", msg: "No mode: field in SKILL.md (cowork-main or codex-main)" });
       } else {
-        console.log("   ⚠️  SKILL.md exists but not configured");
+        console.log("   WARN SKILL.md exists but is not configured");
         issues.push({ level: "warn", msg: "SKILL.md not configured (run: init --wizard)" });
       }
     } catch (err) {
-      console.log(`   ❌ Error reading SKILL.md: ${err.message}`);
+      console.log(`   ERROR Error reading SKILL.md: ${err.message}`);
       issues.push({ level: "error", msg: `Error reading SKILL.md: ${err.message}` });
-      criticalCount++;
     }
   } else {
-    console.log("   ❌ SKILL.md not found");
+    console.log("   ERROR SKILL.md not found");
     issues.push({ level: "error", msg: "SKILL.md not found (run: init)" });
-    criticalCount++;
   }
 
-  // ─── Cowork Engine Check ───────────────────────
   console.log("");
-  console.log("⚙️  Engine");
+  console.log("Engine");
   if (fs.existsSync(coworkEnginePath)) {
-    console.log("   ✅ cowork-engine.js found");
+    console.log("   OK cowork-engine.js found");
     try {
       const engine = require(coworkEnginePath);
       const hasLocalReview = typeof engine.localReview === "function";
@@ -1113,16 +1117,16 @@ function doctorCommand(opts = {}) {
       const sessionList = typeof engine.sessionList === "function";
 
       if (hasLocalReview && hasKnowledge && hasDualReview) {
-        console.log("   ✅ Core functions available (localReview, knowledgeCapture, dualReview)");
+        console.log("   OK Core functions available");
       } else {
-        console.log("   ⚠️  Some core functions missing");
+        console.log("   WARN Some core functions are missing");
         issues.push({ level: "warn", msg: "Engine missing some core functions" });
       }
 
       if (sessionSave && sessionRestore && sessionList) {
-        console.log("   ✅ Session functions available (save, restore, list)");
+        console.log("   OK Session functions available");
       } else {
-        console.log("   ⚠️  Session functions not available");
+        console.log("   WARN Session functions missing");
         issues.push({ level: "warn", msg: "Engine missing session functions" });
       }
 
@@ -1130,220 +1134,194 @@ function doctorCommand(opts = {}) {
       if (hasDetectDefaultBranch && isGitRepo) {
         try {
           const base = engine.detectDefaultBranch({ cwd: process.cwd() });
-          console.log(`   ℹ️  Default branch: ${base}`);
+          console.log(`   INFO Default branch: ${base}`);
         } catch (err) {
-          console.log(`   ⚠️  Default branch detection failed: ${err.message}`);
+          console.log(`   WARN Default branch detection failed: ${err.message}`);
           issues.push({ level: "warn", msg: "Default branch detection failed" });
         }
       } else if (!isGitRepo) {
-        console.log("   ℹ️  Default branch: N/A (not a git repo)");
+        console.log("   INFO Default branch: N/A (not a git repo)");
       }
     } catch (err) {
-      console.log(`   ⚠️  Engine load failed: ${err.message}`);
+      console.log(`   WARN Engine load failed: ${err.message}`);
       issues.push({ level: "warn", msg: `Engine load failed: ${err.message}` });
     }
   } else {
-    console.log("   ❌ cowork-engine.js not found");
+    console.log("   ERROR cowork-engine.js not found");
     issues.push({ level: "error", msg: "cowork-engine.js not found" });
-    criticalCount++;
   }
 
-  // ─── API Keys Check ─────────────────────────────
   console.log("");
-  console.log("🔑 API Keys");
+  console.log("API Keys");
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
 
   if (hasAnthropic) {
-    console.log("   ✅ ANTHROPIC_API_KEY is set");
+    console.log("   OK ANTHROPIC_API_KEY is set");
   } else {
-    console.log("   ❌ ANTHROPIC_API_KEY not set (required)");
-    console.log("      → Get your key: https://console.anthropic.com/settings/keys");
-    console.log("      → Then run:     export ANTHROPIC_API_KEY=\"sk-ant-...\"");
-    issues.push({ level: "error", msg: "ANTHROPIC_API_KEY not set — reviews will not work" });
-    criticalCount++;
+    console.log("   ERROR ANTHROPIC_API_KEY not set (required)");
+    console.log("      Get your key: https://console.anthropic.com/settings/keys");
+    console.log(`      Then run:     ${anthropicSet}`);
+    issues.push({ level: "error", msg: "ANTHROPIC_API_KEY not set - reviews will not work" });
   }
 
   if (hasOpenAI) {
-    console.log("   ✅ OPENAI_API_KEY is set");
-  } else {
-    console.log("   ℹ️  OPENAI_API_KEY not set (optional — enables dual-review)");
-    console.log("      → Get one at: https://platform.openai.com/api-keys");
-  }
-
-  // Detect codex-main mode from SKILL.md for stricter key requirements.
-  let isCodexMain = false;
-  if (skillOk) {
-    try {
-      const skillContent = fs.readFileSync(skillPath, "utf8");
-      const mm = skillContent.match(/mode:\s*([^\n]+)/);
-      isCodexMain = mm && mm[1].trim() === "codex-main";
-    } catch (_) { /* already handled above */ }
-  }
-
-  if (isCodexMain && !hasOpenAI) {
-    console.log("   ❌ OPENAI_API_KEY not set (required for codex-main dual-review)");
-    console.log("      → Get one at: https://platform.openai.com/api-keys");
-    console.log("      → Then run:   export OPENAI_API_KEY=\"sk-...\"");
+    console.log("   OK OPENAI_API_KEY is set");
+  } else if (isCodexMain) {
+    console.log("   ERROR OPENAI_API_KEY not set (required for codex-main)");
+    console.log("      Get your key: https://platform.openai.com/api-keys");
+    console.log(`      Then run:     ${openAISet}`);
     issues.push({ level: "error", msg: "OPENAI_API_KEY required in codex-main mode" });
-    criticalCount++;
+  } else {
+    console.log("   INFO OPENAI_API_KEY not set (optional - enables dual-review)");
+    console.log("      Get one at:   https://platform.openai.com/api-keys");
+    console.log(`      Then run:     ${openAISet}`);
   }
 
   const detectedMode = hasAnthropic && hasOpenAI ? "dual" : hasAnthropic ? "solo" : "none";
-  console.log(`   ℹ️  Detected mode: ${detectedMode}`);
-
+  console.log(`   INFO Detected key state: ${detectedMode}`);
   if (detectedMode === "none") {
-    issues.push({ level: "error", msg: "No API keys found — set ANTHROPIC_API_KEY to use reviews" });
-    criticalCount++;
+    issues.push({ level: "error", msg: "No API keys found - set ANTHROPIC_API_KEY to use reviews" });
   }
 
-  // ─── Codex-Main Pipeline Check ──────────────────
   if (isCodexMain) {
     console.log("");
-    console.log("🚀 Codex-Main Pipeline");
-
+    console.log("Codex-main pipeline");
     const hasOrchPAT = !!process.env.ORCHESTRATOR_PAT;
     if (hasOrchPAT) {
-      console.log("   ✅ ORCHESTRATOR_PAT is set");
+      console.log("   OK ORCHESTRATOR_PAT is set");
     } else {
-      console.log("   ⚠️  ORCHESTRATOR_PAT not set (needed for cross-repo dispatch)");
-      console.log("      → GitHub > Settings > Developer settings > Personal access tokens");
-      console.log("      → Generate token (classic) with 'repo' scope");
-      issues.push({ level: "warn", msg: "ORCHESTRATOR_PAT not set — cross-repo dispatch won't work" });
+      console.log("   WARN ORCHESTRATOR_PAT not set (needed for cross-repo dispatch)");
+      console.log("      Get one at:   https://github.com/settings/personal-access-tokens/new");
+      console.log("      Scope:        repo + workflow");
+      console.log(`      Then run:     ${patSet}`);
+      issues.push({ level: "warn", msg: "ORCHESTRATOR_PAT not set - cross-repo dispatch will not work" });
     }
 
-    // Check if orchestrator directory exists nearby.
     const orchDir = path.join(process.cwd(), "..", "dual-agent-orchestrator");
     const orchDirCwd = path.join(process.cwd(), "dual-agent-orchestrator");
     const orchExists = fs.existsSync(orchDir) || fs.existsSync(orchDirCwd);
     if (orchExists) {
-      console.log("   ✅ dual-agent-orchestrator directory found");
+      console.log("   OK dual-agent-orchestrator directory found nearby");
     } else {
-      console.log("   ⚠️  dual-agent-orchestrator not found nearby");
-      console.log("      → Run: solo-cto-agent setup-pipeline --org <your-org> --repos <repo1,repo2>");
-      console.log("      → Guide: docs/codex-main-install.md");
-      issues.push({ level: "warn", msg: "Orchestrator repo not found — run setup-pipeline" });
+      console.log("   WARN dual-agent-orchestrator not found nearby");
+      console.log("      Run:   solo-cto-agent setup-pipeline --org <your-org> --repos <repo1,repo2>");
+      console.log("      Guide: docs/codex-main-install.md");
+      issues.push({ level: "warn", msg: "Orchestrator repo not found - run setup-pipeline" });
     }
   }
 
-  // ─── Lint Check ─────────────────────────────────
-  console.log("");
-  console.log("📋 Lint");
-  const skillsDir = path.join(ROOT, "skills");
-  if (fs.existsSync(skillsDir)) {
-    const lintDir = skillsDir;
-    const MAX_LINES = 250;
-    const entries = fs.readdirSync(lintDir, { withFileTypes: true });
-    const skillDirs = entries.filter(e => e.isDirectory()).length;
-    let lintIssues = 0;
-
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const skillPath = path.join(lintDir, entry.name, "SKILL.md");
-      if (!fs.existsSync(skillPath)) {
-        lintIssues++;
-        continue;
+  if (!isQuick) {
+    console.log("");
+    console.log("Lint");
+    const skillsDir = path.join(ROOT, "skills");
+    if (fs.existsSync(skillsDir)) {
+      const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+      const skillDirs = entries.filter((e) => e.isDirectory()).length;
+      let lintIssues = 0;
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const localSkillPath = path.join(skillsDir, entry.name, "SKILL.md");
+        if (!fs.existsSync(localSkillPath)) {
+          lintIssues++;
+          continue;
+        }
+        const content = fs.readFileSync(localSkillPath, "utf8");
+        const lines = content.split("\n");
+        if (lines[0].trim() !== "---") lintIssues++;
+        if (lines.length > 250) lintIssues++;
       }
-
-      const content = fs.readFileSync(skillPath, "utf8");
-      const lines = content.split("\n");
-
-      if (lines[0].trim() !== "---") {
-        lintIssues++;
+      if (lintIssues === 0) {
+        console.log(`   OK ${skillDirs} skills clean`);
+      } else {
+        console.log(`   WARN ${lintIssues} lint issue(s) found`);
+        issues.push({ level: "warn", msg: `${lintIssues} lint issues in skills/ directory` });
       }
-
-      if (lines.length > MAX_LINES) {
-        lintIssues++;
-      }
-    }
-
-    if (lintIssues === 0) {
-      console.log(`   ✅ ${skillDirs} skills clean`);
     } else {
-      console.log(`   ⚠️  ${lintIssues} lint issue(s) found`);
-      issues.push({ level: "warn", msg: `${lintIssues} lint issues in skills/ directory` });
+      console.log("   INFO No local skills/ directory found (package user mode)");
     }
-  } else {
-    console.log("   ℹ️  No skills/ directory found (local development only)");
   }
 
-  // ─── Sync Check ─────────────────────────────────
   console.log("");
-  console.log("🔄 Sync");
+  console.log("Sync");
   if (fs.existsSync(syncStatusPath)) {
     try {
       const syncStatus = JSON.parse(fs.readFileSync(syncStatusPath, "utf8"));
       const syncAge = Math.round((Date.now() - new Date(syncStatus.lastSync).getTime()) / 60000);
       const syncLabel = syncAge < 60 ? `${syncAge}m ago` : syncAge < 1440 ? `${Math.round(syncAge / 60)}h ago` : `${Math.round(syncAge / 1440)}d ago`;
-      console.log(`   ✅ Last sync: ${syncLabel}`);
+      console.log(`   OK Last sync: ${syncLabel}`);
       if (syncStatus.summary && syncStatus.summary.workflowRuns === "ok") {
-        console.log(`   ✅ CI data available`);
+        console.log("   OK CI data available");
       } else {
-        console.log(`   ⚠️  CI data not available`);
+        console.log("   WARN CI data not available");
         issues.push({ level: "warn", msg: "Sync CI data not available (run: sync --org <org>)" });
       }
     } catch (err) {
-      console.log(`   ⚠️  Sync status corrupted: ${err.message}`);
+      console.log(`   WARN Sync status corrupted: ${err.message}`);
       issues.push({ level: "warn", msg: "Sync status corrupted" });
     }
   } else {
-    console.log("   ℹ️  No sync data (run: sync --org <github-org>)");
+    console.log("   INFO No sync data yet (run: sync --org <github-org>)");
   }
 
-  // ─── Error Catalog Check ────────────────────────
   console.log("");
-  console.log("📚 Error Catalog");
+  console.log("Error Catalog");
   if (fs.existsSync(catalogPath)) {
     try {
       const count = readCatalogCount(catalogPath);
-      console.log(`   ✅ ${count} failure patterns loaded`);
+      console.log(`   OK ${count} failure patterns loaded`);
     } catch (err) {
-      console.log(`   ⚠️  Catalog corrupted: ${err.message}`);
+      console.log(`   WARN Catalog corrupted: ${err.message}`);
       issues.push({ level: "warn", msg: "Error catalog corrupted" });
     }
   } else {
-    console.log("   ⚠️  failure-catalog.json not found");
+    console.log("   WARN failure-catalog.json not found");
     issues.push({ level: "warn", msg: "failure-catalog.json not found" });
   }
 
-  // ─── Notification Channels Check ────────────────
   console.log("");
-  console.log("🔔 Notifications");
+  console.log("Notifications");
   const hasTgToken = !!process.env.TELEGRAM_BOT_TOKEN;
   const hasTgChat = !!process.env.TELEGRAM_CHAT_ID;
   const hasSlack = !!process.env.SLACK_WEBHOOK_URL;
   const hasDiscord = !!process.env.DISCORD_WEBHOOK_URL;
 
   if (hasTgToken && hasTgChat) {
-    console.log("   ✅ Telegram configured");
+    console.log("   OK Telegram configured");
   } else if (hasTgToken || hasTgChat) {
-    console.log("   ⚠️  Telegram partially configured (need both TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)");
-    console.log("      → Run: solo-cto-agent telegram wizard");
+    console.log("   WARN Telegram partially configured (need both TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)");
+    console.log("      Run: SOLO_CTO_EXPERIMENTAL=1 solo-cto-agent telegram wizard");
     issues.push({ level: "warn", msg: "Telegram partially configured" });
   } else {
-    console.log("   ℹ️  Telegram not configured (optional — enables deploy/review alerts)");
-    console.log("      → Setup: SOLO_CTO_EXPERIMENTAL=1 solo-cto-agent telegram wizard");
+    console.log("   INFO Telegram not configured (optional - enables deploy/review alerts)");
+    console.log("      Setup: SOLO_CTO_EXPERIMENTAL=1 solo-cto-agent telegram wizard");
   }
 
-  if (hasSlack) console.log("   ✅ Slack configured");
-  if (hasDiscord) console.log("   ✅ Discord configured");
+  if (hasSlack) console.log("   OK Slack configured");
+  if (hasDiscord) console.log("   OK Discord configured");
   if (!hasTgToken && !hasSlack && !hasDiscord) {
-    console.log("   ℹ️  No notification channels — alerts go to stderr only");
+    console.log("   INFO No notification channels - alerts stay local");
   }
 
-  // ─── Summary ─────────────────────────────────────
   console.log("");
-  console.log("─".repeat(40));
+  console.log("-".repeat(40));
 
-  const errors = issues.filter(i => i.level === "error");
-  const warns = issues.filter(i => i.level === "warn");
+  const errors = issues.filter((i) => i.level === "error");
+  const warns = issues.filter((i) => i.level === "warn");
 
   if (errors.length === 0 && warns.length === 0) {
-    console.log("✅ All checks passed — you are ready to go!");
+    console.log("OK All checks passed");
     console.log("");
-    console.log("Try your first review:");
-    console.log("   cd <your-git-repo>");
-    console.log("   git add -A && solo-cto-agent review");
+    if (isCodexMain) {
+      console.log("Next:");
+      console.log("   1. Run: solo-cto-agent setup-pipeline --org <your-org> --repos <repo1,repo2>");
+      console.log("   2. Add GitHub Actions secrets in each product repo");
+      console.log("   3. Open a PR and verify auto-review starts");
+    } else {
+      console.log("Try your first review:");
+      console.log("   cd <your-git-repo>");
+      console.log("   git add -A && solo-cto-agent review");
+    }
     console.log("");
     if (opts.exitOnError !== false) process.exit(0);
     return;
@@ -1351,30 +1329,35 @@ function doctorCommand(opts = {}) {
 
   if (errors.length > 0) {
     console.log("");
-    console.log("❌ Fix these before using solo-cto-agent:");
-    for (const err of errors) {
-      console.log(`   • ${err.msg}`);
-    }
+    console.log("Fix these before using solo-cto-agent:");
+    for (const err of errors) console.log(`   - ${err.msg}`);
   }
 
   if (warns.length > 0) {
     console.log("");
-    console.log("⚠️  Warnings (non-blocking):");
-    for (const warn of warns) {
-      console.log(`   • ${warn.msg}`);
-    }
+    console.log("Warnings (non-blocking):");
+    for (const warn of warns) console.log(`   - ${warn.msg}`);
   }
 
-  if (errors.length > 0) {
-    console.log("");
-    console.log("After fixing, run 'solo-cto-agent doctor' again to verify.");
+  console.log("");
+  console.log("Quick links:");
+  console.log("   Anthropic keys: https://console.anthropic.com/settings/keys");
+  console.log("   OpenAI keys:    https://platform.openai.com/api-keys");
+  if (isCodexMain) {
+    console.log("   GitHub CLI:     https://cli.github.com/");
+    console.log("   GitHub PAT:     https://github.com/settings/personal-access-tokens/new");
+    console.log("   Install guide:  docs/codex-main-install.md");
+  } else {
+    console.log("   Install guide:  docs/cowork-main-install.md");
   }
 
+  console.log("");
+  console.log(`After fixing, run 'solo-cto-agent doctor${isQuick ? " --quick" : ""}' again to verify.`);
   console.log("");
   if (opts.exitOnError !== false) process.exit(errors.length > 0 ? 1 : 0);
 }
 
-// ─── upgrade: Builder → CTO ────────────────────────────────
+// ??? upgrade: Builder → CTO ────────────────────────────────
 
 function upgradeCommand(org, repos, orchName) {
   if (!org) {
@@ -1717,7 +1700,7 @@ async function main() {
   }
 
   if (cmd === "doctor") {
-    doctorCommand();
+    doctorCommand({ quick: args.includes("--quick") });
     return;
   }
 

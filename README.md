@@ -27,13 +27,13 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 export OPENAI_API_KEY="sk-..."
 
 # 5. Verify everything is ready
-solo-cto-agent doctor
+solo-cto-agent doctor --quick
 
 # 6. Run your first review (inside a git repo with staged changes)
 solo-cto-agent review
 ```
 
-That is it. `doctor` will tell you if anything is missing and where to get it.
+That is it. `doctor --quick` will tell you what is missing, where to get it, and the next command to run.
 
 ### Platform-specific setup
 
