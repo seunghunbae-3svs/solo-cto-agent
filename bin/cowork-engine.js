@@ -690,6 +690,8 @@ function _anthropicOnce(prompt, systemPrompt, model) {
       },
     };
 
+    const API_TIMEOUT_MS = 120000; // 2 minutes — LLM responses can be slow on large diffs
+
     const req = https.request(options, (res) => {
       let data = "";
       res.on("data", (chunk) => (data += chunk));
@@ -715,6 +717,11 @@ function _anthropicOnce(prompt, systemPrompt, model) {
       });
     });
 
+    if (typeof req.setTimeout === "function") {
+      req.setTimeout(API_TIMEOUT_MS, () => {
+        req.destroy(new Error(`Anthropic API timeout after ${API_TIMEOUT_MS / 1000}s`));
+      });
+    }
     req.on("error", reject);
     req.write(body);
     req.end();
@@ -769,6 +776,8 @@ function _openaiOnce(prompt, systemPrompt, model) {
       },
     };
 
+    const API_TIMEOUT_MS = 120000;
+
     const req = https.request(options, (res) => {
       let data = "";
       res.on("data", (chunk) => (data += chunk));
@@ -797,6 +806,11 @@ function _openaiOnce(prompt, systemPrompt, model) {
       });
     });
 
+    if (typeof req.setTimeout === "function") {
+      req.setTimeout(API_TIMEOUT_MS, () => {
+        req.destroy(new Error(`OpenAI API timeout after ${API_TIMEOUT_MS / 1000}s`));
+      });
+    }
     req.on("error", reject);
     req.write(body);
     req.end();
