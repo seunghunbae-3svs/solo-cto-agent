@@ -247,3 +247,84 @@ describe("config validation", () => {
     expect(testVal).toBe(100000);
   });
 });
+
+// ===========================================================================
+// 6. Config JSON Schema validation (ajv)
+// ===========================================================================
+describe("config.schema.json", () => {
+  let Ajv, ajv, schema;
+
+  beforeEach(() => {
+    Ajv = require("ajv");
+    ajv = new Ajv({ allErrors: true });
+    schema = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), "config.schema.json"), "utf8")
+    );
+  });
+
+  test("schema file exists and is valid JSON Schema", () => {
+    expect(schema.$schema).toContain("json-schema.org");
+    expect(schema.type).toBe("object");
+  });
+
+  test("valid config passes validation", () => {
+    const config = {
+      models: { claude: "test-model", codex: "test-codex", openai: "test-openai" },
+      providers: { anthropicBase: "localhost:8080", openaiBase: "api.groq.com" },
+      diff: { maxChunkBytes: 100000 },
+    };
+    const valid = ajv.validate(schema, config);
+    expect(valid).toBe(true);
+  });
+
+  test("empty object passes (all fields optional)", () => {
+    expect(ajv.validate(schema, {})).toBe(true);
+  });
+
+  test("unknown top-level key fails", () => {
+    const config = { unknownField: "value" };
+    expect(ajv.validate(schema, config)).toBe(false);
+    expect(ajv.errors.some(e => e.keyword === "additionalProperties")).toBe(true);
+  });
+
+  test("unknown model key fails", () => {
+    const config = { models: { gemini: "gemini-pro" } };
+    expect(ajv.validate(schema, config)).toBe(false);
+  });
+
+  test("provider with protocol prefix fails pattern", () => {
+    const config = { providers: { anthropicBase: "https://api.anthropic.com" } };
+    expect(ajv.validate(schema, config)).toBe(false);
+  });
+
+  test("maxChunkBytes below 1024 fails", () => {
+    const config = { diff: { maxChunkBytes: 500 } };
+    expect(ajv.validate(schema, config)).toBe(false);
+  });
+
+  test("maxChunkBytes above 1MB fails", () => {
+    const config = { diff: { maxChunkBytes: 2000000 } };
+    expect(ajv.validate(schema, config)).toBe(false);
+  });
+
+  test("$schema key is allowed (for editor autocomplete)", () => {
+    const config = { "$schema": "https://example.com/schema.json" };
+    expect(ajv.validate(schema, config)).toBe(true);
+  });
+
+  test("tierModels with valid structure passes", () => {
+    const config = {
+      tierModels: {
+        claude: { maker: "custom-haiku", builder: "custom-sonnet", cto: "custom-opus" },
+      },
+    };
+    expect(ajv.validate(schema, config)).toBe(true);
+  });
+
+  test("tierModels with unknown tier fails", () => {
+    const config = {
+      tierModels: { claude: { enterprise: "custom-model" } },
+    };
+    expect(ajv.validate(schema, config)).toBe(false);
+  });
+});
