@@ -42,6 +42,8 @@ function printHelp() {
   console.log(`solo-cto-agent — ${i18n.t("cli.tagline")}
 
 Usage:
+  solo-cto-agent onboard [--yes] [--json] [--token <ghp_...>]                    # interactive onboarding
+  solo-cto-agent digest [--flush] [--json]                                       # view/flush batch review digest
   solo-cto-agent init [--force] [--preset maker|builder|cto] [--wizard]
   solo-cto-agent setup-pipeline --org <github-org> [--tier builder|cto] [--repos <repo1,repo2,...>]
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
@@ -66,6 +68,8 @@ Usage:
   solo-cto-agent --lang <en|ko> <command>      # override CLI locale (or SOLO_CTO_LANG env)
 
 Commands:
+  onboard           Auto-detect repos, configure P0-P4 review, deploy workflow (recommended start)
+  digest            View or flush batch review digest (per-project aggregation)
   init              Install skills to ~/.claude/skills/, then run doctor to verify setup
   setup-pipeline    Full pipeline setup: create orchestrator repo + install workflows to product repos
   setup-repo        Install dual-agent workflows to a single product repo
@@ -91,6 +95,9 @@ Presets / Tiers:
   cto         Lv5+6 — Builder + Orchestrate + UI/UX quality gate + analytics + Telegram
 
 Examples:
+  npx solo-cto-agent onboard                       # auto-detect repos + configure review (recommended)
+  npx solo-cto-agent onboard --yes                 # non-interactive: enable all repos
+  npx solo-cto-agent digest --flush                # show and clear batch digest
   npx solo-cto-agent init --wizard                 # interactive setup (recommended)
   npx solo-cto-agent init --preset builder         # install skills (default)
   npx solo-cto-agent init --preset cto             # install all skills
@@ -2137,6 +2144,60 @@ async function main() {
       console.error(`❌ ${e.message}`);
       process.exit(1);
     });
+    return;
+  }
+
+  // ─── onboard: Interactive onboarding with auto-discovery ───
+  if (cmd === "onboard") {
+    let onboardMod;
+    try { onboardMod = require("./onboard"); } catch (_) { onboardMod = null; }
+    if (!onboardMod) {
+      console.error("❌ onboard module not available.");
+      process.exit(1);
+    }
+
+    const opts = {};
+    const tokIdx = args.indexOf("--token");
+    if (tokIdx >= 0) opts.token = args[tokIdx + 1];
+    if (args.includes("--yes") || args.includes("-y")) opts.yes = true;
+    if (args.includes("--json")) opts.json = true;
+
+    onboardMod.runOnboard(opts).catch((err) => {
+      console.error("❌ onboard failed:", err.message);
+      process.exit(1);
+    });
+    return;
+  }
+
+  // ─── digest: Show/flush batch digest ───
+  if (cmd === "digest") {
+    let onboardMod;
+    try { onboardMod = require("./onboard"); } catch (_) { onboardMod = null; }
+    if (!onboardMod) {
+      console.error("❌ onboard module not available.");
+      process.exit(1);
+    }
+
+    if (args.includes("--flush")) {
+      const grouped = onboardMod.flushDigest();
+      if (!grouped) {
+        console.log("No pending findings in digest queue.");
+      } else {
+        console.log(onboardMod.formatDigest(grouped));
+      }
+    } else {
+      // Peek without flushing
+      const digestFile = path.join(os.homedir(), ".solo-cto-agent", "digest-queue.json");
+      try {
+        const queue = JSON.parse(fs.readFileSync(digestFile, "utf8"));
+        console.log(`Digest queue: ${queue.length} finding${queue.length !== 1 ? "s" : ""} pending.`);
+        if (queue.length > 0 && args.includes("--json")) {
+          console.log(JSON.stringify(queue, null, 2));
+        }
+      } catch (_) {
+        console.log("Digest queue is empty.");
+      }
+    }
     return;
   }
 

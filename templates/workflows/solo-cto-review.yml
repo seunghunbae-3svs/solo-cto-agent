@@ -1,13 +1,25 @@
 # ============================================================
-# Solo CTO 3-Pass PR Review
+# Solo CTO 3-Pass PR Review (v2 — P0-P4 Priority + Batch Digest)
 # ============================================================
 # Pass 1: Code Review (구조, 보안, 성능, 버그)
 # Pass 2: Cross-Check (1차 리뷰 검증 + 누락 발견)
 # Pass 3: UI/UX Review (접근성, 반응형, 사용성)
 #
-# 프로세스:
-#   APPROVE  → ✅ 완료 (머지 가능)
-#   REQUEST_CHANGES → 🔄 재작업 필요 (수정 후 push → 자동 재리뷰)
+# Priority Levels:
+#   P0: CRITICAL   — Security vulnerability, data loss, production down
+#   P1: BLOCKER    — Must fix before merge
+#   P2: IMPORTANT  — Should fix (performance, tests)
+#   P3: SUGGESTION — Nice to have
+#   P4: NIT        — Cosmetic, trivial
+#
+# Batch Digest:
+#   Findings are aggregated per-project. One digest notification
+#   instead of per-PR spam.
+#
+# Verdict:
+#   P0/P1 found → REQUEST_CHANGES
+#   P2 only     → COMMENT (merge allowed, but recommended fixes)
+#   P3/P4 only  → APPROVE
 # ============================================================
 
 name: "Solo CTO Review"
@@ -19,6 +31,9 @@ on:
 permissions:
   contents: read
   pull-requests: write
+
+env:
+  SOLO_CTO_VERSION: "2.0"
 
 jobs:
   review:
@@ -38,20 +53,26 @@ jobs:
       - name: Install solo-cto-agent
         run: npm install -g solo-cto-agent
 
-      - name: Fetch base branch
+      - name: Fetch base branch & compute diff
         run: |
           git fetch origin ${{ github.base_ref }} --depth=50 2>/dev/null || true
-          DIFF_LINES=$(git diff origin/${{ github.base_ref }}...HEAD -- . ':!package-lock.json' ':!*.lock' | wc -l)
+          DIFF_LINES=$(git diff origin/${{ github.base_ref }}...HEAD -- . ':!package-lock.json' ':!*.lock' ':!*.min.js' ':!*.min.css' | wc -l)
           echo "diff_lines=$DIFF_LINES" >> $GITHUB_ENV
           if [ "$DIFF_LINES" -lt 3 ]; then
             echo "SKIP_REVIEW=true" >> $GITHUB_ENV
           fi
+
+          # Extract changed files for targeted review
+          git diff --name-only origin/${{ github.base_ref }}...HEAD > /tmp/changed-files.txt
+          echo "changed_files=$(cat /tmp/changed-files.txt | wc -l)" >> $GITHUB_ENV
 
       - name: Pass 1 — Code Review
         if: env.SKIP_REVIEW != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          solo-cto-agent review --branch --target origin/${{ github.base_ref }} --json 2>/dev/null | tee /tmp/pass1-result.json || true
+          # Fallback: non-json output
           solo-cto-agent review --branch --target origin/${{ github.base_ref }} 2>&1 | tee /tmp/pass1-result.txt || true
 
       - name: Pass 2 — Cross-Check
@@ -68,83 +89,268 @@ jobs:
         run: |
           solo-cto-agent review --branch --target origin/${{ github.base_ref }} 2>&1 | tee /tmp/pass3-result.txt || true
 
+      - name: Classify findings by priority (P0-P4)
+        id: classify
+        run: |
+          node -e "
+          const fs = require('fs');
+          const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+
+          const read = (f) => { try { return strip(fs.readFileSync(f, 'utf8')); } catch { return ''; } };
+          const all = read('/tmp/pass1-result.txt') + '\n' + read('/tmp/pass2-result.txt') + '\n' + read('/tmp/pass3-result.txt');
+
+          // Priority classification heuristics
+          const findings = { P0: [], P1: [], P2: [], P3: [], P4: [] };
+
+          // P0: Security, data loss, injection, XSS, credentials
+          const p0Patterns = /\b(security|vulnerab|injection|XSS|CSRF|credential|secret|password|token\s+leak|data\s+loss|SQL\s+inject|RCE|remote\s+code)\b/gi;
+          // P1: Blocker, logic error, breaking change, crash, undefined
+          const p1Patterns = /\b(BLOCKER|REQUEST_CHANGES|수정요청|logic\s+error|breaking|crash|undefined\s+is\s+not|TypeError|null\s+pointer|infinite\s+loop|memory\s+leak|deadlock)\b/gi;
+          // P2: Performance, missing test, error handling, race condition
+          const p2Patterns = /\b(performance|missing\s+test|error\s+handling|race\s+condition|N\+1|unhandled|timeout|retry|validation)\b/gi;
+          // P3: Style, naming, refactor suggestion
+          const p3Patterns = /\b(naming|refactor|suggest|readability|convention|consider|could\s+be|might\s+want)\b/gi;
+
+          const lines = all.split('\n').filter(l => l.trim());
+          const issueLines = lines.filter(l => /[⛔⚠️💡]|BLOCKER|SUGGESTION|NIT|severity/i.test(l));
+
+          for (const line of issueLines) {
+            if (p0Patterns.test(line)) { findings.P0.push(line.trim().slice(0, 200)); p0Patterns.lastIndex = 0; }
+            else if (p1Patterns.test(line)) { findings.P1.push(line.trim().slice(0, 200)); p1Patterns.lastIndex = 0; }
+            else if (p2Patterns.test(line)) { findings.P2.push(line.trim().slice(0, 200)); p2Patterns.lastIndex = 0; }
+            else if (p3Patterns.test(line)) { findings.P3.push(line.trim().slice(0, 200)); p3Patterns.lastIndex = 0; }
+            else { findings.P4.push(line.trim().slice(0, 200)); }
+          }
+
+          // Also classify ⛔/⚠️/💡 markers
+          const blockerLines = all.match(/⛔[^\n]*/g) || [];
+          const warnLines = all.match(/⚠️[^\n]*/g) || [];
+          const nitLines = all.match(/💡[^\n]*/g) || [];
+
+          // Merge (dedup with existing)
+          for (const l of blockerLines) {
+            const trimmed = l.trim().slice(0, 200);
+            if (!findings.P1.includes(trimmed) && !findings.P0.includes(trimmed)) findings.P1.push(trimmed);
+          }
+          for (const l of warnLines) {
+            const trimmed = l.trim().slice(0, 200);
+            if (!findings.P2.includes(trimmed) && !findings.P3.includes(trimmed)) findings.P2.push(trimmed);
+          }
+          for (const l of nitLines) {
+            const trimmed = l.trim().slice(0, 200);
+            if (!findings.P4.includes(trimmed)) findings.P4.push(trimmed);
+          }
+
+          // Determine verdict based on highest priority
+          let verdict = 'APPROVE';
+          let emoji = '✅';
+          let action = 'All clear — merge when ready.';
+
+          if (findings.P0.length > 0) {
+            verdict = 'REQUEST_CHANGES'; emoji = '🔴';
+            action = 'P0 CRITICAL issues found — must fix before merge.';
+          } else if (findings.P1.length > 0) {
+            verdict = 'REQUEST_CHANGES'; emoji = '🟠';
+            action = 'P1 BLOCKER issues found — should fix before merge.';
+          } else if (findings.P2.length > 0) {
+            verdict = 'COMMENT'; emoji = '🟡';
+            action = 'P2 issues found — recommended fixes, but merge allowed.';
+          } else if (findings.P3.length > 0 || findings.P4.length > 0) {
+            verdict = 'APPROVE'; emoji = '✅';
+            action = 'Minor suggestions only — approved.';
+          }
+
+          // Write outputs
+          const counts = Object.entries(findings).map(([k,v]) => k + '=' + v.length).join(',');
+          fs.writeFileSync('/tmp/priority-counts.txt', counts);
+          fs.writeFileSync('/tmp/findings.json', JSON.stringify(findings, null, 2));
+
+          // GitHub outputs
+          const core = require('@actions/core') || null;
+          console.log('::set-output name=verdict::' + verdict);
+          console.log('::set-output name=emoji::' + emoji);
+          console.log('::set-output name=action::' + action);
+          console.log('::set-output name=p0_count::' + findings.P0.length);
+          console.log('::set-output name=p1_count::' + findings.P1.length);
+          console.log('::set-output name=p2_count::' + findings.P2.length);
+          console.log('::set-output name=p3_count::' + findings.P3.length);
+          console.log('::set-output name=p4_count::' + findings.P4.length);
+
+          // Also write to GITHUB_OUTPUT file
+          const outFile = process.env.GITHUB_OUTPUT;
+          if (outFile) {
+            const lines = [
+              'verdict=' + verdict,
+              'emoji=' + emoji,
+              'action=' + action,
+              'p0_count=' + findings.P0.length,
+              'p1_count=' + findings.P1.length,
+              'p2_count=' + findings.P2.length,
+              'p3_count=' + findings.P3.length,
+              'p4_count=' + findings.P4.length,
+            ];
+            fs.appendFileSync(outFile, lines.join('\n') + '\n');
+          }
+          "
+
       - name: Determine final verdict
+        if: env.SKIP_REVIEW != 'true'
         id: verdict
         run: |
-          if [ "${SKIP_REVIEW}" = "true" ]; then
-            echo "final=SKIP" >> $GITHUB_OUTPUT
-            echo "emoji=⏭️" >> $GITHUB_OUTPUT
-            echo "action=변경사항이 너무 작아 리뷰를 건너뜁니다." >> $GITHUB_OUTPUT
-            exit 0
+          # Read from classify step outputs, with fallback to file-based detection
+          FINDINGS_FILE="/tmp/findings.json"
+          if [ -f "$FINDINGS_FILE" ]; then
+            P0=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$FINDINGS_FILE','utf8')).P0.length)")
+            P1=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$FINDINGS_FILE','utf8')).P1.length)")
+            P2=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$FINDINGS_FILE','utf8')).P2.length)")
+            P3=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$FINDINGS_FILE','utf8')).P3.length)")
+            P4=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$FINDINGS_FILE','utf8')).P4.length)")
+          else
+            P0=0; P1=0; P2=0; P3=0; P4=0
+            # Fallback: scan raw text
+            ALL=$(cat /tmp/pass1-result.txt /tmp/pass2-result.txt /tmp/pass3-result.txt 2>/dev/null || echo "")
+            if echo "$ALL" | grep -qi "security\|vulnerab\|injection\|XSS"; then P0=1; fi
+            if echo "$ALL" | grep -qi "REQUEST_CHANGES\|BLOCKER\|수정요청"; then P1=1; fi
           fi
 
-          ALL=$(cat /tmp/pass1-result.txt /tmp/pass2-result.txt /tmp/pass3-result.txt 2>/dev/null || echo "")
-
-          if echo "$ALL" | grep -qi "REQUEST_CHANGES\|BLOCKER\|수정요청"; then
+          if [ "$P0" -gt 0 ]; then
             echo "final=REQUEST_CHANGES" >> $GITHUB_OUTPUT
-            echo "emoji=🔄" >> $GITHUB_OUTPUT
-            echo "action=재작업 필요 — 수정 후 push하면 자동으로 재리뷰됩니다." >> $GITHUB_OUTPUT
+            echo "emoji=🔴" >> $GITHUB_OUTPUT
+            echo "action=🔴 P0 CRITICAL — 보안/데이터 이슈. 반드시 수정 후 머지." >> $GITHUB_OUTPUT
+          elif [ "$P1" -gt 0 ]; then
+            echo "final=REQUEST_CHANGES" >> $GITHUB_OUTPUT
+            echo "emoji=🟠" >> $GITHUB_OUTPUT
+            echo "action=🟠 P1 BLOCKER — 머지 전 수정 필요. push하면 자동 재리뷰." >> $GITHUB_OUTPUT
+          elif [ "$P2" -gt 0 ]; then
+            echo "final=COMMENT" >> $GITHUB_OUTPUT
+            echo "emoji=🟡" >> $GITHUB_OUTPUT
+            echo "action=🟡 P2 권장 수정사항 있음. 머지는 가능하나 수정 권장." >> $GITHUB_OUTPUT
           else
             echo "final=APPROVE" >> $GITHUB_OUTPUT
             echo "emoji=✅" >> $GITHUB_OUTPUT
-            echo "action=완료 — 머지 가능합니다." >> $GITHUB_OUTPUT
+            echo "action=✅ P3/P4 사소한 제안만. 머지 가능." >> $GITHUB_OUTPUT
           fi
 
-      - name: Post 3-pass review comment
+          echo "p0=$P0" >> $GITHUB_OUTPUT
+          echo "p1=$P1" >> $GITHUB_OUTPUT
+          echo "p2=$P2" >> $GITHUB_OUTPUT
+          echo "p3=$P3" >> $GITHUB_OUTPUT
+          echo "p4=$P4" >> $GITHUB_OUTPUT
+
+      - name: Post P0-P4 review comment
         uses: actions/github-script@v7
         env:
-          FINAL_VERDICT: ${{ steps.verdict.outputs.final }}
-          FINAL_EMOJI: ${{ steps.verdict.outputs.emoji }}
-          FINAL_ACTION: ${{ steps.verdict.outputs.action }}
+          FINAL_VERDICT: ${{ steps.verdict.outputs.final || 'SKIP' }}
+          FINAL_EMOJI: ${{ steps.verdict.outputs.emoji || '⏭️' }}
+          FINAL_ACTION: ${{ steps.verdict.outputs.action || 'Skipped' }}
+          P0: ${{ steps.verdict.outputs.p0 || '0' }}
+          P1: ${{ steps.verdict.outputs.p1 || '0' }}
+          P2: ${{ steps.verdict.outputs.p2 || '0' }}
+          P3: ${{ steps.verdict.outputs.p3 || '0' }}
+          P4: ${{ steps.verdict.outputs.p4 || '0' }}
         with:
           script: |
             const fs = require('fs');
             const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
             const diffLines = process.env.diff_lines || '?';
 
-            let body;
-            if (process.env.FINAL_VERDICT === 'SKIP') {
-              body = `## ⏭️ Solo CTO Review — SKIPPED\n\n> 변경사항이 ${diffLines}줄로 리뷰를 건너뜁니다.\n\n*[solo-cto-agent](https://www.npmjs.com/package/solo-cto-agent) v1.1.0*`;
-            } else {
-              const read = (f) => { try { return strip(fs.readFileSync(f, 'utf8').trim()); } catch { return 'N/A'; } };
-              const pass1 = read('/tmp/pass1-result.txt');
-              const pass2 = read('/tmp/pass2-result.txt');
-              const pass3 = read('/tmp/pass3-result.txt');
+            // Skip case
+            if (process.env.SKIP_REVIEW === 'true' || process.env.FINAL_VERDICT === 'SKIP') {
+              const body = `## ⏭️ Solo CTO Review — SKIPPED\n\n> 변경사항이 ${diffLines}줄로 리뷰를 건너뜁니다.\n\n---\n*[solo-cto-agent](https://github.com/seunghunbae-3svs/solo-cto-agent) · [❤ Sponsor](https://github.com/sponsors/seunghunbae-3svs)*`;
 
-              body = [
-                `## ${process.env.FINAL_EMOJI} Solo CTO 3-Pass Review — ${process.env.FINAL_VERDICT}`,
-                '',
-                `> **${process.env.FINAL_ACTION}**`,
-                `> Diff: ${diffLines} lines`,
-                '',
-                '---',
-                '',
-                '### Pass 1 — Code Review',
-                '```',
-                pass1.slice(0, 3000),
-                '```',
-                '',
-                '### Pass 2 — Cross-Check',
-                '```',
-                pass2.slice(0, 3000),
-                '```',
-                '',
-                '### Pass 3 — UI/UX Review',
-                '```',
-                pass3.slice(0, 3000),
-                '```',
-                '',
-                '---',
-                '',
-                '| 프로세스 | 설명 |',
-                '|---|---|',
-                '| ✅ **APPROVE** | 3-pass 모두 통과 → 머지 가능 |',
-                '| 🔄 **REQUEST_CHANGES** | 수정 필요 → push하면 자동 재리뷰 |',
-                '',
-                '*Automated 3-pass review by [solo-cto-agent](https://www.npmjs.com/package/solo-cto-agent) v1.1.0*',
-              ].join('\n');
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+              return;
             }
 
+            const read = (f) => { try { return strip(fs.readFileSync(f, 'utf8').trim()); } catch { return 'N/A'; } };
+            const pass1 = read('/tmp/pass1-result.txt');
+            const pass2 = read('/tmp/pass2-result.txt');
+            const pass3 = read('/tmp/pass3-result.txt');
+
+            // Read findings JSON if available
+            let findings = { P0: [], P1: [], P2: [], P3: [], P4: [] };
+            try {
+              findings = JSON.parse(fs.readFileSync('/tmp/findings.json', 'utf8'));
+            } catch {}
+
+            const p0 = parseInt(process.env.P0) || 0;
+            const p1 = parseInt(process.env.P1) || 0;
+            const p2 = parseInt(process.env.P2) || 0;
+            const p3 = parseInt(process.env.P3) || 0;
+            const p4 = parseInt(process.env.P4) || 0;
+            const total = p0 + p1 + p2 + p3 + p4;
+
+            // Build priority summary
+            const priorityBadges = [
+              p0 > 0 ? `🔴 **P0**: ${p0}` : null,
+              p1 > 0 ? `🟠 **P1**: ${p1}` : null,
+              p2 > 0 ? `🟡 **P2**: ${p2}` : null,
+              p3 > 0 ? `🔵 **P3**: ${p3}` : null,
+              p4 > 0 ? `⚪ **P4**: ${p4}` : null,
+            ].filter(Boolean).join(' · ');
+
+            const body = [
+              `## ${process.env.FINAL_EMOJI} Solo CTO 3-Pass Review — ${process.env.FINAL_VERDICT}`,
+              '',
+              `> **${process.env.FINAL_ACTION}**`,
+              `> Diff: ${diffLines} lines · ${process.env.changed_files || '?'} files · Findings: ${total}`,
+              '',
+              '### Priority Summary',
+              '',
+              priorityBadges || '✅ No issues found',
+              '',
+              '| Priority | Count | Meaning |',
+              '|:---:|:---:|---|',
+              `| 🔴 P0 | ${p0} | Critical — security, data loss |`,
+              `| 🟠 P1 | ${p1} | Blocker — must fix before merge |`,
+              `| 🟡 P2 | ${p2} | Important — should fix |`,
+              `| 🔵 P3 | ${p3} | Suggestion — nice to have |`,
+              `| ⚪ P4 | ${p4} | Nit — cosmetic |`,
+              '',
+              '---',
+              '',
+              '<details>',
+              '<summary>📋 Pass 1 — Code Review</summary>',
+              '',
+              '```',
+              pass1.slice(0, 4000),
+              '```',
+              '</details>',
+              '',
+              '<details>',
+              '<summary>🔄 Pass 2 — Cross-Check</summary>',
+              '',
+              '```',
+              pass2.slice(0, 4000),
+              '```',
+              '</details>',
+              '',
+              '<details>',
+              '<summary>🎨 Pass 3 — UI/UX Review</summary>',
+              '',
+              '```',
+              pass3.slice(0, 4000),
+              '```',
+              '</details>',
+              '',
+              '---',
+              '',
+              '| Verdict | Action |',
+              '|:---:|---|',
+              '| ✅ **APPROVE** | P3/P4 only → merge allowed |',
+              '| 🟡 **COMMENT** | P2 found → merge allowed, fixes recommended |',
+              '| 🟠 **REQUEST_CHANGES** | P1 found → fix and push for re-review |',
+              '| 🔴 **REQUEST_CHANGES** | P0 found → critical fix required |',
+              '',
+              `*Automated 3-pass review by [solo-cto-agent](https://github.com/seunghunbae-3svs/solo-cto-agent) · [❤ Sponsor](https://github.com/sponsors/seunghunbae-3svs)*`,
+            ].join('\n');
+
+            // Update existing bot comment or create new
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -170,7 +376,7 @@ jobs:
               });
             }
 
-      - name: Request changes if needed
+      - name: Request changes if P0/P1 found
         if: steps.verdict.outputs.final == 'REQUEST_CHANGES'
         uses: actions/github-script@v7
         with:
@@ -180,5 +386,5 @@ jobs:
               repo: context.repo.repo,
               pull_number: context.issue.number,
               event: 'REQUEST_CHANGES',
-              body: '🔄 Solo CTO 3-pass 리뷰에서 수정 요청이 있습니다. 위 코멘트를 확인해주세요.',
+              body: `${process.env.FINAL_EMOJI} Solo CTO 리뷰에서 수정 요청. 위 코멘트의 Priority Summary를 확인하세요.`,
             });
