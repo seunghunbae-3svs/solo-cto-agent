@@ -155,6 +155,7 @@ solo-cto-agent review                    # 첫 리뷰 실행
 - Claude 엔트리: `docs/claude.md`
 - 예제 모음: `examples/README.md`
 - 설치/셋업(한국어): `docs/cowork-main-install.md`
+- 설정/커스터마이징: `docs/configuration.md`
 - Tier 비교/예시: `docs/tier-matrix.md`, `docs/tier-examples.md`
 - CTO 티어 정책: `docs/cto-policy.md`
 - 외부 루프 정책: `docs/external-loop-policy.md`
@@ -244,7 +245,7 @@ Full-auto adds:
 | Builder | Maker + build + ship | solo dev shipping |
 | CTO | Builder + orchestrate | multi-agent + routing |
 
-Details: `docs/tier-matrix.md`, `docs/tier-examples.md`, `docs/cto-policy.md`, `docs/cowork-main-install.md`.
+Details: `docs/tier-matrix.md`, `docs/tier-examples.md`, `docs/cto-policy.md`, `docs/cowork-main-install.md`, `docs/configuration.md`.
 
 ## Install
 
@@ -512,7 +513,7 @@ A: Infinite loops waste more time than they save. If something fails 3 times, th
 A: Because default AI output tends toward the same rounded-gradient look. The rules push for more intentional choices. Override whatever doesn't fit your taste.
 
 **Q: Does this work outside Cowork + Codex?**
-A: Not officially. This repo focuses on Cowork + Codex only.
+A: Yes. Provider abstraction supports any OpenAI-compatible or Anthropic-compatible API (Ollama, LM Studio, Groq, etc.). Set `OPENAI_API_BASE` or `ANTHROPIC_API_BASE` to point at your provider. See [docs/configuration.md](docs/configuration.md) for setup details.
 
 **Q: Why a separate orchestrator repo?**
 A: The orchestrator holds cross-repo logic (agent routing, score tracking, visual baselines, daily briefings) that doesn't belong in any single product repo. It dispatches workflows across your product repos and collects results centrally. If you only have one product repo, you can still use it - the separation keeps CI/CD config out of your application code.
