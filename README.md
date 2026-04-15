@@ -157,7 +157,10 @@ Real-world flows, four-part shape (input -> agent behavior -> output -> pain red
 
 If you want the live codex-main proof first, start here:
 
+- [`docs/codex-main-validation.svg`](docs/codex-main-validation.svg) - one-page proof card for codex solo and codex + cowork
 - [`examples/ship/codex-main-setup-on-live-project.md`](examples/ship/codex-main-setup-on-live-project.md) - real full-auto install on a private Next.js app
+- [`examples/review/codex-main-codex-solo-routing.md`](examples/review/codex-main-codex-solo-routing.md) - verified single-agent Codex routing path
+- [`examples/review/codex-main-codex-plus-cowork.md`](examples/review/codex-main-codex-plus-cowork.md) - verified dual-agent routing path
 - [`examples/review/codex-main-live-pr-review.md`](examples/review/codex-main-live-pr-review.md) - real PR-open automation timings and outputs
 - [`examples/founder-workflow/codex-main-live-rework-and-digest.md`](examples/founder-workflow/codex-main-live-rework-and-digest.md) - real rework-round comments and scheduled digest behavior
 

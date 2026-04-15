@@ -29,6 +29,8 @@ These are not feature tours. They describe the moment where the agent changes yo
 - [Dual-review catches a race condition](review/dual-review-blocker.md) - Claude + Codex disagree, cross-review produces a decision
 - [UI/UX vision check on a preview URL](review/uiux-vision-check.md) - 6-axis scoring catches AI-slop gradient UI before it ships
 - [PR #64 toolkit upgrade](review/pr-64-toolkit-upgrade.md) - real PR scope summary for fast decisioning
+- [codex-main codex-solo routing](review/codex-main-codex-solo-routing.md) - `agent-codex` forces a deterministic single-agent Codex path
+- [codex-main codex + cowork dual review](review/codex-main-codex-plus-cowork.md) - `dual-review` resolves into the dual-agent PR path
 - [codex-main live PR review on a private app](review/codex-main-live-pr-review.md) - measured PR-open timings from a real full-auto run
 
 ### `founder-workflow/` - Non-code loops

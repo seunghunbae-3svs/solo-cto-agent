@@ -99,6 +99,48 @@ codex-main 모드에서는 ANTHROPIC_API_KEY + OPENAI_API_KEY 모두 필요합�
 
 ---
 
+## Two operating models inside codex-main
+
+`codex-main` is one mode, but it can run in two distinct agent shapes.
+
+### 1. Codex solo
+
+Use this when the task should stay on Codex only.
+
+- typical trigger: issue label `agent-codex`
+- routing result: `single-agent`
+- implementer: `codex`
+- reviewer metadata: `claude`
+- telegram tier: `notify`
+
+This path is useful when you want full automation but do not need a second agent on every task.
+
+Proof:
+
+- `examples/review/codex-main-codex-solo-routing.md`
+- `docs/codex-main-validation.svg`
+
+### 2. Codex + Cowork
+
+Use this when you want the dual-agent path.
+
+- typical trigger: PR open on a CTO-tier repo, or label `dual-review`
+- routing result: `dual-agent`
+- both Claude and Codex participate in review/comparison
+- telegram tier: `decision`
+- max rounds: `2`
+
+This is the higher-confidence path. It costs more, but it is the path that catches disagreements before merge.
+
+Proof:
+
+- `examples/review/codex-main-codex-plus-cowork.md`
+- `examples/review/codex-main-live-pr-review.md`
+- `examples/founder-workflow/codex-main-live-rework-and-digest.md`
+- `docs/codex-main-validation.svg`
+
+---
+
 ## 실행 플로우 (자동)
 
 ```
