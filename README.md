@@ -27,13 +27,13 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 export OPENAI_API_KEY="sk-..."
 
 # 5. Verify everything is ready
-solo-cto-agent doctor
+solo-cto-agent doctor --quick
 
 # 6. Run your first review (inside a git repo with staged changes)
 solo-cto-agent review
 ```
 
-That is it. `doctor` will tell you if anything is missing and where to get it.
+That is it. `doctor --quick` will tell you what is missing, where to get it, and the next command to run.
 
 ### Platform-specific setup
 
@@ -56,6 +56,11 @@ solo-cto-agent doctor
 If you choose `codex-main` during the wizard, also install:
 - GitHub CLI: [cli.github.com](https://cli.github.com/)
 - GitHub PAT for cross-repo dispatch: [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
+
+If you choose `codex-main`, template drift audit is enabled by default:
+- local check: `solo-cto-agent template-audit`
+- scheduled check: `template-audit.yml` in the orchestrator repo
+- policy: `report-only` by default, so drift is detected but never auto-overwritten
 
 ---
 
@@ -154,6 +159,16 @@ Real-world flows, four-part shape (input -> agent behavior -> output -> pain red
 - [`examples/ship/`](examples/ship/) - pre-deploy env lint, idempotent release pipeline
 - [`examples/review/`](examples/review/) - dual-review blockers, UI/UX vision gates
 - [`examples/founder-workflow/`](examples/founder-workflow/) - session brief, idea critique
+
+If you want the live codex-main proof first, start here:
+
+- [`docs/codex-main-validation.svg`](docs/codex-main-validation.svg) - one-page proof card for codex solo and codex + cowork
+- [`docs/codex-main-live-validation.md`](docs/codex-main-live-validation.md) - repeatable runbook for fresh codex solo and codex + cowork validation on real repos
+- [`examples/ship/codex-main-setup-on-live-project.md`](examples/ship/codex-main-setup-on-live-project.md) - real full-auto install on a private Next.js app
+- [`examples/review/codex-main-codex-solo-routing.md`](examples/review/codex-main-codex-solo-routing.md) - verified single-agent Codex routing path
+- [`examples/review/codex-main-codex-plus-cowork.md`](examples/review/codex-main-codex-plus-cowork.md) - verified dual-agent routing path
+- [`examples/review/codex-main-live-pr-review.md`](examples/review/codex-main-live-pr-review.md) - real PR-open automation timings and outputs
+- [`examples/founder-workflow/codex-main-live-rework-and-digest.md`](examples/founder-workflow/codex-main-live-rework-and-digest.md) - real rework-round comments and scheduled digest behavior
 
 See [`examples/README.md`](examples/README.md) for the full index.
 

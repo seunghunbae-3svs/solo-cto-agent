@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="860" viewBox="0 0 1280 860" role="img" aria-labelledby="title desc">
+  <title id="title">codex-main validation snapshot</title>
+  <desc id="desc">Validation summary for codex solo and codex plus cowork operating models.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1020"/>
+      <stop offset="100%" stop-color="#151d36"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#16213f"/>
+      <stop offset="100%" stop-color="#0f172d"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="860" fill="url(#bg)"/>
+  <text x="84" y="98" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="42" font-weight="700">codex-main validation snapshot</text>
+  <text x="84" y="136" fill="#94a3b8" font-family="Segoe UI, Arial, sans-serif" font-size="22">Two operating models verified: codex solo and codex + cowork</text>
+
+  <rect x="84" y="190" rx="24" ry="24" width="528" height="560" fill="url(#card)" stroke="#334155" stroke-width="2"/>
+  <rect x="668" y="190" rx="24" ry="24" width="528" height="560" fill="url(#card)" stroke="#334155" stroke-width="2"/>
+
+  <text x="120" y="246" fill="#e2e8f0" font-family="Segoe UI, Arial, sans-serif" font-size="32" font-weight="700">codex solo</text>
+  <text x="704" y="246" fill="#e2e8f0" font-family="Segoe UI, Arial, sans-serif" font-size="32" font-weight="700">codex + cowork</text>
+
+  <text x="120" y="290" fill="#38bdf8" font-family="Consolas, monospace" font-size="18">trigger: issue label "agent-codex"</text>
+  <text x="704" y="290" fill="#38bdf8" font-family="Consolas, monospace" font-size="18">trigger: PR open or label "dual-review"</text>
+
+  <text x="120" y="342" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="600">Verified output</text>
+  <text x="704" y="342" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="600">Verified output</text>
+
+  <text x="120" y="386" fill="#cbd5e1" font-family="Consolas, monospace" font-size="20">mode: single-agent</text>
+  <text x="120" y="418" fill="#cbd5e1" font-family="Consolas, monospace" font-size="20">implementer: codex</text>
+  <text x="120" y="450" fill="#cbd5e1" font-family="Consolas, monospace" font-size="20">reviewer: claude</text>
+  <text x="120" y="482" fill="#cbd5e1" font-family="Consolas, monospace" font-size="20">telegram_tier: notify</text>
+  <text x="120" y="514" fill="#cbd5e1" font-family="Consolas, monospace" font-size="20">max_rounds: 2</text>
+
+  <text x="704" y="386" fill="#cbd5e1" font-family="Consolas, monospace" font-size="20">mode: dual-agent</text>
+  <text x="704" y="418" fill="#cbd5e1" font-family="Consolas, monospace" font-size="20">telegram_tier: decision</text>
+  <text x="704" y="450" fill="#cbd5e1" font-family="Consolas, monospace" font-size="20">max_rounds: 2</text>
+  <text x="704" y="494" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="600">Live timings</text>
+  <text x="704" y="528" fill="#cbd5e1" font-family="Consolas, monospace" font-size="19">Telegram Notify      7s</text>
+  <text x="704" y="558" fill="#cbd5e1" font-family="Consolas, monospace" font-size="19">Auto Review          9s</text>
+  <text x="704" y="588" fill="#cbd5e1" font-family="Consolas, monospace" font-size="19">Full Review         56s</text>
+  <text x="704" y="618" fill="#cbd5e1" font-family="Consolas, monospace" font-size="19">Solo CTO Review     78s</text>
+
+  <text x="120" y="572" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="600">Evidence</text>
+  <text x="120" y="606" fill="#cbd5e1" font-family="Segoe UI, Arial, sans-serif" font-size="19">- routing-policy.json label rule</text>
+  <text x="120" y="636" fill="#cbd5e1" font-family="Segoe UI, Arial, sans-serif" font-size="19">- routing-engine.js output</text>
+  <text x="120" y="666" fill="#cbd5e1" font-family="Segoe UI, Arial, sans-serif" font-size="19">- codex-auto.yml dispatch path</text>
+
+  <text x="704" y="666" fill="#cbd5e1" font-family="Segoe UI, Arial, sans-serif" font-size="19">- live private repo PR-open run</text>
+  <text x="704" y="696" fill="#cbd5e1" font-family="Segoe UI, Arial, sans-serif" font-size="19">- rework dispatch + digest follow-up</text>
+
+  <rect x="84" y="780" rx="16" ry="16" width="1112" height="44" fill="#111827" stroke="#1e293b" stroke-width="2"/>
+  <text x="112" y="808" fill="#94a3b8" font-family="Segoe UI, Arial, sans-serif" font-size="20">Automated checks passed: CLI + doctor + E2E + routing + watch/external-signal suites. See examples/ and tests/ for the raw proof.</text>
+</svg>

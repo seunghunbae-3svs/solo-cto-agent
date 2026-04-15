@@ -6,28 +6,28 @@
   },
   "agents": {
     "codex": {
-      "accuracy": 0,
+      "accuracy": 0.5,
       "test_pass_rate": 1,
-      "review_hit_rate": 0,
-      "rework_rate": 0,
-      "tasks_completed": 0,
+      "review_hit_rate": 0.8,
+      "rework_rate": 0.1,
+      "tasks_completed": 10,
       "ci_pass": 10,
       "ci_total": 10,
-      "reviews_submitted": 0,
+      "reviews_submitted": 8,
       "merges": 5,
       "hotfixes": 0
     },
     "claude": {
-      "accuracy": 0.5,
-      "test_pass_rate": 0.5,
-      "review_hit_rate": 0.5,
-      "rework_rate": 0,
-      "tasks_completed": 0,
-      "ci_pass": 0,
-      "ci_total": 0,
-      "reviews_submitted": 0,
-      "merges": 0,
-      "hotfixes": 0
+      "accuracy": 0.7,
+      "test_pass_rate": 0.9,
+      "review_hit_rate": 0.75,
+      "rework_rate": 0.05,
+      "tasks_completed": 10,
+      "ci_pass": 9,
+      "ci_total": 10,
+      "reviews_submitted": 8,
+      "merges": 7,
+      "hotfixes": 1
     }
   },
   "by_repo": {},

@@ -1,0 +1,25 @@
+name: Template Audit
+
+on:
+  schedule:
+    - cron: '15 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Audit managed templates
+        env:
+          ORCHESTRATOR_PAT: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node ops/scripts/template-audit.js
