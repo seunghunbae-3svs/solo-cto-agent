@@ -13,12 +13,14 @@
   },
   "files": [
     "bin",
+    "completions",
     "templates",
     "skills",
     "docs",
     "tiers.json",
     "failure-catalog.json",
     "failure-catalog.schema.json",
+    "config.schema.json",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"

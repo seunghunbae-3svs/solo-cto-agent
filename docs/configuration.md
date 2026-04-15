@@ -4,10 +4,11 @@ solo-cto-agent works out of the box with zero configuration. Everything below is
 
 ## Config file
 
-Create `~/.solo-cto-agent/config.json` to customize defaults:
+Create `~/.solo-cto-agent/config.json` to customize defaults. A JSON Schema is included for editor autocompletion:
 
 ```json
 {
+  "$schema": "https://raw.githubusercontent.com/seunghunbae-3svs/solo-cto-agent/main/config.schema.json",
   "models": {
     "claude": "claude-sonnet-4-20250514",
     "codex": "codex-mini-latest",

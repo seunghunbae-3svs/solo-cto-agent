@@ -35,18 +35,37 @@ const _skillBase = () => _skillDirOverride
 
 // User config file: ~/.solo-cto-agent/config.json
 // Allows overriding models, API base URLs, review settings, etc.
+// Schema: config.schema.json — validation is advisory (warns, never blocks).
+function _validateConfigSchema(config, configPath) {
+  try {
+    const schemaPath = path.join(__dirname, "..", "config.schema.json");
+    if (!fs.existsSync(schemaPath)) return; // schema not shipped (dev env)
+    const Ajv = require("ajv");
+    const ajv = new Ajv({ allErrors: true });
+    const schema = JSON.parse(fs.readFileSync(schemaPath, "utf8"));
+    const valid = ajv.validate(schema, config);
+    if (!valid && ajv.errors) {
+      const issues = ajv.errors.map(e =>
+        `  - ${e.instancePath || "/"}: ${e.message}`
+      ).join("\n");
+      console.warn(`⚠ Config schema warnings (${configPath}):\n${issues}`);
+      console.warn(`  Config will still be used, but unexpected keys are ignored.`);
+    }
+  } catch (_) { /* ajv not installed at runtime — skip validation */ }
+}
+
 function _loadUserConfig() {
   const configPath = process.env.SOLO_CTO_CONFIG
     || path.join(os.homedir(), ".solo-cto-agent", "config.json");
   try {
     if (fs.existsSync(configPath)) {
-      return JSON.parse(fs.readFileSync(configPath, "utf8"));
+      const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      _validateConfigSchema(config, configPath);
+      return config;
     }
   } catch (e) {
-    const cfgPath = process.env.SOLO_CTO_CONFIG
-      || path.join(os.homedir(), ".solo-cto-agent", "config.json");
-    if (fs.existsSync(cfgPath)) {
-      console.warn(`⚠ Config file exists but is not valid JSON: ${cfgPath}`);
+    if (fs.existsSync(configPath)) {
+      console.warn(`⚠ Config file exists but is not valid JSON: ${configPath}`);
       console.warn(`  Using built-in defaults. Fix the file or delete it.`);
     }
   }
