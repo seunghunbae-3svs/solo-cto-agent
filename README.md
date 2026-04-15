@@ -14,8 +14,8 @@
 # 1. Install
 npm install -g solo-cto-agent
 
-# 2. Initialize (copies skills to ~/.claude/skills/)
-solo-cto-agent init
+# 2. Initialize (recommended: choose mode during wizard)
+npx solo-cto-agent init --wizard
 
 # 3. Set your Anthropic API key (required for reviews)
 #    Get one at: https://console.anthropic.com/settings/keys
@@ -34,6 +34,28 @@ solo-cto-agent review
 
 That is it. `doctor` will tell you if anything is missing and where to get it.
 
+### Platform-specific setup
+
+**macOS / Linux**
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+export OPENAI_API_KEY="sk-..."   # optional for cowork-main, required for codex-main
+solo-cto-agent doctor
+```
+
+**Windows PowerShell**
+
+```powershell
+$env:ANTHROPIC_API_KEY="sk-ant-..."
+$env:OPENAI_API_KEY="sk-..."   # optional for cowork-main, required for codex-main
+solo-cto-agent doctor
+```
+
+If you choose `codex-main` during the wizard, also install:
+- GitHub CLI: [cli.github.com](https://cli.github.com/)
+- GitHub PAT for cross-repo dispatch: [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
+
 ---
 
 I made this because I got tired of using AI coding tools that were good at writing code, but still left me doing all the messy CTO work around it.
@@ -50,7 +72,7 @@ This repo is my attempt to package those habits into a small set of reusable ski
 
 ## What this is
 
-`solo-cto-agent` is an opinionated skill pack for solo founders, indie hackers, and small teams using AI coding agents in their build workflow.
+`solo-cto-agent` is an opinionated CTO toolkit for solo founders, indie hackers, and small teams using AI coding agents in their build workflow.
 
 Primary workflow: **Claude Cowork + OpenAI Codex**. Cowork-only is supported for single-agent use, but this document assumes Cowork + Codex unless noted.
 
@@ -117,7 +139,11 @@ This pack is designed for Cowork + Codex. Start from the Claude entry point and 
 |---|---|---|
 | **Claude** (Cowork + CLI) | [docs/claude.md](docs/claude.md) | Supported (primary) |
 
-Other tools are intentionally not covered yet to keep the workflow tight and consistent.
+Gamma users can still use the toolkit today, but **Gamma is not a core runtime**. The intended flow is:
+- use `solo-cto-agent` to generate, review, tighten, and validate the content or product narrative
+- move the final output into Gamma for presentation publishing
+
+That keeps the core position stable: **Cowork + Codex are the operating surface, Gamma is a downstream publishing surface**.
 
 ## Examples
 
@@ -255,6 +281,12 @@ Details: `docs/tier-matrix.md`, `docs/tier-examples.md`, `docs/cto-policy.md`, `
 npm install -g solo-cto-agent
 solo-cto-agent init
 ```
+
+### Platform notes
+
+- **macOS:** supported directly. `zsh` is the default shell assumed by most examples.
+- **Windows:** supported for the CLI. Use PowerShell environment variables during setup. Some Cowork-side shell snippets still assume POSIX-style commands.
+- **Gamma:** supported as a downstream presentation tool for decks/docs/content, not as a primary execution surface.
 
 ### Maintainer note (publish)
 
