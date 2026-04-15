@@ -34,6 +34,29 @@ solo-cto-agent review
 
 That is it. `doctor` will tell you if anything is missing and where to get it.
 
+## Validated user paths
+
+These are not hypothetical docs-only flows. They were run from a packed CLI tarball on Windows PowerShell using the same commands a real user would run after install.
+
+| Path | What was tested | Result |
+|---|---|---|
+| Install | `npm pack` -> `npm install -g solo-cto-agent-1.1.0.tgz` | Passed |
+| cowork-main first day | `doctor`, `review --staged`, `sync --org ...` | Passed with actionable key/setup guidance |
+| codex-main first setup | `setup-pipeline --org ... --tier cto --repos ...` | Passed; generated orchestrator + product workflows |
+| Safety check | `init --wizard` in a non-TTY shell | Passed; refused cleanly without partial initialization |
+
+Raw evidence and command transcripts:
+- [benchmarks/real-user-install-validation.md](benchmarks/real-user-install-validation.md)
+- [examples/founder-workflow/cowork-main-first-day.md](examples/founder-workflow/cowork-main-first-day.md)
+- [examples/founder-workflow/codex-main-first-setup.md](examples/founder-workflow/codex-main-first-setup.md)
+
+Important: `cowork-main` and `codex-main` do not operate at the same automation level.
+
+- `cowork-main` is a real semi-auto path: local review, local knowledge, manual sync, optional dual-review.
+- `codex-main` is the full-auto path: orchestrator repo, GitHub Actions, cross-review, rework dispatch, preview and Telegram workflows.
+
+They share capability families. They do not share the same trigger model.
+
 ### Platform-specific setup
 
 **macOS / Linux**

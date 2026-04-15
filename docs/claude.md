@@ -108,6 +108,26 @@ Default recommendation:
 - **Linux:** supported.
 - **Gamma:** supported only as a downstream publishing surface. Not a runtime target.
 
+## What has been tested in practice
+
+This toolkit now has real install-path evidence, not just architecture docs.
+
+- Packaged install from `npm pack` -> global install: passed
+- `doctor` after install: passed, with real key URLs and shell-aware commands
+- `cowork-main` first-day path (`review`, `sync`): passed
+- `codex-main` first scaffold generation (`setup-pipeline`): passed
+
+Important interpretation:
+
+- `cowork-main` is viable for real users as a semi-auto path.
+- `codex-main` is viable for real users as the stronger full-auto path.
+- They are not the same operating level. They share capability families, but not the same trigger model.
+
+See:
+- [benchmarks/real-user-install-validation.md](../benchmarks/real-user-install-validation.md)
+- [examples/founder-workflow/cowork-main-first-day.md](../examples/founder-workflow/cowork-main-first-day.md)
+- [examples/founder-workflow/codex-main-first-setup.md](../examples/founder-workflow/codex-main-first-setup.md)
+
 ## Where to go next
 
 - Main overview: [README.md](../README.md)
