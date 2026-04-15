@@ -22,6 +22,8 @@ let pluginManager;
 try { pluginManager = require("./plugin-manager"); } catch (_) { pluginManager = null; }
 let telegramWizard;
 try { telegramWizard = require("./telegram-wizard"); } catch (_) { telegramWizard = null; }
+let selfEvolve;
+try { selfEvolve = require("./self-evolve"); } catch (_) { selfEvolve = null; }
 
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CATALOG = path.join(ROOT, "failure-catalog.json");
@@ -2624,6 +2626,228 @@ async function main() {
 
     console.error(`❌ Unknown plugin subcommand: ${sub}`);
     console.error(`   Use: solo-cto-agent plugin list|show|add|remove`);
+    process.exit(1);
+  }
+
+  // ─── self-evolve (error tracking, quality checks, feedback, reports) ─
+  if (cmd === "self-evolve" || cmd === "evolve") {
+    if (!selfEvolve) {
+      console.error("❌ self-evolve module not installed. Reinstall solo-cto-agent.");
+      process.exit(1);
+    }
+    const sub = args[1] || "status";
+    const get = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : null; };
+    const projectDir = get("--project-dir") || process.cwd();
+    const skillsDir = get("--skills-dir") || path.join(projectDir, ".solo-cto-agent", "skills");
+
+    if (sub === "init") {
+      selfEvolve.initializeDataFiles(projectDir);
+      console.log("✅ Self-evolve data files initialized.");
+      return;
+    }
+
+    if (sub === "status") {
+      const status = selfEvolve.getStatus(projectDir);
+      const icon = status.health === "ok" ? "✅" : status.health === "degraded" ? "⚠️" : "❌";
+      console.log(`\n${icon} Self-Evolve Status: ${status.health}\n`);
+      console.log("Files:");
+      for (const [file, exists] of Object.entries(status.files)) {
+        console.log(`  ${exists ? "✅" : "❌"} ${file}`);
+      }
+      console.log("\nModules:");
+      for (const [mod, loaded] of Object.entries(status.modules)) {
+        console.log(`  ${loaded ? "✅" : "❌"} ${mod}`);
+      }
+      if (status.issues.length) {
+        console.log(`\nIssues (${status.issues.length}):`);
+        for (const issue of status.issues) console.log(`  - ${issue}`);
+      }
+      return;
+    }
+
+    if (sub === "error") {
+      const skill = get("--skill");
+      const symptom = get("--symptom");
+      if (!skill || !symptom) {
+        console.error("❌ Usage: solo-cto-agent self-evolve error --skill <name> --symptom <text>");
+        console.error("         [--category build|design|api|deploy|type|runtime|other]");
+        console.error("         [--cause <text>] [--fix <text>] [--severity critical|high|medium|low]");
+        process.exit(1);
+      }
+      const result = selfEvolve.collectError(projectDir, {
+        skill,
+        symptom,
+        category: get("--category") || "other",
+        cause: get("--cause") || "Unknown",
+        fix: get("--fix") || "Pending",
+        severity: get("--severity") || "medium",
+      });
+      if (result.isNew) {
+        console.log(`✅ E-${result.id}: New error pattern recorded (${skill})`);
+      } else {
+        console.log(`🔄 E-${result.id}: Repeat count → ${result.repeatCount}`);
+      }
+      if (result.triggerImprovement) {
+        console.log(`🔴 Skill improvement trigger fired! (${skill}, ${result.repeatCount}x)`);
+      }
+      return;
+    }
+
+    if (sub === "quality") {
+      const type = get("--type") || "code";
+      const skill = get("--skill") || "unknown";
+      const checksRaw = get("--checks") || "";
+      const checks = {};
+      for (const pair of checksRaw.split(",").filter(Boolean)) {
+        const [k, v] = pair.split(":");
+        if (k && v) checks[k.trim()] = v.trim();
+      }
+      if (Object.keys(checks).length === 0) {
+        console.error("❌ Usage: solo-cto-agent self-evolve quality --type code --skill <name> --checks 'build:pass,ts:warn'");
+        process.exit(1);
+      }
+      const result = selfEvolve.analyzeQuality(projectDir, {
+        type, skill, checks,
+        notes: get("--notes") || "",
+        feedbackScore: get("--feedback") ? parseInt(get("--feedback"), 10) : null,
+      });
+      const icon = result.overallScore === "pass" ? "✅" : result.overallScore === "warn" ? "⚠️" : "❌";
+      console.log(`${icon} Quality: ${result.overallScore} (${type}/${skill})`);
+      console.log(`   Pass: ${result.passCount}  Warn: ${result.warnCount}  Fail: ${result.failCount}`);
+      if (result.triggerImprovement) {
+        console.log(`🔴 Skill improvement trigger fired! (${skill}, ${type})`);
+      }
+      return;
+    }
+
+    if (sub === "feedback" || sub === "score") {
+      const skill = get("--skill");
+      const scoreStr = get("--score");
+      if (!skill || !scoreStr) {
+        console.error("❌ Usage: solo-cto-agent self-evolve feedback --skill <name> --score <1-5>");
+        console.error("         [--task <text>] [--reason <text>]");
+        process.exit(1);
+      }
+      const score = parseInt(scoreStr, 10);
+      if (score < 1 || score > 5) {
+        console.error("❌ Score must be between 1 and 5.");
+        process.exit(1);
+      }
+      const result = selfEvolve.recordSatisfaction(projectDir, {
+        skill,
+        score,
+        task: get("--task") || "",
+        reason: get("--reason") || "",
+      });
+      console.log(`📝 Feedback recorded: ${skill} → ${score}/5`);
+      if (result.triggerL2) {
+        console.log(`🔴 L2 auto-patch trigger fired! (${skill}, ${result.lowCount}x low scores)`);
+      }
+      return;
+    }
+
+    if (sub === "improve") {
+      if (args.includes("--check") || args.includes("--apply") === false) {
+        const triggers = selfEvolve.checkTriggers(projectDir);
+        if (triggers.length === 0) {
+          console.log("✅ No improvement triggers pending.");
+        } else {
+          console.log(`⚠️  ${triggers.length} improvement trigger(s):`);
+          for (const t of triggers) {
+            console.log(`  - [${t.source}] ${t.skill}: ${t.reason} (count: ${t.count})`);
+          }
+          if (!args.includes("--apply")) {
+            console.log("\nRun with --apply to auto-patch skills.");
+          }
+        }
+      }
+      if (args.includes("--apply")) {
+        const triggers = selfEvolve.checkTriggers(projectDir);
+        if (triggers.length === 0) {
+          console.log("✅ Nothing to apply.");
+          return;
+        }
+        for (const t of triggers) {
+          try {
+            selfEvolve.applyImprovement(skillsDir, t, projectDir);
+            console.log(`✅ Applied improvement: ${t.skill} (${t.source})`);
+          } catch (err) {
+            console.error(`❌ Failed to improve ${t.skill}: ${err.message}`);
+          }
+        }
+      }
+      return;
+    }
+
+    if (sub === "report") {
+      const weeks = parseInt(get("--weeks") || "1", 10);
+      const report = selfEvolve.generateWeeklyReport(projectDir, { weeks });
+      console.log(report.content);
+      console.log(`\n📄 Report saved: ${report.filePath}`);
+      return;
+    }
+
+    if (sub === "trends") {
+      const npmDir = get("--npm-dir") || projectDir;
+      const report = selfEvolve.generateTrendsReport(projectDir, { npmDir });
+      console.log(report.content);
+      console.log(`\n📄 Trends report saved: ${report.filePath}`);
+      return;
+    }
+
+    if (sub === "scout") {
+      if (args.includes("--installed")) {
+        const skills = selfEvolve.getInstalledSkills(skillsDir);
+        console.log(`📦 Installed skills (${skills.length}):`);
+        for (const s of skills) {
+          console.log(`  - ${s.name}: ${s.description || "(no description)"}`);
+        }
+        return;
+      }
+      console.error("❌ Usage: solo-cto-agent self-evolve scout --installed");
+      process.exit(1);
+    }
+
+    if (sub === "errors") {
+      const n = parseInt(get("--top") || "10", 10);
+      const top = selfEvolve.getTopErrors ? selfEvolve.getTopErrors(projectDir, n) : [];
+      if (top.length === 0) {
+        console.log("✅ No error patterns recorded.");
+      } else {
+        console.log(`Top ${top.length} error patterns:`);
+        for (const e of top) {
+          console.log(`  E-${e.id}: ${e.symptom} (${e.repeatCount}x, ${e.skill})`);
+        }
+      }
+      return;
+    }
+
+    if (sub === "summary") {
+      const trend = selfEvolve.getQualityTrend ? selfEvolve.getQualityTrend(projectDir, 20) : [];
+      const fbSummary = selfEvolve.getFeedbackSummary ? selfEvolve.getFeedbackSummary(projectDir) : null;
+      console.log("=== Quality Trend (last 20) ===");
+      if (trend.length === 0) {
+        console.log("  No quality records yet.");
+      } else {
+        for (const r of trend) {
+          const icon = r.overallScore === "pass" ? "✅" : r.overallScore === "warn" ? "⚠️" : "❌";
+          console.log(`  ${icon} ${r.date} ${r.type}/${r.skill}: ${r.overallScore}`);
+        }
+      }
+      if (fbSummary) {
+        console.log("\n=== Feedback Summary ===");
+        console.log(`  Total: ${fbSummary.totalCount}, Average: ${fbSummary.averageScore.toFixed(1)}`);
+        if (fbSummary.bySkill && Object.keys(fbSummary.bySkill).length > 0) {
+          for (const [sk, data] of Object.entries(fbSummary.bySkill)) {
+            console.log(`  ${sk}: avg ${data.average.toFixed(1)} (${data.count} records)`);
+          }
+        }
+      }
+      return;
+    }
+
+    console.error(`❌ Unknown self-evolve subcommand: ${sub}`);
+    console.error("   Use: solo-cto-agent self-evolve init|status|error|quality|feedback|improve|report|trends|scout|errors|summary");
     process.exit(1);
   }
 
