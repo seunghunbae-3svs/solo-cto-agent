@@ -54,11 +54,14 @@ Usage:
   solo-cto-agent status
   solo-cto-agent lint [path]
   solo-cto-agent doctor
+  solo-cto-agent notify deploy-ready --target <env> --url <url> --commit <sha> [--body <msg>]
+  solo-cto-agent notify deploy-error --target <env> --commit <sha> --body <msg>
+  solo-cto-agent telegram wizard [--lang <en|ko>]
   solo-cto-agent --help
   solo-cto-agent --lang <en|ko> <command>      # override CLI locale (or SOLO_CTO_LANG env)
 
 Commands:
-  init              Install skills to ~/.claude/skills/ (add --wizard for interactive setup)
+  init              Install skills to ~/.claude/skills/, then run doctor to verify setup
   setup-pipeline    Full pipeline setup: create orchestrator repo + install workflows to product repos
   setup-repo        Install dual-agent workflows to a single product repo
   upgrade           Upgrade Builder (Lv4) → CTO (Lv5+6): add multi-agent workflows + config
@@ -69,7 +72,9 @@ Commands:
   session           Save/restore/list session context (cowork-main mode)
   status            Check skill health, error catalog, sync status (local only, no network)
   lint              Check skill files for size and structure issues
-  doctor            Complete system health check (skills, engine, API keys, lint, sync, catalog)
+  doctor            Complete system health check (skills, engine, API keys, notifications, catalog)
+  notify            Send event-tagged notification (deploy-ready / deploy-error)
+  telegram wizard   Interactive setup for Telegram notifications (SOLO_CTO_EXPERIMENTAL=1)
 
 Presets / Tiers:
   maker       Spark + Review + Memory + Craft (idea validation only)
@@ -95,6 +100,9 @@ Examples:
   npx solo-cto-agent session save --project tribo          # save session context
   npx solo-cto-agent session restore                       # load most recent session
   npx solo-cto-agent session list --limit 5                # show 5 recent sessions
+  npx solo-cto-agent notify deploy-ready --target production --url https://myapp.com --commit abc1234
+  npx solo-cto-agent notify deploy-error --target preview --body "$(tail -50 build.log)"
+  SOLO_CTO_EXPERIMENTAL=1 npx solo-cto-agent telegram wizard   # setup Telegram alerts
 `);
 }
 
@@ -239,7 +247,9 @@ Style: {{YOUR_STYLE}}
   console.log(`   skills installed: ${installed.length ? installed.join(", ") : "none (already exist)"}`);
   if (skipped.length) console.log(`   skills skipped: ${skipped.join(", ")}`);
   console.log("");
-  console.log("Next: run 'solo-cto-agent setup-pipeline' to deploy CI/CD automation");
+  console.log("Running doctor to check remaining setup...");
+  console.log("");
+  doctorCommand({ exitOnError: false });
 }
 
 // ─── setup-pipeline: Full Pipeline Deploy ───────────────────
@@ -1012,7 +1022,7 @@ function lintCommand(targetPath) {
 
 // ─── doctor: System Health Check ─────────────────────────────
 
-function doctorCommand() {
+function doctorCommand(opts = {}) {
   const targetDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
   const skillPath = path.join(targetDir, "SKILL.md");
   const catalogPath = path.join(targetDir, "failure-catalog.json");
@@ -1120,21 +1130,26 @@ function doctorCommand() {
   if (hasAnthropic) {
     console.log("   ✅ ANTHROPIC_API_KEY is set");
   } else {
-    console.log("   ⚠️  ANTHROPIC_API_KEY not set");
-    issues.push({ level: "warn", msg: "ANTHROPIC_API_KEY not set (needed for local review)" });
+    console.log("   ❌ ANTHROPIC_API_KEY not set (required)");
+    console.log("      → Get your key: https://console.anthropic.com/settings/keys");
+    console.log("      → Then run:     export ANTHROPIC_API_KEY=\"sk-ant-...\"");
+    issues.push({ level: "error", msg: "ANTHROPIC_API_KEY not set — reviews will not work" });
+    criticalCount++;
   }
 
   if (hasOpenAI) {
     console.log("   ✅ OPENAI_API_KEY is set");
   } else {
-    console.log("   ℹ️  OPENAI_API_KEY not set (optional, only for dual-review)");
+    console.log("   ℹ️  OPENAI_API_KEY not set (optional — enables dual-review)");
+    console.log("      → Get one at: https://platform.openai.com/api-keys");
   }
 
   const detectedMode = hasAnthropic && hasOpenAI ? "dual" : hasAnthropic ? "solo" : "none";
   console.log(`   ℹ️  Detected mode: ${detectedMode}`);
 
   if (detectedMode === "none") {
-    issues.push({ level: "warn", msg: "No API keys found (set ANTHROPIC_API_KEY for local review)" });
+    issues.push({ level: "error", msg: "No API keys found — set ANTHROPIC_API_KEY to use reviews" });
+    criticalCount++;
   }
 
   // ─── Lint Check ─────────────────────────────────
@@ -1143,7 +1158,7 @@ function doctorCommand() {
   const skillsDir = path.join(ROOT, "skills");
   if (fs.existsSync(skillsDir)) {
     const lintDir = skillsDir;
-    const MAX_LINES = 150;
+    const MAX_LINES = 250;
     const entries = fs.readdirSync(lintDir, { withFileTypes: true });
     const skillDirs = entries.filter(e => e.isDirectory()).length;
     let lintIssues = 0;
@@ -1217,6 +1232,31 @@ function doctorCommand() {
     issues.push({ level: "warn", msg: "failure-catalog.json not found" });
   }
 
+  // ─── Notification Channels Check ────────────────
+  console.log("");
+  console.log("🔔 Notifications");
+  const hasTgToken = !!process.env.TELEGRAM_BOT_TOKEN;
+  const hasTgChat = !!process.env.TELEGRAM_CHAT_ID;
+  const hasSlack = !!process.env.SLACK_WEBHOOK_URL;
+  const hasDiscord = !!process.env.DISCORD_WEBHOOK_URL;
+
+  if (hasTgToken && hasTgChat) {
+    console.log("   ✅ Telegram configured");
+  } else if (hasTgToken || hasTgChat) {
+    console.log("   ⚠️  Telegram partially configured (need both TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)");
+    console.log("      → Run: solo-cto-agent telegram wizard");
+    issues.push({ level: "warn", msg: "Telegram partially configured" });
+  } else {
+    console.log("   ℹ️  Telegram not configured (optional — enables deploy/review alerts)");
+    console.log("      → Setup: SOLO_CTO_EXPERIMENTAL=1 solo-cto-agent telegram wizard");
+  }
+
+  if (hasSlack) console.log("   ✅ Slack configured");
+  if (hasDiscord) console.log("   ✅ Discord configured");
+  if (!hasTgToken && !hasSlack && !hasDiscord) {
+    console.log("   ℹ️  No notification channels — alerts go to stderr only");
+  }
+
   // ─── Summary ─────────────────────────────────────
   console.log("");
   console.log("─".repeat(40));
@@ -1225,29 +1265,39 @@ function doctorCommand() {
   const warns = issues.filter(i => i.level === "warn");
 
   if (errors.length === 0 && warns.length === 0) {
-    console.log("✅ System healthy");
+    console.log("✅ All checks passed — you are ready to go!");
     console.log("");
-    process.exit(0);
+    console.log("Try your first review:");
+    console.log("   cd <your-git-repo>");
+    console.log("   git add -A && solo-cto-agent review");
+    console.log("");
+    if (opts.exitOnError !== false) process.exit(0);
+    return;
   }
 
   if (errors.length > 0) {
     console.log("");
-    console.log("Critical Issues:");
+    console.log("❌ Fix these before using solo-cto-agent:");
     for (const err of errors) {
-      console.log(`❌ ${err.msg}`);
+      console.log(`   • ${err.msg}`);
     }
   }
 
   if (warns.length > 0) {
     console.log("");
-    console.log("Warnings:");
+    console.log("⚠️  Warnings (non-blocking):");
     for (const warn of warns) {
-      console.log(`⚠️  ${warn.msg}`);
+      console.log(`   • ${warn.msg}`);
     }
   }
 
+  if (errors.length > 0) {
+    console.log("");
+    console.log("After fixing, run 'solo-cto-agent doctor' again to verify.");
+  }
+
   console.log("");
-  process.exit(errors.length > 0 ? 1 : 0);
+  if (opts.exitOnError !== false) process.exit(errors.length > 0 ? 1 : 0);
 }
 
 // ─── upgrade: Builder → CTO ────────────────────────────────
