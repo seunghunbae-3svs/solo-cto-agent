@@ -20,6 +20,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { execSync } = require("child_process");
+const C = require("./constants");
 
 // ============================================================================
 // CONFIGURATION & CONSTANTS
@@ -80,18 +81,18 @@ const CONFIG = {
   get sessionsDir() { return path.join(_skillBase(), "sessions"); },
   get personalizationFile() { return path.join(_skillBase(), "personalization.json"); },
   defaultModel: {
-    claude: (_userConfig.models && _userConfig.models.claude) || "claude-sonnet-4-20250514",
-    codex: (_userConfig.models && _userConfig.models.codex) || "codex-mini-latest",
-    openai: (_userConfig.models && _userConfig.models.openai) || "gpt-4o",
+    claude: (_userConfig.models && _userConfig.models.claude) || C.MODELS.claude,
+    codex: (_userConfig.models && _userConfig.models.codex) || C.MODELS.codex,
+    openai: (_userConfig.models && _userConfig.models.openai) || C.MODELS.openai,
   },
   // Tier → model mapping. Haiku for light validation (maker),
   // Sonnet for balanced dev work (builder), Opus for orchestration
   // and deeper reasoning (cto). Env overrides documented in resolveModelForTier().
   tierModels: {
     claude: {
-      maker:   "claude-haiku-4-5-20251001",
-      builder: "claude-sonnet-4-5-20250929",
-      cto:     "claude-opus-4-5-20250929",
+      maker:   C.MODELS.tier.maker,
+      builder: C.MODELS.tier.builder,
+      cto:     C.MODELS.tier.cto,
       ...(_userConfig.tierModels && _userConfig.tierModels.claude),
     },
   },
@@ -100,14 +101,14 @@ const CONFIG = {
   providers: {
     anthropicBase: process.env.ANTHROPIC_API_BASE
       || (_userConfig.providers && _userConfig.providers.anthropicBase)
-      || "api.anthropic.com",
+      || C.API_HOSTS.anthropic,
     openaiBase: process.env.OPENAI_API_BASE
       || (_userConfig.providers && _userConfig.providers.openaiBase)
-      || "api.openai.com",
+      || C.API_HOSTS.openai,
   },
   // Diff chunking — split large diffs before sending to API.
   diff: {
-    maxChunkBytes: (_userConfig.diff && _userConfig.diff.maxChunkBytes) || 50000,
+    maxChunkBytes: (_userConfig.diff && _userConfig.diff.maxChunkBytes) || C.LIMITS.maxChunkBytes,
   },
   // Tier × Mode 자동화 한계 (Semi-auto mode)
   tierLimits: {
@@ -121,7 +122,7 @@ const CONFIG = {
   routines: {
     enabled: (_userConfig.routines && _userConfig.routines.enabled) || false,
     triggerId: (_userConfig.routines && _userConfig.routines.triggerId) || null,
-    betaHeader: "experimental-cc-routine-2026-04-01",
+    betaHeader: C.BETA_HEADERS.routines,
     // Daily run caps by plan: Pro=5, Max=15, Team/Enterprise=25
     schedules: (_userConfig.routines && _userConfig.routines.schedules) || [],
   },
@@ -129,9 +130,9 @@ const CONFIG = {
   // CTO tier only. $0.08/session-hour + standard token rates.
   managedAgents: {
     enabled: (_userConfig.managedAgents && _userConfig.managedAgents.enabled) || false,
-    model: (_userConfig.managedAgents && _userConfig.managedAgents.model) || "claude-sonnet-4-6",
-    betaHeader: "managed-agents-2026-04-01",
-    sessionTimeoutMs: (_userConfig.managedAgents && _userConfig.managedAgents.sessionTimeoutMs) || 300000,
+    model: (_userConfig.managedAgents && _userConfig.managedAgents.model) || C.MODELS.managedAgent,
+    betaHeader: C.BETA_HEADERS.managedAgents,
+    sessionTimeoutMs: (_userConfig.managedAgents && _userConfig.managedAgents.sessionTimeoutMs) || C.TIMEOUTS.managedAgent,
   },
 };
 
@@ -753,7 +754,7 @@ function getDiff(source, target, opts = {}) {
       default:
         cmd = "git diff --staged";
     }
-    return execSync(cmd, { encoding: "utf8", maxBuffer: 1024 * 1024 * 5, cwd });
+    return execSync(cmd, { encoding: "utf8", maxBuffer: C.LIMITS.gitDiffBuffer, cwd });
   } catch (e) {
     const stderr = e && e.stderr ? e.stderr.toString() : "";
     const msg = `${e && e.message ? e.message : ""} ${stderr}`.toLowerCase();
@@ -792,7 +793,7 @@ function getRecentCommits(hours = 24) {
     const since = `${hours}h`;
     const log = execSync(`git log --since="${since}" --format=%B`, {
       encoding: "utf8",
-      maxBuffer: 1024 * 1024,
+      maxBuffer: C.LIMITS.gitCommandBuffer,
     });
     return log;
   } catch {
@@ -801,17 +802,8 @@ function getRecentCommits(hours = 24) {
 }
 
 function estimateCost(inputTokens, outputTokens, model) {
-  // Rough estimates per 1K tokens (as of 2026-04). Tier models added for PR-G2.
-  const rates = {
-    // Legacy / sonnet-4 family (backstop default)
-    "claude-sonnet-4-20250514": { input: 0.003, output: 0.015 },
-    "claude-opus-4-20250514":   { input: 0.015, output: 0.075 },
-    // Tier defaults (PR-G2)
-    "claude-haiku-4-5-20251001":  { input: 0.0008, output: 0.004 },
-    "claude-sonnet-4-5-20250929": { input: 0.003,  output: 0.015 },
-    "claude-opus-4-5-20250929":   { input: 0.015,  output: 0.075 },
-    "codex-mini-latest": { input: 0.0005, output: 0.0015 },
-  };
+  // Pricing from constants.js — single source of truth for all model rates.
+  const rates = C.PRICING;
 
   // Prefix-based fallback so new minor model versions still get sane estimates
   // rather than silently defaulting to sonnet rates.
@@ -840,7 +832,7 @@ function _anthropicOnce(prompt, systemPrompt, model) {
 
     const body = JSON.stringify({
       model,
-      max_tokens: 4096,
+      max_tokens: C.LIMITS.maxTokens,
       system: systemPrompt,
       messages: [{ role: "user", content: prompt }],
     });
@@ -852,11 +844,11 @@ function _anthropicOnce(prompt, systemPrompt, model) {
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+        "anthropic-version": C.ANTHROPIC_API_VERSION,
       },
     };
 
-    const API_TIMEOUT_MS = 120000; // 2 minutes — LLM responses can be slow on large diffs
+    const API_TIMEOUT_MS = C.TIMEOUTS.apiCall; // 2 minutes — LLM responses can be slow on large diffs
 
     const req = https.request(options, (res) => {
       let data = "";
@@ -907,7 +899,7 @@ async function callAnthropic(prompt, systemPrompt, model, opts = {}) {
       const body = (e.body || e.message || "").toLowerCase();
       const isRateLimit = body.includes("rate_limit") || body.includes("overloaded") || e.statusCode === 429 || e.statusCode === 529;
       if (attempt === maxRetries - 1) break;
-      const waitMs = isRateLimit ? (attempt + 1) * 30000 : (attempt + 1) * 15000;
+      const waitMs = isRateLimit ? (attempt + 1) * C.RETRY_DELAYS.rateLimit : (attempt + 1) * C.RETRY_DELAYS.generic;
       logWarn(`Anthropic ${isRateLimit ? "rate limited" : "error"}, waiting ${waitMs / 1000}s (attempt ${attempt + 1}/${maxRetries})...`);
       await new Promise((r) => setTimeout(r, waitMs));
     }
@@ -929,7 +921,7 @@ function _openaiOnce(prompt, systemPrompt, model) {
         { role: "system", content: systemPrompt },
         { role: "user", content: prompt },
       ],
-      max_tokens: 4096,
+      max_tokens: C.LIMITS.maxTokens,
     });
 
     const options = {
@@ -942,7 +934,7 @@ function _openaiOnce(prompt, systemPrompt, model) {
       },
     };
 
-    const API_TIMEOUT_MS = 120000;
+    const API_TIMEOUT_MS = C.TIMEOUTS.apiCall;
 
     const req = https.request(options, (res) => {
       let data = "";
@@ -993,7 +985,7 @@ async function callOpenAI(prompt, systemPrompt, model) {
       const body = (e.body || e.message || "").toLowerCase();
       const isRateLimit = body.includes("rate_limit") || e.statusCode === 429;
       if (attempt === 2) break;
-      const waitMs = isRateLimit ? (attempt + 1) * 30000 : (attempt + 1) * 15000;
+      const waitMs = isRateLimit ? (attempt + 1) * C.RETRY_DELAYS.rateLimit : (attempt + 1) * C.RETRY_DELAYS.generic;
       logWarn(`OpenAI ${isRateLimit ? "rate limited" : "error"}, waiting ${waitMs / 1000}s (attempt ${attempt + 1}/3)...`);
       await new Promise((r) => setTimeout(r, waitMs));
     }
@@ -3305,14 +3297,14 @@ async function fireRoutine(options = {}) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(payload);
     const req = https.request({
-      hostname: "api.anthropic.com",
+      hostname: C.API_HOSTS.anthropic,
       path: `/v1/claude_code/routines/${triggerId}/fire`,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`,
         "anthropic-beta": CONFIG.routines.betaHeader,
-        "anthropic-version": "2023-06-01",
+        "anthropic-version": C.ANTHROPIC_API_VERSION,
       },
     }, (res) => {
       let data = "";
@@ -3453,19 +3445,19 @@ ${errorPatterns}
       model,
       system: systemPrompt,
       messages: [{ role: "user", content: `Review this diff:\n\`\`\`diff\n${diff}\n\`\`\`` }],
-      max_tokens: 8192,
+      max_tokens: C.LIMITS.maxTokensDeep,
       tools: [{ type: "computer_20250124", name: "computer" }],
     });
 
     const req = https.request({
-      hostname: "api.anthropic.com",
+      hostname: C.API_HOSTS.anthropic,
       path: "/v1/managed_agents/sessions",
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-beta": CONFIG.managedAgents.betaHeader,
-        "anthropic-version": "2023-06-01",
+        "anthropic-version": C.ANTHROPIC_API_VERSION,
       },
     }, (res) => {
       let data = "";

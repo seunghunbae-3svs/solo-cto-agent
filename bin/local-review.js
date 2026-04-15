@@ -17,6 +17,7 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const C = require("./constants");
 
 // ============================================================================
 // API Callers
@@ -25,7 +26,7 @@ const os = require("os");
 /**
  * Call Anthropic API for code review
  */
-function callAnthropic(diff, apiKey, model = "claude-sonnet-4-20250514", maxTokens = 4096) {
+function callAnthropic(diff, apiKey, model = C.MODELS.claude, maxTokens = C.LIMITS.maxTokens) {
   return new Promise((resolve, reject) => {
     const systemPrompt = `You are a senior code reviewer for production code. Your review style:
 - Risks and bugs before praise
@@ -57,7 +58,7 @@ IMPORTANT: Respond ONLY with valid JSON, no other text. Use this exact structure
     });
 
     const options = {
-      hostname: "api.anthropic.com",
+      hostname: C.API_HOSTS.anthropic,
       path: "/v1/messages",
       method: "POST",
       headers: {
@@ -66,7 +67,7 @@ IMPORTANT: Respond ONLY with valid JSON, no other text. Use this exact structure
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
       },
-      timeout: 60000,
+      timeout: C.TIMEOUTS.localReview,
     };
 
     const req = https.request(options, (res) => {
@@ -104,7 +105,7 @@ IMPORTANT: Respond ONLY with valid JSON, no other text. Use this exact structure
 /**
  * Call OpenAI API for code review (optional second agent)
  */
-function callOpenAI(diff, apiKey, model = "gpt-4o") {
+function callOpenAI(diff, apiKey, model = C.MODELS.openai) {
   return new Promise((resolve, reject) => {
     const systemPrompt = `You are a senior code reviewer for production code. Your review style:
 - Risks and bugs before praise
@@ -135,7 +136,7 @@ IMPORTANT: Respond ONLY with valid JSON, no other text. Use this exact structure
     });
 
     const options = {
-      hostname: "api.openai.com",
+      hostname: C.API_HOSTS.openai,
       path: "/v1/chat/completions",
       method: "POST",
       headers: {
@@ -143,7 +144,7 @@ IMPORTANT: Respond ONLY with valid JSON, no other text. Use this exact structure
         "Content-Length": Buffer.byteLength(body),
         Authorization: `Bearer ${apiKey}`,
       },
-      timeout: 60000,
+      timeout: C.TIMEOUTS.localReview,
     };
 
     const req = https.request(options, (res) => {
@@ -614,7 +615,7 @@ function formatJSON(diff, reviews, comparison, patterns) {
  * @param {string} options.outputFormat - "terminal" | "markdown" | "json"
  * @param {string} options.outputFile - Optional file path to write report
  * @param {string} options.model - Claude model (default: claude-sonnet-4-20250514)
- * @param {number} options.maxTokens - Max tokens (default: 4096)
+ * @param {number} options.maxTokens - Max tokens (default: 4096 via constants)
  * @returns {Promise<string>} - Formatted report
  */
 async function localReview(options = {}) {
@@ -625,7 +626,7 @@ async function localReview(options = {}) {
     outputFormat = "terminal",
     outputFile = null,
     model = "claude-sonnet-4-20250514",
-    maxTokens = 4096,
+    maxTokens = C.LIMITS.maxTokens,
   } = options;
 
   // Validate API keys
