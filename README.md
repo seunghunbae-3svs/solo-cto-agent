@@ -92,6 +92,21 @@ It is probably not a good fit if you:
 * want every action manually approved
 * prefer a neutral framework-agnostic starter pack with very conservative defaults
 
+## Operating modes
+
+Choose a mode during `init --wizard`. The same package supports both.
+
+| Mode | Default behavior | Best for |
+|---|---|---|
+| **codex-main** | Full CI/CD automation (GitHub Actions, auto-review, auto-rework) | Stable GitHub Actions + webhook environments |
+| **cowork-main** | Local-first with manual sync (wizard + local review/sync) | Offline work, minimal external dependencies |
+
+**codex-main** — PR opened → Claude review → Codex cross-review → rework loop → merge conditions. Agent scores auto-updated in orchestrator repo.
+
+**cowork-main** — Local review/learn commands work without GitHub Actions. `sync --apply` pulls latest scores/patterns when you choose.
+
+The selected mode is saved in `~/.claude/skills/solo-cto-agent/SKILL.md`.
+
 ---
 
 ## Tool entry points
