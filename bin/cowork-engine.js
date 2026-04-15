@@ -42,7 +42,14 @@ function _loadUserConfig() {
     if (fs.existsSync(configPath)) {
       return JSON.parse(fs.readFileSync(configPath, "utf8"));
     }
-  } catch (_) { /* malformed config — silently use defaults */ }
+  } catch (e) {
+    const cfgPath = process.env.SOLO_CTO_CONFIG
+      || path.join(os.homedir(), ".solo-cto-agent", "config.json");
+    if (fs.existsSync(cfgPath)) {
+      console.warn(`⚠ Config file exists but is not valid JSON: ${cfgPath}`);
+      console.warn(`  Using built-in defaults. Fix the file or delete it.`);
+    }
+  }
   return {};
 }
 const _userConfig = _loadUserConfig();
