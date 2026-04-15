@@ -6,7 +6,7 @@ const required = [
   'package.json',
   'setup.sh',
   'README.md',
-  'CONTRIBUTING',
+  'CONTRIBUTING.md',
   'examples/README.md',
   'docs/claude.md',
   'failure-catalog.json',

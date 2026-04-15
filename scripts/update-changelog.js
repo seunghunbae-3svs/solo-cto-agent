@@ -1,7 +1,7 @@
 const fs = require('fs');
 const { execSync } = require('child_process');
 
-const path = 'CHANGELOG';
+const path = 'CHANGELOG.md';
 let content = fs.readFileSync(path, 'utf8');
 const header = '# Changelog';
 if (!content.startsWith(header)) {

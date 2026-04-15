@@ -21,7 +21,7 @@
     "failure-catalog.schema.json",
     "README.md",
     "LICENSE",
-    "CHANGELOG"
+    "CHANGELOG.md"
   ],
   "keywords": [
     "claude",

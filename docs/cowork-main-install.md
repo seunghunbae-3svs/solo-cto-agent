@@ -1,559 +1,108 @@
-﻿# cowork-main ??Semi-Auto Mode Install & Operating Guide
+# Cowork-Main Setup Guide
 
-> `cowork-main` = **Semi-auto mode**.  (??? `codex-main` = Full-auto mode.)
-> Claude Cowork agent 媛 desktop runtime ?먯꽌 ?뚮㈃???꾩슂??cloud amplifier 瑜???뼱 CTO湲??덉쭏??留뚮뱺??
-> 愿???뺤쓽 臾몄꽌: `docs/tier-matrix.md` (Tier 異? 쨌 `docs/tier-examples.md` (?곗뼱蹂??ъ슜 ?? 쨌 `docs/cto-policy.md` (CTO ?댁쁺 ?뺤콉)
+> `cowork-main` = **Semi-auto mode**. Claude Cowork desktop agent에서 로컬 리뷰, 지식 캡처, 세션 관리를 실행합니다. CI/CD 파이프라인 없이 동작합니다.
+
+codex-main(Full-auto)과 다른 점: GitHub Actions 없이 로컬에서 모든 명령을 실행합니다. 필요할 때 `sync`로 원격 데이터를 가져옵니다.
 
 ---
 
-## 0. ??媛쒖쓽 異???Tier 횞 Agent 횞 Mode
+## Prerequisites
 
-`solo-cto-agent` ???ㅼ젙? **?쒕줈 ?낅┰?곸씤 ??異?*??議고빀?대떎.
-
-| 異?| ?섎? | 媛?|
+| 항목 | 필요 여부 | 발급처 |
 |---|---|---|
-| **Tier** (湲곕뒫 ?덈꺼) | ?대뼡 ?ㅽ궗/湲곕뒫????寃껋씤媛 | `Maker` / `Builder` / `CTO` |
-| **Agent** (?먯씠?꾪듃 援ъ꽦) | ?꾧? ?묒뾽/由щ럭?섎뒗媛 | `Cowork` (Claude ?⑤룆) / `Cowork + Codex` (Dual) |
-| **Mode** (?먮룞??紐⑤뱶) | ?몄젣 ?대뵒???먮룞?쇰줈 ?뚮┫ 寃껋씤媛 | `Semi-auto` = cowork-main / `Full-auto` = codex-main |
-
-**??臾몄꽌??Mode 異뺤씠 Semi-auto (cowork-main) ??寃쎌슦???ㅼ튂쨌?댁쁺???ㅻ，??**
-Tier ? Agent ??Semi-auto 紐⑤뱶 ?덉뿉?쒕룄 蹂꾨룄濡??좏깮?????덈떎. ?? CTO Tier ???뺤콉??Full-auto + Dual ?댁쁺??沅뚯옣?쒕떎 (`docs/cto-policy.md`).
-
----
-
-## 1. What Semi-auto mode (cowork-main) is
-
-Claude Cowork agent 媛 **desktop runtime** ?먯꽌 ?뚮㈃???몄뀡 ?덉뿉??
-
-- 肄붾뱶/?붿옄??臾몄꽌瑜?**?뺥빐吏??덉쭏 湲곗?源뚯?** ?먯씠?꾪듃媛 諛섎났 ?묒뾽
-- Cowork ?⑤룆 ?먮뒗 Cowork + Codex 議고빀?쇰줈 **?먮룞 ?щ줈?ㅻ━酉?*
-- MCP 而ㅻ꽖??GitHub, Vercel, Supabase, Figma, Google Drive, Slack ??濡?**?쇱씠釉?而⑦뀓?ㅽ듃 ?뺤씤**
-- Web search / WebFetch 濡?**理쒖떊 臾몄꽌쨌?덊띁?곗뒪쨌寃쎌웳 ?뺣낫 二쇱엯**
-- Scheduled tasks 濡?**?몄뀡 諛?諛깃렇?쇱슫???먮룞??*
-- ?좎? ?명뭼쨌寃곗젙쨌?ㅽ??쇱씠 ?꾩쟻??**媛쒖씤?붾맂 CTO 紐⑤뜽**濡??깆옣
-
-利?Semi-auto ??"濡쒖뺄濡쒕쭔 ?꾨뒗 ?ㅽ봽?쇱씤 ?? ???꾨땲??**desktop agent runtime + cloud amplifiers 議고빀**?대떎.
-?ㅽ봽?쇱씤? ?ㅽ듃?뚰겕 ?ㅽ뙣 ?쒖쓽 degraded fallback ?댁? ?뺤긽 ?댁쁺 ?꾩젣媛 ?꾨땲??
-
-### Semi-auto vs Full-auto ?ъ??붾떇
-
-| | Semi-auto (cowork-main) | Full-auto (codex-main) |
-|---|---|---|
-| ?ㅽ뻾 ?섍꼍 | Claude Cowork desktop runtime | GitHub Actions (CI/CD) |
-| ?먮룞???붿쭊 | ?먯씠?꾪듃 猷⑦봽 + MCP 而ㅻ꽖??+ scheduled tasks | GitHub workflow + webhook |
-| ?몃━嫄?| ?먯씠?꾪듃 ?먮떒, ?ъ슜???몄텧, ?ㅼ?以?| PR ?대깽?? repository_dispatch |
-| ?대씪?곕뱶 ?쒖슜 | API ?ㅺ굔 (Claude, OpenAI, GitHub, Vercel, Supabase, Figma, Drive, Slack?? | GitHub Actions ?대? ?꾧껐 |
-| ?ㅽ듃?뚰겕 ?딄? ??| 罹먯떆 湲곕컲 degraded fallback | ?뚯씠?꾨씪???쇱떆 以묐떒 |
-| 湲곕낯 沅뚯옣 Tier | Maker / Builder | Builder / CTO |
-| ?곹빀 ?좎? | ?붾줈 ?뚯슫?? ?щ━?먯씠?? 硫???꾨줈?앺듃 ?댁쁺??| CI ?명봽???덈뒗 ? |
-
-**??以??붿빟:** Full-auto ???덊룷 諛뽰뿉???뚯븘媛??遊뉗씠怨? Semi-auto ??**?뱀떊 ?놁뿉???쇳븯硫??꾩슂??紐⑤뱺 ?대씪?곕뱶瑜?李뚮Ⅴ???먯씠?꾪듃**??
+| Node.js 18+ | 필수 | https://nodejs.org/ |
+| git | 필수 | https://git-scm.com/ |
+| ANTHROPIC_API_KEY | 필수 | https://console.anthropic.com/settings/keys |
+| OPENAI_API_KEY | 선택 (dual-review) | https://platform.openai.com/api-keys |
+| GITHUB_TOKEN | 선택 (sync) | GitHub Settings > Developer settings > Personal access tokens |
+| TELEGRAM_BOT_TOKEN + CHAT_ID | 선택 | `solo-cto-agent telegram wizard` |
 
 ---
 
-## 2. Agent 援ъ꽦 ??Cowork ?⑤룆 vs Cowork + Codex
+## Step-by-step
 
-Semi-auto mode ?덉뿉??**?꾧? ?묒뾽/由щ럭瑜??뚮┫吏**??API ???좊Т濡?寃곗젙?쒕떎. 蹂꾨룄 ?ㅼ젙 ?놁쓬.
-
-### Cowork (?⑤룆) ??Claude agent 留??ъ슜
-
-`ANTHROPIC_API_KEY` ?섎굹濡??쒖옉. 由щ럭쨌?щ옒?꾪듃쨌knowledge쨌memory ?꾨? Cowork agent(Claude) ?⑤룆 泥섎━.
-- ?몄뀡 ?댁뿉??**self cross-review** 猷⑦봽 (craft ??review ??craft, 泥댄겕由ъ뒪???먮룞 寃利?
-- Tier 媛 ?믪븘吏덉닔濡??먭린 寃利?媛뺣룄 ?곸듅
-- 媛??媛踰쇱슫 ?ㅼ젙, Maker / Builder Tier ??沅뚯옣
-
-### Cowork + Codex ??Dual agent 援먯감由щ럭
-
-`ANTHROPIC_API_KEY` + `OPENAI_API_KEY` ?????ㅼ젙?섎㈃ **?먮룞?쇰줈 Dual 援ъ꽦?쇰줈 ?꾪솚**.
-- `review` 紐낅졊??Cowork 由щ럭 ??Codex 由щ럭 ??援먯감寃利앹쓣 **??踰덉뿉** ?ㅽ뻾
-- ???먯씠?꾪듃???먯젙???ㅻⅤ硫?`[ISSUES]` ?뱀뀡??李⑥씠媛 紐낆떆??
-- Dual ??媛뺤젣濡??꾧퀬 ?띠쓣 ?뚮쭔 `solo-cto-agent review --solo`
-- CTO Tier 沅뚯옣 援ъ꽦 (cto-policy.md ?뺤콉)
-
-> Agent 援ъ꽦? Mode(Semi-auto/Full-auto) ? ?낅┰?대떎. Full-auto mode ?먯꽌??Cowork ?⑤룆 ?먮뒗 Cowork+Codex ????媛?ν븯??
-
----
-
-## 3. Install ??5遺??먮쫫
-
-### 3.1. ?ㅼ튂
+### 1. Install + Init
 
 ```bash
-npx solo-cto-agent init --wizard
+npm install -g solo-cto-agent
+solo-cto-agent init --wizard
 ```
 
-Wizard媛 臾삳뒗 ??ぉ:
+wizard에서 `[2] cowork-main`을 선택합니다. 프로젝트 스택 정보를 입력하면 `~/.claude/skills/solo-cto-agent/SKILL.md`에 `mode: cowork-main`이 세팅됩니다.
 
-1. **Mode** ??`[2] cowork-main` ?좏깮
-2. **Stack** ??OS / Editor / Framework / Style / Deploy / DB / ?⑦궎吏 留ㅻ땲?
-3. **Optional** ??GitHub org/username, Primary language
-
-Wizard媛 ?앸굹硫?`~/.claude/skills/solo-cto-agent/SKILL.md` 媛 ?앹꽦?섍퀬, `mode: cowork-main` ?꾨뱶媛 ?ㅼ젙?쒕떎.
-
-### 3.2. API ??
-
-理쒖냼 ?섎굹 ?꾩슂. ?????덉쑝硫?Cowork+Codex 援ъ꽦?쇰줈 ?먮룞 ?꾪솚.
+### 2. API Key 설정
 
 ```bash
-# Cowork ?⑤룆 ??Claude agent 留?
 export ANTHROPIC_API_KEY="sk-ant-..."
+```
 
-# Cowork + Codex ??Dual cross-review
-export ANTHROPIC_API_KEY="sk-ant-..."
+dual-review를 사용하려면 OpenAI 키도 설정합니다:
+```bash
 export OPENAI_API_KEY="sk-..."
 ```
 
-?ㅻ뒗 ?몄뀡 ?섍꼍蹂???먮뒗 shell rc ?뚯씪 (zshrc, bashrc, Powershell profile)???ｋ뒗??
-
-### 3.3. ?뺤씤
+### 3. Doctor로 확인
 
 ```bash
 solo-cto-agent doctor
 ```
 
-Skills / engine / API keys / lint / sync / catalog ?곹깭瑜???踰덉뿉 ?먭??쒕떎.
+SKILL.md 설치, API 키, 엔진 상태를 한 번에 확인합니다.
+
+### 4. 첫 리뷰 실행
+
+```bash
+cd <your-git-repo>
+git add -A
+solo-cto-agent review
+```
 
 ---
 
-## 4. Tier ??湲곕뒫 ?덈꺼 ?좏깮 (Maker / Builder / CTO)
+## 주요 명령
 
-Tier ??**?대뼡 ?ㅽ궗/湲곕뒫 踰붿쐞瑜???寃껋씤媛** 瑜?寃곗젙?쒕떎. Agent 援ъ꽦 쨌 Mode ???蹂꾧컻 異뺤씠??
-`init --preset <tier>` ?먮뒗 wizard ?먯꽌 吏??
-
-| Tier | ????좎? | ?ы븿 ?ㅽ궗 | 湲곕뒫 踰붿쐞 | Semi-auto ?먯꽌??沅뚯옣 Agent |
-|---|---|---|---|---|
-| **Maker** | 泥섏쓬 ?곕뒗 ?щ엺, ?щ━?먯씠?? 1??| spark / review / memory / craft | 媛?대뱶 以묒떖 (?덉쟾 湲곕낯媛? ?쒗뵆由? | Cowork ?⑤룆 |
-| **Builder** (default) | ?붾줈 媛쒕컻??| Maker + **build** + **ship** | ?ㅽ뻾 以묒떖 (?먮룞 ?ъ떆?? ?뚮줈 李⑤떒湲? | Cowork ?⑤룆 ?먮뒗 Cowork+Codex |
-| **CTO** | ?뚯썙 ?좎?, ?뚭퇋紐?? | Builder + **orchestrate** | ?먮떒 ?꾩엫 (?섏궗寃곗젙 異붿쟻, 硫???먯씠?꾪듃 ?쇱슦?? | Cowork+Codex (?뺤콉) |
-
-Tier ??`solo-cto-agent upgrade` 濡??щ┫ ???덈떎. ?ㅼ슫洹몃젅?대뱶??沅뚯옣?섏? ?딆쓬.
-
-### CTO Tier ?뺤콉 (以묒슂)
-
-CTO Tier ???뺤콉??**Full-auto + Dual (Cowork + Codex)** ??湲곕낯 ?댁쁺 ?뺥깭濡??쒕떎.  
-?댁쑀??CTO Tier??`orchestrate` ?ㅽ궗???ㅼ쓬???꾩젣?섍린 ?뚮Ц:
-- 硫???먯씠?꾪듃 ?쇱슦????理쒖냼 ???먯씠?꾪듃 ?꾩슂
-- ?섏궗寃곗젙 異붿쟻 諛?agent scoring ?먮룞 ?낅뜲?댄듃 ??CI ?덈꺼???덉젙???대깽???먮쫫 ?꾩슂
-- 24媛??ㅼ??ㅽ듃?덉씠???뚰겕?뚮줈?곗쓽 援먯감寃利?濡쒖쭅
-
-??**Semi-auto mode + CTO Tier** ??湲곗닠?곸쑝濡?媛?ν븯吏留? 遺遺?湲곕뒫留??곕뒗 ?뺥깭媛 ?쒕떎 (orchestrate ???먮룞???낆씠 ?ㅽ뻾?섏? ?딆쓬). CTO Tier 瑜??먰븯硫?Full-auto 濡??꾪솚?섍굅?? Semi-auto ?먯꽌??Builder Tier 濡??쒗븳?섎뒗 寃껋쓣 沅뚯옣.
-
-?먯꽭???뺤콉: `docs/cto-policy.md` 李몄“.
+```bash
+solo-cto-agent review                    # 로컬 Claude 리뷰
+solo-cto-agent dual-review               # Claude + OpenAI 크로스 리뷰
+solo-cto-agent knowledge --project myapp # 세션 지식 추출
+solo-cto-agent session save              # 세션 컨텍스트 저장
+solo-cto-agent session restore           # 이전 세션 복원
+solo-cto-agent session list              # 저장된 세션 목록
+solo-cto-agent sync --org <org>          # 원격 데이터 조회 (dry-run)
+solo-cto-agent sync --org <org> --apply  # 원격 데이터 로컬 반영
+solo-cto-agent doctor                    # 상태 확인
+```
 
 ---
 
-## 5. ?쇱긽 ?뚰겕?뚮줈?????몄뀡 ?덉뿉???먮룞?붽? ?대뼸寃??뚯븘媛??
+## Semi-auto vs Full-auto
 
-Semi-auto ???먮룞?붾뒗 **"?몃? CI ???Cowork agent 猷⑦봽媛 ?쇳븳??** ???살씠?? ?ъ슜?먮뒗 ?섎룄留??섏?怨? ?먯씠?꾪듃媛 ?꾩슂??紐낅졊???ㅽ뻾?쒕떎.
-
-### 5.1. ?묒뾽 ?쒖옉 ??
-
-```bash
-solo-cto-agent session restore          # ?댁쟾 ?몄뀡 而⑦뀓?ㅽ듃 蹂듦뎄
-# (?먮뒗 Claude Cowork??留먮줈 "?대뵒源뚯? ?덉뿀吏?" ???먯씠?꾪듃媛 ?먮룞 ?ㅽ뻾)
-```
-
-### 5.2. 肄붾뱶 ?묒뾽 以?
-
-?먯씠?꾪듃媛 `craft` ??`build` 諛섎났. ?뱀젙 吏?먯뿉???먮룞?쇰줈:
-
-```bash
-solo-cto-agent review                   # staged diff ?먮룞 由щ럭 (Cowork / Cowork+Codex ?먮룞 媛먯?)
-solo-cto-agent review --branch          # 釉뚮옖移??꾩껜 diff
-solo-cto-agent review --file path.ts    # ?⑥씪 ?뚯씪
-solo-cto-agent review --json            # ?ㅼ쓬 ?④퀎瑜??뚯떛?섎젮硫?JSON
-```
-
-?먯젙? `APPROVE` / `REQUEST_CHANGES` / `COMMENT` (?쒓?: ?뱀씤/?섏젙?붿껌/蹂대쪟). ?ш컖?꾨뒗 `BLOCKER` ??/ `SUGGESTION` ?좑툘 / `NIT` ?뮕.
-`REQUEST_CHANGES` 媛 ?⑥뼱吏硫??먯씠?꾪듃媛 ?섏젙 ???щ━酉곌퉴吏 ??猷⑦봽濡??뚮┛??
-
-### 5.3. 寃곗젙쨌?먮윭쨌?⑦꽩 ???
-
-```bash
-solo-cto-agent knowledge                # 理쒓렐 ?몄뀡?먯꽌 寃곗젙/?먮윭 ?⑦꽩 異붿텧
-solo-cto-agent knowledge --source file --file notes.md
-solo-cto-agent knowledge --project tribo
-```
-
-????꾩튂: ???붾젆?좊━ 吏???꾪떚??+ ?꾨줈?앺듃 STATE.md. ?ㅼ쓬 ?몄뀡?먯꽌 ?먮룞 濡쒕뱶??
-
-### 5.4. UI/UX 由щ럭 ??肄붾뱶 + 鍮꾩쟾 援먯감寃利?
-
-?붿옄???꾨줎?몄뿏???묒뾽 ??肄붾뱶 ?덈꺼怨?鍮꾩쟾(?ㅽ겕由곗꺑) ?덈꺼???숈떆???먭??쒕떎.
-
-```bash
-solo-cto-agent uiux-review code                    # diff 湲곕컲 UI 肄붾뱶 由щ럭 (?좏겙 ?쇨???/ a11y / 諛섏쓳??
-solo-cto-agent uiux-review vision --screenshot shot.png
-                                                   # 6異??먯닔 (layout/typography/spacing/color/a11y/polish)
-solo-cto-agent uiux-review cross-verify --screenshot shot.png
-                                                   # 肄붾뱶 ??鍮꾩쟾 援먯감 寃利?(?쒖そ留??볦튂???댁뒋 ?≪쓬)
-solo-cto-agent uiux-review baseline save --screenshot shot.png --project <slug>
-solo-cto-agent uiux-review baseline diff --screenshot shot.png --project <slug>
-solo-cto-agent uiux-review tokens                  # 肄붾뱶?먯꽌 ?붿옄???좏겙 異붿텧 / ?붿빟
-```
-
-Vision 由щ럭??鍮꾩슜 媛?쒕젅?쇱긽 湲곕낯 manual ?꾩슜 (watch ?먮룞 ?몃━嫄?????꾨떂).
-
-### 5.5. Rework ??由щ럭 寃곌낵瑜??먮룞 ?곸슜
-
-`review --json` ?쇰줈 ?⑥뼱吏?`[FIX]` 釉붾줉??`git apply --check` 濡?寃利????좏깮???곸슜?쒕떎.
-
-```bash
-solo-cto-agent review --json > review.json         # 由щ럭 JSON ???
-solo-cto-agent apply-fixes --review review.json    # dry-run (湲곕낯) ???⑥튂留?寃利?
-solo-cto-agent apply-fixes --review review.json --apply
-                                                   # ?ㅼ젣 ?곸슜 (git working tree clean ?꾩닔)
-solo-cto-agent apply-fixes --review review.json --apply --only BLOCKER
-                                                   # BLOCKER 留??먮룞 ?곸슜, SUGGESTION ? ?섎룞 寃??
-solo-cto-agent apply-fixes --review review.json --apply --max-fixes 3
-                                                   # circuit-breaker: 理쒕? N媛쒓퉴吏留??곸슜
-solo-cto-agent apply-fixes --review review.json --apply --no-clean-check
-                                                   # working tree dirty ?곹깭?먯꽌??媛뺥뻾 (鍮꾧텒??
-```
-
-### 5.6. Feedback ??由щ럭 ?뺥솗???숈뒿
-
-?먯씠?꾪듃媛 ?섎せ 吏싳? ?댁뒋??`reject`, ?뺥솗??吏싳? ?댁뒋??`accept` 濡?湲곕줉. ?ㅼ쓬 由щ럭遺??personalization 媛以묒튂??諛섏쁺?쒕떎 (80/20 anti-bias rotation ?ы븿).
-
-```bash
-solo-cto-agent feedback accept --location src/Btn.tsx:42 --severity BLOCKER
-solo-cto-agent feedback reject --location src/Nav.tsx:12 --severity SUGGESTION \
-  --note "false positive ??already memoized"
-solo-cto-agent feedback show                       # ?꾩쟻 accept/reject ?⑦꽩 議고쉶
-```
-
-### 5.7. Watch ???뚯씪 蹂寃?媛먯? ???먮룞 由щ럭
-
-??ν븯硫?諛섏옄?숈쑝濡?由щ럭瑜??뚮━???뚯씪 watcher. **鍮꾩슜 媛?쒕젅??*: CTO tier + cowork+codex 議고빀留?`--auto` ?덉슜. ?섎㉧吏???좏샇留??쒖떆, ?섎룞 `review` ?몄텧 ?꾩슂.
-
-```bash
-solo-cto-agent watch                               # manual signal mode (蹂寃쎈쭔 ?쒖떆)
-solo-cto-agent watch --auto                        # tier gate ?듦낵 ?쒕쭔 ?먮룞 review ?ㅽ룿
-solo-cto-agent watch --auto --force                # gate ?고쉶 (?ъ슜??梨낆엫, 鍮꾩슜 二쇱쓽)
-solo-cto-agent watch --debounce-ms 3000            # 蹂寃?flush 媛꾧꺽 (湲곕낯 1500ms)
-solo-cto-agent watch --dry-run                     # gate 寃곗젙留?由ы꽩, ?ㅼ젣 watch ?쒖옉 ????
-```
-
-scheduled-tasks manifest(`~/.claude/skills/solo-cto-agent/scheduled-tasks.yaml`)瑜??먮룞 emit ??Cowork ??scheduled-tasks MCP 媛 ?깅줉?섎㈃ 二쇨린 ?ㅽ뻾??媛??
-
-### 5.8. Notify ???몃? 梨꾨꼸 ?뚮┝
-
-由щ럭/rework 寃곌낵瑜?Slack/Telegram/Discord/?뚯씪濡??꾩넚. ?섍꼍蹂?섎줈 梨꾨꼸 ?먮룞 媛먯?.
-
-```bash
-solo-cto-agent notify --detect                     # 媛먯???梨꾨꼸 紐⑸줉
-solo-cto-agent notify --title "Review done" --severity info --body "0 blockers"
-solo-cto-agent notify --title "Build failed" --severity error --body "..." \
-  --channels slack,telegram --meta project=tribo
-```
-
-媛먯? ?섍꼍蹂?? `SLACK_WEBHOOK_URL` / `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` / `DISCORD_WEBHOOK_URL` / `NOTIFY_LOG_FILE`. 紐⑤몢 ?놁쑝硫?console(stderr)濡?fallback.
-
-### 5.9. External Loop (T1/T2/T3) — 외부 평가 루프
-
-Cowork는 **Self-loop**(자기검증)만으로 끝나지 않도록 외부 신호를 주입할 수 있습니다.
-리뷰 프롬프트에 아래 섹션이 자동 삽입됩니다.
-
-| Tier | 의미 | 활성 조건 |
+| | Semi-auto (cowork-main) | Full-auto (codex-main) |
 |---|---|---|
-| **T1 — Peer Model** | 다른 모델의 교차 평가 | `OPENAI_API_KEY` + `solo-cto-agent dual-review` |
-| **T2 — External Knowledge** | 최신 스택/트렌드/레지스트리 | `COWORK_EXTERNAL_KNOWLEDGE=1` (npm registry 조회) |
-| **T3 — Ground Truth** | 실제 배포/런타임 신호 | `COWORK_GROUND_TRUTH=1` 또는 `VERCEL_TOKEN` |
-
-```bash
-# T2: 최신 패키지 버전 비교 섹션 주입
-export COWORK_EXTERNAL_KNOWLEDGE=1
-
-# T3: 배포 신호 주입 (GitHub deployments 기반)
-export COWORK_GROUND_TRUTH=1
-```
-
-> **Self‑loop 경고**: 외부 신호가 하나도 없으면 `[SELF-LOOP NOTICE]` 배너가 리뷰 결과 상단에 뜹니다.
-### 5.10. ?몄뀡 醫낅즺
-
-```bash
-solo-cto-agent session save             # ?꾩옱 而⑦뀓?ㅽ듃 ?ㅻ깄??
-```
-
-`bae-self-evolve` ?ㅽ궗???쒖꽦?붾뤌 ?덉쑝硫?醫낅즺 ???쇱씪 濡쒓렇 / quality-log / error-patterns ?먮룞 ?댄렂??
-
-### 5.5. ?먭꺽 ?곗씠???숆린??(?좏깮)
-
-Full-auto mode ???ㅼ??ㅽ듃?덉씠???덊룷媛 ?덈뒗 寃쎌슦?먮쭔 ?ъ슜. ?놁쑝硫????뱀뀡 嫄대꼫?.
-
-```bash
-solo-cto-agent sync --org <github-org>            # dry-run ??蹂寃??ы빆留??쒖떆
-solo-cto-agent sync --org <github-org> --apply    # 濡쒖뺄 罹먯떆??癒몄?
-```
-
-湲곕낯 **dry-run**. `--apply` 媛 ?덉쓣 ?뚮쭔 ?ㅼ젣 ?뚯씪???섏젙?쒕떎.
-
-?꾩슂 env var (sync 紐낅졊?먮쭔):
-- `GITHUB_TOKEN` / `GH_TOKEN` / `ORCHESTRATOR_PAT` 以??섎굹
-| COWORK_EXTERNAL_KNOWLEDGE | ?좏깮 | 최신 스택 버전 비교 섹션 주입 (T2) |
-| COWORK_GROUND_TRUTH | ?좏깮 | 배포/런타임 신호 주입 (T3, GitHub deployments 기반) |
-| VERCEL_TOKEN | ?좏깮 | Ground Truth 신호(배포 상태) 조회 |
-- `--org` ?뚮옒洹?(org name)
-- `--orchestrator-name <repo>` (湲곕낯媛?`dual-agent-orchestrator`)
+| 실행 환경 | Claude Cowork desktop | GitHub Actions (CI/CD) |
+| 트리거 | 수동 CLI 명령 | PR 이벤트, Issue 라벨 |
+| CI/CD 필요 | 불필요 | 필수 |
+| 네트워크 의존 | API 키만 (오프라인 가능) | GitHub + webhook |
+| 적합한 상황 | 개인 작업, 오프라인, 빠른 시작 | 팀 협업, 자동화 파이프라인 |
 
 ---
 
-## 6. 媛쒖씤?????몄닔濡??뱀떊 ?ㅽ??쇱씠 ?섎뒗 援ъ“
+## Troubleshooting
 
-Semi-auto mode ???듭떖 ?먯궛? **?꾩쟻??而⑦뀓?ㅽ듃**?? ?ㅼ쓬 ?먮즺?ㅼ씠 ?몄뀡留덈떎 ?볦씠怨??ㅼ쓬 ?몄뀡?먯꽌 ?먮룞 濡쒕뱶?쒕떎.
-
-| ?먯궛 | ?꾩튂 | ?꾧? ?곕굹 |
+| 증상 | 원인 | 해결 |
 |---|---|---|
-| **SKILL.md** ???ㅽ깮 / 洹쒖튃 / ?좏샇 ?щ㎎ | `~/.claude/skills/solo-cto-agent/SKILL.md` | 紐⑤뱺 ?ㅽ궗 |
-| **STATE.md** ???꾨줈?앺듃蹂??꾩옱 ?④퀎 | ?묒뾽 以묒씤 ?꾨줈?앺듃 猷⑦듃 | `memory`, `build`, `ship` |
-| **Knowledge articles** ??寃곗젙 / ?먮윭 / ?⑦꽩 | ???붾젆?좊━ memory ?대뜑 | `review`, `knowledge`, `spark` |
-| **Session snapshots** ???몄뀡 蹂듭썝 | `session save` 寃쎈줈 | ?ㅼ쓬 ?몄뀡 ?쒖옉 ???먮룞 |
-| **Style calibration** ???좎? 肄붾뱶/臾몄꽌/?붿옄??痍⑦뼢 | SKILL.md + knowledge ?꾩쟻 | `craft`, `review`, design ?ㅽ궗 |
-
-**寃곌낵:** 5~10?몄뀡 吏?섎㈃ ?먯씠?꾪듃媛
-- ?뱀떊???レ뼱?섎뒗 肄붾뱶 ?⑦꽩??誘몃━ ?쇳븯怨?
-- ?뱀떊???먯＜ ?곕뒗 ?ㅽ깮?쇰줈 湲곕낯媛믪쓣 ?↔퀬
-- ?뱀떊??臾몄꽌 ?ㅼ쓣 紐⑥궗?섍퀬
-- ?뱀떊???대┛ 寃곗젙怨?異⑸룎?섎뒗 ?쒖븞???ㅼ뒪濡?嫄몃윭?몃떎.
-
-媛쒖씤?붾뒗 媛뺤젣?섏? ?딅뒗?? Knowledge ??μ씠??session save 瑜??곗? ?딆쑝硫??쇰컲 紐⑤뱶濡??숈옉.
+| review 실행 안 됨 | ANTHROPIC_API_KEY 미설정 | `export ANTHROPIC_API_KEY="sk-ant-..."` |
+| dual-review 실패 | OPENAI_API_KEY 미설정 | `export OPENAI_API_KEY="sk-..."` |
+| sync 실패 | GITHUB_TOKEN 미설정 또는 만료 | PAT 재발급 후 `export GITHUB_TOKEN="ghp_..."` |
+| doctor 경고 다수 | SKILL.md 미설정 | `solo-cto-agent init --wizard` 재실행 |
 
 ---
 
-## 7. Cloud Amplifiers ???대뼡 ?대씪?곕뱶 ?먯썝?쇰줈 ?덉쭏???꾩꽦?섎굹
-
-Semi-auto mode ??由щ럭/?щ옒?꾪듃 ?덉쭏? **?곌껐???대씪?곕뱶 ?먯썝???섏? 鍮꾨?**?쒕떎.
-?꾨옒???몄뀡 ?덉뿉???먮룞?쇰줈 ?쒖슜?섎뒗 ??쒖쟻???대씪?곕뱶 ?덉씠?? 媛??덉씠?대뒗 ?낅┰?곸쑝濡??쇱슦怨?類????덈떎.
-
-### 7.1. 紐⑤뜽 ?덉씠??
-
-| ?먯썝 | ??븷 | ?꾩닔 ?щ? |
-|---|---|---|
-| **Anthropic Claude API** | 紐⑤뱺 由щ럭/?щ옒?꾪듃/knowledge ?붿쭊 (Cowork agent 援щ룞) | 怨듯넻 ?꾩닔 |
-| **OpenAI API (Codex)** | Cowork+Codex 援ъ꽦 ???먮룞 ?щ줈?ㅻ━酉?| Dual 援ъ꽦 ???꾩닔 |
-| **Claude Vision (multimodal)** | ?ㅽ겕由곗꺑쨌?붿옄??紐⑹뾽 QA, UI slop 媛먯?, ?붿옄???뚭? 泥댄겕 | ?붿옄???ㅽ궗?먯꽌 ?좏깮 |
-
-### 7.2. MCP 而ㅻ꽖??(?쇱씠釉??뚯뒪 ?ㅻ툕 ?몃（??
-
-Claude Cowork ???곌껐??MCP 而ㅻ꽖?곕뱾? **臾몄꽌 湲곕줉???꾨땲???ㅼ젣 ?댁쁺 ?곹깭**瑜?議고쉶?쒕떎.
-Semi-auto mode ??由щ럭쨌釉뚮━????濡쒖뺄 湲곕줉 ????쇱씠釉??곹깭瑜??곗꽑 ?뺤씤?쒕떎.
-
-| 而ㅻ꽖??| 臾댁뾿???뚯뼱?ㅻ굹 |
-|---|---|
-| **GitHub** | PR diff, CI ?곹깭, 釉뚮옖移? 肄붾찘?? 理쒓렐 而ㅻ컠 |
-| **Vercel** | production 諛고룷 ?곹깭, build logs, runtime logs (500/ERROR 吏꾨떒) |
-| **Supabase** | ?ㅼ젣 DB ?ㅽ궎留? 留덉씠洹몃젅?댁뀡 ?대젰, advisor 寃쎄퀬 |
-| **Google Drive** | 湲고쉷 臾몄꽌, ?뚯쓽濡? 寃곗젙 ?대젰 ??knowledge articles濡??≪닔 |
-| **Figma** | ?붿옄???쒖뒪???좏겙, 而댄룷?뚰듃 硫뷀?, code connect 留ㅽ븨 |
-| **Gmail / Calendar** | 湲고븳 / ?쎌냽 / 怨꾩빟 ?④퀎 crosscheck |
-| **Slack** | ? 寃곗젙 / ?댁뒋 ?ㅻ젅??異붿텧 |
-
-MCP??沅뚰븳쨌?곌껐 ?щ????곕씪 ?쇱썙 ?대떎. ?놁쑝硫??대떦 ?뚯뒪??**"[誘멸?利?"** ?쒓렇濡??쒖떆?섍퀬, ?덉쑝硫?**"[?뺤젙]"** ?쒓렇媛 遺숇뒗??
-
-### 7.3. ?명꽣???덉씠??(web search / WebFetch)
-
-由щ럭쨌?ㅺ퀎 ??**理쒖떊 吏??*???꾩슂?섎㈃ ?몄뀡 ?댁뿉??吏곸젒 ?뱀쓣 ?뺤씤?쒕떎.
-
-- ?쇱씠釉뚮윭由?理쒖떊 踰꾩쟾, 蹂寃쎌궗?? ?뚮젮吏?踰꾧렇
-- Next.js / Tailwind / Prisma 媛숈? ?ㅽ깮??怨듭떇 臾몄꽌 理쒖떊??
-- 寃쎌웳??룹떆???덊띁?곗뒪 (spark / idea ?ㅽ궗?먯꽌)
-- 洹쒖젣쨌?뺤콉 ?낅뜲?댄듃 (bae-regulatory-navigator ?곌퀎 ??
-
-Claude ?숈뒿 而룹삤??2025??5?? ?댄썑???뺣낫???꾨? web search濡?蹂댁셿?쒕떎.
-
-### 7.4. Scheduled Tasks (?몄뀡 諛??먮룞??
-
-scheduled-tasks MCP 瑜??곕㈃ Semi-auto mode ???먮룞?붽? **?몄뀡 諛뽰쑝濡??뺤옣**?쒕떎.
-
-- 留ㅼ씪 ?꾩묠 ?꾨줈?앺듃蹂??곹깭 釉뚮━??(Vercel 諛고룷, PR, 誘멸껐 ?≪뀡)
-- 二쇨컙 quality-log / error-patterns ?붿빟
-- ?뱀젙 ?덊룷????PR???대━硫?review ?먮룞 ?몃━嫄???寃곌낵留??몄뀡 ?쒖옉 ???쒖떆
-- ?붽컙 knowledge ?꾪떚???먮룞 ?뺣━
-
-Full-auto mode ??GitHub Actions ?泥댁옱?댁?留? **?ъ슜??癒몄떊 湲곗??쇰줈 ?뚭린 ?뚮Ц??* CI ?ㅼ젙 ?놁씠???숈옉?쒕떎.
-
-### 7.5. ?먭꺽 knowledge 怨듭쑀 (?좏깮)
-
-Semi-auto mode ??knowledge / agent-scores / error-patterns 瑜?**?щ윭 癒몄떊?먯꽌 怨듭쑀**?섍퀬 ?띠쑝硫?
-
-- ?ㅼ??ㅽ듃?덉씠???덊룷(`dual-agent-orchestrator`) ??媛쒕? GitHub???먭퀬
-- 媛?癒몄떊?먯꽌 `solo-cto-agent sync --org <org> --apply` 濡??숆린??
-- Full-auto mode 媛 媛숈씠 ?뚭퀬 ?덉쑝硫?Full-auto ??PR 由щ럭 寃곌낵媛 ?먮룞?쇰줈 ???덊룷???볦씠怨? Semi-auto 媛 洹멸구 濡쒖뺄濡??뚯뼱?⑤떎
-
-利?**媛숈? ?먯씠?꾪듃媛 ?щ윭 怨녹뿉???숈뒿??寃곌낵瑜????щ엺???먯궛?쇰줈 ?⑹튇??**
-
----
-
-## 8. ?먮룞??寃쎄퀎 ??臾댁뾿???먮룞?닿퀬 臾댁뾿???꾨땶媛
-
-### ?먮룞?쇰줈 ?쇱뼱?섎뒗 ??(?몄뀡 ??
-
-- ?먯씠?꾪듃媛 ?먮떒??`craft ??review ??craft` 猷⑦봽
-- Circuit Breaker (媛숈? ?먮윭 3??諛섎났 ???먮룞 以묐떒 + ?먯씤 ?붿빟)
-- Tier??留욌뒗 ?덉쭏 泥댄겕由ъ뒪???먮룞 ?곸슜
-- Cowork+Codex 援ъ꽦?먯꽌 Claude ??Codex 援먯감由щ럭
-- ?곌껐??MCP 而ㅻ꽖?곕줈 ?쇱씠釉??곹깭 ?щ줈?ㅼ껜??(Vercel/Supabase/GitHub ??
-- Web search 濡?理쒖떊 ?덊띁?곗뒪 二쇱엯
-- ?몄뀡 而⑦뀓?ㅽ듃 濡쒕뱶/???(session 紐낅졊 ?먮뒗 `bae-self-evolve` ??
-
-### ?몄뀡 諛뽰뿉???먮룞?쇰줈 ?쇱뼱?섍쾶 留뚮뱶??諛⑸쾿
-
-- scheduled-tasks MCP 濡??뺢린 ?ㅽ뻾 ?깅줉
-- ?ㅼ??ㅽ듃?덉씠???덊룷瑜??먭퀬 `sync` 濡??ㅻⅨ 癒몄떊??寃곌낵 ?≪닔
-- ??媛吏 ??**?ъ슜?먭? ??踰??ㅼ젙**?섎㈃ ?댄썑?먮뒗 ?먮룞
-
-### ?ъ슜???몄텧???덉뼱?쇰쭔 ?쇱뼱?섎뒗 ??
-
-- `sync --apply` (dry-run ? ?먮룞, ?ㅼ젣 癒몄???紐낆떆)
-- `git push` ??PR ?앹꽦/癒몄? (Semi-auto ??肄붾뱶 蹂寃쎈쭔 ?ㅽ뀒?댁쭠, push ???ъ슜?먭?)
-- ?꾨줈?뺤뀡 DB ?ㅽ궎留?蹂寃?
-- ???덊룷 ?앹꽦
-- ?몃? ?쒕퉬??寃곗젣쨌怨꾩빟 諛쒖깮 ?묒뾽
-
-### ?덈? ???섎뒗 ????"Semi-auto does NOT"
-
-- PR ?먮룞 癒몄? (Full-auto mode ?곸뿭)
-- GitHub Actions CI 媛뺤젣 ?섏〈
-- ?먭꺽 ?뚯씪??dry-run ?놁씠 諛붾줈 ?섏젙
-
-### ?ㅽ듃?뚰겕 ?딄? ????Degraded Fallback
-
-?뺤긽 ?댁쁺? ?대씪?곕뱶 ?곌껐???꾩젣?쒕떎. ?ㅽ듃?뚰겕媛 ?딄린硫?**異뺤냼 紐⑤뱶**濡??대젮媛꾨떎:
-
-- Claude/OpenAI API ?몄텧 ?ㅽ뙣 ??罹먯떆??failure-catalog 湲곕컲 ?뺤쟻 寃?щ쭔 媛??
-- MCP 而ㅻ꽖????留덉?留됱쑝濡??깃났??議고쉶 寃곌낵瑜?`[罹먯떆]` ?쒓렇濡??쒖떆
-- Web search ???숈뒿 而룹삤???대궡 吏?앸쭔 ?ъ슜, 遺덊솗????ぉ? `[誘멸?利?`
-- sync ???꾩쟾 李⑤떒 (?ъ뿰寃????ъ떆??
-
-Circuit Breaker 媛 3???곗냽 ?ㅽ듃?뚰겕 ?ㅽ뙣瑜?媛먯??섎㈃ offline mode瑜??좎뼵?섍퀬 ?ъ슜?먯뿉寃??뚮┛??
-
----
-
-## 9. Environment Variables ???꾩껜 紐⑸줉
-
-| 蹂??| ?꾩닔 ?щ? | ?⑸룄 |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | review/knowledge ?ъ슜 ???꾩닔 | Claude ?몄텧 |
-| `OPENAI_API_KEY` | Cowork+Codex 援ъ꽦?먮쭔 | Codex ?몄텧 (?덉쑝硫??먮룞 Dual ?꾪솚) |
-| `GITHUB_TOKEN` / `GH_TOKEN` / `ORCHESTRATOR_PAT` | `sync` ?ъ슜 ????以??섎굹 | ?ㅼ??ㅽ듃?덉씠???덊룷 議고쉶 |
-| `TELEGRAM_BOT_TOKEN` | ?좏깮 | 由щ럭 寃곌낵 ?붾젅洹몃옩 ?뚮┝ |
-| `TELEGRAM_CHAT_ID` | ?좏깮 | ?뚮┝ ???chat |
-
-env var 瑜??꾨줈?앺듃蹂꾨줈 愿由ы븯怨??띠쑝硫??꾨줈?앺듃 猷⑦듃 `.env.local` ???ъ슜. Wizard媛 `.env.example` ?쒗뵆由우쓣 留뚮뱾???붾떎.
-
----
-
-## 10. CLI Reference ??Semi-auto mode ?먯꽌 ?먯＜ ?곕뒗 紐낅졊
+## codex-main으로 전환하기
 
 ```bash
-# ?ㅼ튂 / ?먭?
 solo-cto-agent init --wizard
-solo-cto-agent doctor
-solo-cto-agent status                 # 濡쒖뺄 罹먯떆留? ?ㅽ듃?뚰겕 ?놁쓬
-
-# 由щ럭 (Cowork / Cowork+Codex ?먮룞 媛먯?)
-solo-cto-agent review                 # staged diff
-solo-cto-agent review --branch
-solo-cto-agent review --file <path>
-solo-cto-agent review --solo          # Cowork+Codex 援ъ꽦 媛먯??섏뼱??Cowork ?⑤룆?쇰줈 媛뺤젣
-solo-cto-agent review --json          # ?뚯떛??JSON 異쒕젰
-solo-cto-agent review --dry-run       # ?꾨＼?꾪듃留??뺤씤, API ?몄텧 ?놁쓬
-
-# UI/UX 由щ럭 (肄붾뱶 + 鍮꾩쟾 援먯감寃利?
-solo-cto-agent uiux-review code
-solo-cto-agent uiux-review vision --screenshot <img>
-solo-cto-agent uiux-review cross-verify --screenshot <img>
-solo-cto-agent uiux-review baseline save --screenshot <img> --project <slug>
-solo-cto-agent uiux-review baseline diff --screenshot <img> --project <slug>
-solo-cto-agent uiux-review tokens
-
-# Rework (review 寃곌낵 ?먮룞 ?곸슜)
-solo-cto-agent apply-fixes --review review.json              # dry-run
-solo-cto-agent apply-fixes --review review.json --apply
-solo-cto-agent apply-fixes --review review.json --apply --only BLOCKER
-solo-cto-agent apply-fixes --review review.json --apply --max-fixes 5
-
-# Feedback (由щ럭 ?뺥솗???숈뒿)
-solo-cto-agent feedback accept --location <path[:line]> --severity <S>
-solo-cto-agent feedback reject --location <path[:line]> --severity <S> --note "..."
-solo-cto-agent feedback show
-
-# Watch (?뚯씪 蹂寃?媛먯? ??諛섏옄??review)
-solo-cto-agent watch                  # manual signal mode
-solo-cto-agent watch --auto           # tier gate ?듦낵 ?쒕쭔 ?먮룞
-solo-cto-agent watch --dry-run        # gate 寃곗젙留??뺤씤
-
-# Notify (?몃? 梨꾨꼸 ?뚮┝)
-solo-cto-agent notify --detect
-solo-cto-agent notify --title "..." --severity info --body "..." --channels slack
-
-# 吏???꾩쟻
-solo-cto-agent knowledge
-solo-cto-agent knowledge --source file --file notes.md
-solo-cto-agent knowledge --project <tag>
-
-# ?몄뀡 而⑦뀓?ㅽ듃
-solo-cto-agent session save
-solo-cto-agent session restore
-solo-cto-agent session list
-
-# ?먭꺽 ?숆린??(?좏깮)
-solo-cto-agent sync --org <org>
-solo-cto-agent sync --org <org> --apply
-solo-cto-agent sync --org <org> --repos repo1,repo2
+# Mode 선택에서 [1] codex-main 선택
 ```
 
-> `setup-pipeline`, `setup-repo` 紐낅졊? Semi-auto mode ?먯꽌 ?몄텧?섎㈃ "Not needed in cowork-main mode" 硫붿떆吏留??щ떎. ?대뱾? Full-auto mode ?꾩슜?대떎.
-
----
-
-## 11. Troubleshooting
-
-| 利앹긽 | ?먯씤 / ?닿껐 |
-|---|---|
-| `??ANTHROPIC_API_KEY required` | ?섍꼍蹂??誘몄꽕?? shell rc 諛섏쁺 ?뺤씤 |
-| Cowork+Codex 援ъ꽦?쇰줈 ???꾪솚 | `OPENAI_API_KEY` ?꾨씫 ?먮뒗 ???대쫫 ?ㅽ? |
-| `sync` 媛 ?좏겙 ?ㅻ쪟 | `GITHUB_TOKEN` / `GH_TOKEN` / `ORCHESTRATOR_PAT` 以?理쒖냼 ?섎굹 ?꾩슂 |
-| Review 寃곌낵媛 ?곸뼱濡쒕쭔 ?섏샂 | SKILL.md??`language: Korean` ?뺤씤 (wizard?먯꽌 湲곕낯 ?ㅼ젙) |
-| 媛숈? ?먮윭 3踰?諛섎났 以?硫덉땄 | Circuit Breaker ?뺤긽 ?묐룞. `[ISSUES]` ?뱀뀡???먯씤 ?붿빟??癒쇱? ?쎄퀬 ?섏젙 |
-| ?ㅽ봽?쇱씤 ?곹깭?먯꽌 review ?ㅽ뙣 | Claude API???ㅽ듃?뚰겕 ?꾩슂. 罹먯떆??failure-catalog 湲곕컲 ?뺤쟻 寃?щ쭔 媛??|
-| Wizard瑜??ㅼ떆 ?뚮━怨??띠쓬 | `solo-cto-agent init --wizard --force` |
-
-??湲?吏꾨떒? `docs/feedback-guide.md` 李몄“.
-
----
-
-## 12. Semi-auto + Full-auto 蹂묒슜
-
-???꾨줈?앺듃?먯꽌 ??Mode 瑜?**?숈떆??* ?댁쁺?????덈떎. ?ㅼ쓬???꾩젣???뚮쭔 沅뚯옣:
-
-- ???CI/CD ?명봽?쇨? ?덇퀬 PR ?④퀎???먮룞?뷀븯怨??띕떎 ??Full-auto (codex-main)
-- 濡쒖뺄 媛쒕컻쨌?붿옄?맞룸Ц???묒뾽? Claude Cowork ?덉뿉???섍퀬 ?띕떎 ??Semi-auto (cowork-main)
-- ??Mode 媛 媛숈? `agent-scores.json` / `error-patterns.md` 瑜?怨듭쑀 ??Semi-auto 媛 `sync` 濡?Full-auto 寃곌낵臾쇱쓣 ?뚯뼱??
-
-??寃쎌슦 ?ㅼ튂 ?쒖꽌:
-
-1. Full-auto 癒쇱? ?ㅼ튂 (`init --wizard`, Mode 1 = codex-main, setup-pipeline ?ㅽ뻾)
-2. 媛숈? 癒몄떊?먯꽌 Semi-auto 瑜??곌퀬 ?띠쑝硫?**SKILL.md 瑜??덈줈 ?곗? 留먭퀬 `mode:` ?꾨뱶留?`cowork-main` ?쇰줈 蹂寃?*
-3. `sync --apply` 濡?Full-auto ?먯꽌 ?앹꽦???곗씠?곕? 媛?몄? 濡쒖뺄 由щ럭??諛섏쁺
-
-Agent 援ъ꽦 異뺤? ??Mode 怨듯넻?대떎. CTO Tier 瑜????뚮뒗 Full-auto + Cowork+Codex 媛 湲곕낯 ?뺤콉 (`docs/cto-policy.md`).
-
-> Semi-auto ?⑤룆 ?ъ슜??湲곕낯 沅뚯옣. ??蹂묒슜? "?대? CI ?먮룞?붽? ?덈뒗??異붽?濡?濡쒖뺄 ?대쭅???곌퀬 ?띕떎" ???ъ슜?먯뿉寃뚮쭔.
-
----
-
-## 13. ?ㅼ쓬 ?④퀎
-
-- **Tier 異??뺤쓽:** `docs/tier-matrix.md`
-- **Tier 蹂??ъ슜 ??** `docs/tier-examples.md`
-- **CTO Tier ?댁쁺 ?뺤콉:** `docs/cto-policy.md`
-- **?ㅽ궗 洹쒓꺽 (?묒そ Mode 怨듯넻):** `skills/_shared/agent-spec.md`
-- **?꾨쿋??而⑦뀓?ㅽ듃:** `skills/_shared/skill-context.md`
-- **?쇰뱶諛?/ ?댁뒋:** `docs/feedback-guide.md`
-- **?ㅽ궗 ?щ━諛??꾨왂:** `docs/skill-slimming.md`
-
-臾몄젣媛 ?앷린硫?`solo-cto-agent doctor` 異쒕젰???④퍡 怨듭쑀??二쇱꽭??
-
-
-
+codex-main 가이드: `docs/codex-main-install.md`

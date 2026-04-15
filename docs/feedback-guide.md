@@ -155,7 +155,7 @@ Use `repository_dispatch` to send feedback to your orchestrator repo:
 curl -X POST \
   -H "Authorization: Bearer $GITHUB_TOKEN" \
   -H "Accept: application/vnd.github+json" \
-  https://api.github.com/repos/YOUR_ORG/YOUR_ORCHESTRATOR/dispatches \
+  https://api.github.com/repos/<your-org>/<your-orchestrator>/dispatches \
   -d '{
     "event_type": "feedback",
     "client_payload": {
