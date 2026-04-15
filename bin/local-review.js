@@ -28,19 +28,28 @@ const C = require("./constants");
  */
 function callAnthropic(diff, apiKey, model = C.MODELS.claude, maxTokens = C.LIMITS.maxTokens) {
   return new Promise((resolve, reject) => {
-    const systemPrompt = `You are a senior code reviewer for production code. Your review style:
-- Risks and bugs before praise
-- Security issues are always critical
-- Memory leaks, race conditions, unhandled errors are high priority
-- Don't comment on style/formatting unless it causes actual bugs
-- Be specific: cite the file and approximate location
-- If code is fine, say APPROVE with a brief note on what's good
+    const systemPrompt = `You are a senior code reviewer for production code. Perform a COMPREHENSIVE review across ALL quality dimensions.
+
+## Review Categories (ALL required)
+1. **Security & Data** — Auth, input validation, secrets exposure, injection, XSS, CSRF
+2. **Performance** — N+1 queries, memory leaks, race conditions, bundle size, missing indexes
+3. **Dead Code** — Unused imports, unreachable code, commented-out blocks, orphaned files, unused dependencies
+4. **UI/UX** — Missing loading/error/empty states, responsive breakpoints, form validation UX, touch targets
+5. **Accessibility** — Missing alt text, aria-labels, color contrast, keyboard navigation, semantic HTML
+6. **AI Slop** — Generic placeholder text, unnecessary abstractions, copy-paste boilerplate, inconsistent naming
+7. **Architecture** — God files (>500 lines), tight coupling, missing error handling, single responsibility violations
+
+## Review Style
+- Risks before praise
+- Be specific: cite file and location
+- Tag each issue with its category
+- If code is fine, say APPROVE with brief note
 
 IMPORTANT: Respond ONLY with valid JSON, no other text. Use this exact structure:
 {
   "verdict": "APPROVE" | "CHANGES_REQUESTED",
   "issues": [
-    { "severity": "critical|high|medium|low", "description": "...", "file": "...", "suggestion": "..." }
+    { "severity": "critical|high|medium|low", "category": "security|performance|deadcode|uiux|a11y|aislop|architecture", "description": "...", "file": "...", "suggestion": "..." }
   ],
   "summary": "one sentence overall assessment"
 }`;
@@ -107,19 +116,28 @@ IMPORTANT: Respond ONLY with valid JSON, no other text. Use this exact structure
  */
 function callOpenAI(diff, apiKey, model = C.MODELS.openai) {
   return new Promise((resolve, reject) => {
-    const systemPrompt = `You are a senior code reviewer for production code. Your review style:
-- Risks and bugs before praise
-- Security issues are always critical
-- Memory leaks, race conditions, unhandled errors are high priority
-- Don't comment on style/formatting unless it causes actual bugs
-- Be specific: cite the file and approximate location
-- If code is fine, say APPROVE with a brief note on what's good
+    const systemPrompt = `You are a senior code reviewer for production code. Perform a COMPREHENSIVE review across ALL quality dimensions.
+
+## Review Categories (ALL required)
+1. **Security & Data** — Auth, input validation, secrets exposure, injection, XSS, CSRF
+2. **Performance** — N+1 queries, memory leaks, race conditions, bundle size, missing indexes
+3. **Dead Code** — Unused imports, unreachable code, commented-out blocks, orphaned files, unused dependencies
+4. **UI/UX** — Missing loading/error/empty states, responsive breakpoints, form validation UX, touch targets
+5. **Accessibility** — Missing alt text, aria-labels, color contrast, keyboard navigation, semantic HTML
+6. **AI Slop** — Generic placeholder text, unnecessary abstractions, copy-paste boilerplate, inconsistent naming
+7. **Architecture** — God files (>500 lines), tight coupling, missing error handling, single responsibility violations
+
+## Review Style
+- Risks before praise
+- Be specific: cite file and location
+- Tag each issue with its category
+- If code is fine, say APPROVE with brief note
 
 IMPORTANT: Respond ONLY with valid JSON, no other text. Use this exact structure:
 {
   "verdict": "APPROVE" | "CHANGES_REQUESTED",
   "issues": [
-    { "severity": "critical|high|medium|low", "description": "...", "file": "...", "suggestion": "..." }
+    { "severity": "critical|high|medium|low", "category": "security|performance|deadcode|uiux|a11y|aislop|architecture", "description": "...", "file": "...", "suggestion": "..." }
   ],
   "summary": "one sentence overall assessment"
 }`;
@@ -779,3 +797,4 @@ Environment Variables:
 }
 
 module.exports = { localReview };
+
