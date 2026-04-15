@@ -3,13 +3,29 @@
   "version": "1.1.0",
   "private": false,
   "description": "Dual-agent CI/CD orchestrator with CTO-grade operating rules. Claude + Codex automated cross-review pipeline.",
+  "author": "seunghunbae-3svs",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seunghunbae-3svs/solo-cto-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/seunghunbae-3svs/solo-cto-agent/issues"
+  },
+  "homepage": "https://github.com/seunghunbae-3svs/solo-cto-agent#readme",
   "bin": {
     "solo-cto-agent": "bin/cli.js"
   },
+  "types": "index.d.ts",
   "scripts": {
     "test": "vitest run",
     "lint": "node scripts/validate-package.js",
-    "validate": "bash scripts/validate.sh"
+    "validate": "bash scripts/validate.sh",
+    "format": "prettier --write \"bin/**/*.js\" \"tests/**/*.mjs\"",
+    "format:check": "prettier --check \"bin/**/*.js\" \"tests/**/*.mjs\""
   },
   "files": [
     "bin",
@@ -36,7 +52,11 @@
     "cto"
   ],
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "ajv": "^8.12.0",
+    "eslint": "^10.2.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
     "vitest": "^1.6.0"
   }
 }
