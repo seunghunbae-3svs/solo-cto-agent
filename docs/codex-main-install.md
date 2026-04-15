@@ -152,3 +152,23 @@ solo-cto-agent init --wizard
 
 CI/CD 워크플로우는 그대로 두어도 무방합니다 (트리거되지 않으면 비용 없음).
 cowork-main 가이드: `docs/cowork-main-install.md`
+
+---
+
+## Live E2E findings (2026-04-15)
+
+This install path was re-checked against a real private Next.js 14 + NextAuth + Prisma project on Windows PowerShell.
+
+Observed setup result:
+
+- orchestrator scaffold: 24 workflows
+- product repo install: 8 workflows
+- detected services: `next-auth`, `prisma`
+- generated secret list: `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `DATABASE_URL`, `ORCHESTRATOR_PAT`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
+
+One live runtime caveat also surfaced during PR testing:
+
+- if Vercel refuses a PR preview, check the git author email first
+- the commit author email must be linked to a GitHub account that Vercel can match
+- if it is not, the review pipeline can still run, but preview deployment may be blocked
+

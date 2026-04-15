@@ -22,12 +22,14 @@ These are not feature tours. They describe the moment where the agent changes yo
 - [Pre-deploy env var lint](ship/pre-deploy-env-lint.md) - service scan + paste-ready `gh secret set` commands before the deploy breaks
 - [Release with idempotent npm publish](ship/release-with-npm-publish.md) - version bump + changelog + tag + CI publish that is safe to re-run
 - [Release tag v1.1.0](ship/release-v1.1.0.md) - tag-driven release pipeline instead of manual publish
+- [codex-main setup on a live project](ship/codex-main-setup-on-live-project.md) - real Windows install on a private Next.js app, with detected services and workflow inventory
 
 ### `review/` - Cross-checking before merge
 
 - [Dual-review catches a race condition](review/dual-review-blocker.md) - Claude + Codex disagree, cross-review produces a decision
 - [UI/UX vision check on a preview URL](review/uiux-vision-check.md) - 6-axis scoring catches AI-slop gradient UI before it ships
 - [PR #64 toolkit upgrade](review/pr-64-toolkit-upgrade.md) - real PR scope summary for fast decisioning
+- [codex-main live PR review on a private app](review/codex-main-live-pr-review.md) - measured PR-open timings from a real full-auto run
 
 ### `founder-workflow/` - Non-code loops
 
@@ -35,6 +37,7 @@ These are not feature tours. They describe the moment where the agent changes yo
 - [Idea critique before commitment](founder-workflow/idea-critique.md) - risk-first analysis surfaces a blocker in 2 minutes instead of 2 weeks
 - [Decision queue via Telegram](founder-workflow/decision-queue-telegram.md) - one-tap approve/revise/hold without hunting PRs
 - [Effectiveness report snapshot](founder-workflow/effectiveness-report.md) - real 30-day metrics from the repo
+- [codex-main live rework loop and digest](founder-workflow/codex-main-live-rework-and-digest.md) - real repository-dispatch rework rounds plus scheduled digest delivery
 
 ## How to read an example
 

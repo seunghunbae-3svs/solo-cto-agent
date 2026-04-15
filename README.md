@@ -155,6 +155,12 @@ Real-world flows, four-part shape (input -> agent behavior -> output -> pain red
 - [`examples/review/`](examples/review/) - dual-review blockers, UI/UX vision gates
 - [`examples/founder-workflow/`](examples/founder-workflow/) - session brief, idea critique
 
+If you want the live codex-main proof first, start here:
+
+- [`examples/ship/codex-main-setup-on-live-project.md`](examples/ship/codex-main-setup-on-live-project.md) - real full-auto install on a private Next.js app
+- [`examples/review/codex-main-live-pr-review.md`](examples/review/codex-main-live-pr-review.md) - real PR-open automation timings and outputs
+- [`examples/founder-workflow/codex-main-live-rework-and-digest.md`](examples/founder-workflow/codex-main-live-rework-and-digest.md) - real rework-round comments and scheduled digest behavior
+
 See [`examples/README.md`](examples/README.md) for the full index.
 
 ---
