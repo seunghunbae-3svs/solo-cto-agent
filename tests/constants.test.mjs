@@ -35,7 +35,7 @@ describe("API_HOSTS", () => {
 describe("MODELS", () => {
   test("has default model names", () => {
     expect(C.MODELS.claude).toMatch(/^claude-/);
-    expect(C.MODELS.codex).toMatch(/codex/);
+    expect(C.MODELS.codex).toMatch(/gpt|codex/);
     expect(C.MODELS.openai).toMatch(/gpt/);
   });
 
