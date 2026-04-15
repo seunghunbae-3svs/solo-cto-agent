@@ -107,7 +107,19 @@
       ],
       "ops_codex_extras": [
         "codex-prompts.md"
-      ]
+      ],
+      "cloud_features": {
+        "routines": {
+          "description": "Claude Code Routines — cloud-based scheduled/triggered reviews",
+          "cost": "Standard token rates. Daily caps: Pro=5, Max=15, Team/Enterprise=25.",
+          "requires": ["ANTHROPIC_API_KEY", "routines.triggerId in config"]
+        },
+        "managedAgents": {
+          "description": "Managed Agent deep-review with sandboxed code execution",
+          "cost": "Standard token rates + $0.08/session-hour active runtime",
+          "requires": ["ANTHROPIC_API_KEY", "managedAgents.enabled in config"]
+        }
+      }
     }
   },
   "product_repo_templates": {

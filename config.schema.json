@@ -66,6 +66,61 @@
         }
       },
       "additionalProperties": false
+    },
+    "routines": {
+      "type": "object",
+      "description": "Claude Code Routines — cloud-based scheduled/triggered reviews (CTO tier). Cost: standard token rates. Daily caps: Pro=5, Max=15, Team/Enterprise=25.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Routines integration"
+        },
+        "triggerId": {
+          "type": "string",
+          "pattern": "^trig_",
+          "description": "Routine trigger ID from Claude Code (e.g. trig_01ABC...)"
+        },
+        "schedules": {
+          "type": "array",
+          "description": "Custom schedule entries (name, cron, triggerId, text)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "cron": { "type": "string", "description": "Cron expression (e.g. '0 2 * * *' for 2am daily)" },
+              "triggerId": { "type": "string" },
+              "text": { "type": "string", "description": "Context text sent with the /fire request" }
+            },
+            "required": ["name", "triggerId"]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "managedAgents": {
+      "type": "object",
+      "description": "Claude Managed Agents — deep review with sandboxed code execution (CTO tier). Cost: standard token rates + $0.08/session-hour active runtime.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Managed Agents deep-review"
+        },
+        "model": {
+          "type": "string",
+          "default": "claude-sonnet-4-6",
+          "description": "Model for Managed Agent sessions (claude-sonnet-4-6, claude-opus-4-6, claude-haiku-4-5-20251001)"
+        },
+        "sessionTimeoutMs": {
+          "type": "integer",
+          "minimum": 30000,
+          "maximum": 600000,
+          "default": 300000,
+          "description": "Max session duration in ms (30s-10min, default 5min)"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

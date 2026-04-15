@@ -9,7 +9,7 @@ _solo_cto_agent() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-  commands="init setup-pipeline setup-repo upgrade sync review dual-review knowledge session status lint doctor notify telegram --help --version --lang --completions"
+  commands="init setup-pipeline setup-repo upgrade sync review dual-review deep-review knowledge session status lint doctor notify telegram routine --help --version --lang --completions"
 
   case "$prev" in
     solo-cto-agent)
@@ -58,6 +58,22 @@ _solo_cto_agent() {
       ;;
     deploy-error)
       COMPREPLY=( $(compgen -W "--target --commit --body" -- "$cur") )
+      return 0
+      ;;
+    deep-review)
+      COMPREPLY=( $(compgen -W "--staged --branch --file --target --dry-run --json --force" -- "$cur") )
+      return 0
+      ;;
+    routine)
+      COMPREPLY=( $(compgen -W "fire schedules" -- "$cur") )
+      return 0
+      ;;
+    fire)
+      COMPREPLY=( $(compgen -W "--trigger --text --dry-run --force" -- "$cur") )
+      return 0
+      ;;
+    schedules)
+      COMPREPLY=( $(compgen -W "--json" -- "$cur") )
       return 0
       ;;
     telegram)

@@ -9,7 +9,7 @@ const { execSync } = require("child_process");
 const { syncCommand } = require("./sync");
 const { runWizard, hasWizardFlag } = require("./wizard");
 const i18n = require("./i18n");
-const { localReview, knowledgeCapture, dualReview, detectMode, sessionSave, sessionRestore, sessionList, recordFeedback, setLogChannel } = require("./cowork-engine");
+const { localReview, knowledgeCapture, dualReview, detectMode, sessionSave, sessionRestore, sessionList, recordFeedback, setLogChannel, fireRoutine, buildRoutineSchedules, managedAgentReview, getDiff } = require("./cowork-engine");
 // Lazy-load optional modules so missing files don't break older installs.
 let uiux, rework, watch, notify, inboundFeedback;
 try { uiux = require("./uiux-engine"); } catch (_) { uiux = null; }
@@ -49,6 +49,9 @@ Usage:
   solo-cto-agent sync --org <github-org> [--apply] [--repos <repo1,repo2,...>]
   solo-cto-agent review [--staged|--branch [--target <base>]|--file <path>] [--dry-run] [--solo] [--json|--markdown]
   solo-cto-agent dual-review [--staged|--branch [--target <base>]]
+  solo-cto-agent deep-review [--staged|--branch|--file <path>] [--dry-run] [--json]  # CTO tier
+  solo-cto-agent routine fire [--trigger <id>] [--text <context>] [--dry-run]         # CTO tier
+  solo-cto-agent routine schedules [--json]
   solo-cto-agent knowledge [--session|--file <path>|--manual] [--project <tag>]
   solo-cto-agent session save|restore|list [--project <tag>] [--session <file>] [--limit <n>]
   solo-cto-agent status
@@ -77,6 +80,9 @@ Commands:
   doctor            Complete system health check (skills, engine, API keys, notifications, catalog)
   notify            Send event-tagged notification (deploy-ready / deploy-error)
   telegram wizard   Interactive setup for Telegram notifications (SOLO_CTO_EXPERIMENTAL=1)
+  deep-review       Managed Agent deep-review with sandboxed code execution (CTO tier, $0.08/session-hr)
+  routine fire      Fire a Claude Code Routine via /fire API endpoint (CTO tier)
+  routine schedules List configured routine schedules
 
 Presets / Tiers:
   maker       Spark + Review + Memory + Craft (idea validation only)
@@ -105,6 +111,22 @@ Examples:
   npx solo-cto-agent notify deploy-ready --target production --url https://myapp.com --commit abc1234
   npx solo-cto-agent notify deploy-error --target preview --body "$(tail -50 build.log)"
   SOLO_CTO_EXPERIMENTAL=1 npx solo-cto-agent telegram wizard   # setup Telegram alerts
+
+  # Claude Code Routines (CTO tier — cloud-based, laptop can be closed)
+  npx solo-cto-agent routine fire --text "Nightly review"       # fire routine manually
+  npx solo-cto-agent routine schedules                          # list configured schedules
+
+  # Managed Agent Deep Review (CTO tier — sandboxed code execution)
+  npx solo-cto-agent deep-review                                # deep-review staged changes
+  npx solo-cto-agent deep-review --dry-run                      # preview cost without sending
+`);
+  console.log(`
+Cloud Features (CTO tier only — requires config):
+  Routines       Schedule/trigger reviews on Anthropic cloud. Daily caps: Pro=5, Max=15, Team=25.
+                 Cost: standard Claude token rates.
+  Deep Review    Managed Agent with sandboxed execution for higher-confidence reviews.
+                 Cost: standard token rates + $0.08/session-hour active runtime.
+  See: https://github.com/seunghunbae-3svs/solo-cto-agent/blob/main/docs/configuration.md#cloud-features
 `);
 }
 
@@ -1957,6 +1979,109 @@ async function main() {
       console.error(`   Use: solo-cto-agent session save|restore|list`);
       process.exit(1);
     }
+    return;
+  }
+
+  // =========================================================================
+  // Claude Code Routines — fire / list schedules (PR-G26)
+  // =========================================================================
+  if (cmd === "routine") {
+    const sub = args[1] || "fire";
+    const dryRun = args.includes("--dry-run");
+    const forceFlag = args.includes("--force");
+
+    if (sub === "fire") {
+      const trigIdx = args.indexOf("--trigger");
+      const textIdx = args.indexOf("--text");
+      const triggerId = trigIdx >= 0 ? args[trigIdx + 1] : null;
+      const text = textIdx >= 0 ? args[textIdx + 1] : null;
+
+      fireRoutine({ triggerId, text, dryRun, force: forceFlag }).then((result) => {
+        if (!result && !dryRun) process.exit(1);
+      }).catch((e) => {
+        console.error(`❌ ${e.message}`);
+        process.exit(1);
+      });
+      return;
+    }
+
+    if (sub === "schedules") {
+      const schedules = buildRoutineSchedules();
+      if (args.includes("--json")) {
+        console.log(JSON.stringify(schedules, null, 2));
+      } else {
+        if (schedules.length === 0) {
+          console.log("No routine schedules configured.");
+          console.log("Set routines.enabled=true and routines.triggerId in config.");
+        } else {
+          console.log(`Routine schedules (${schedules.length}):\n`);
+          for (const s of schedules) {
+            console.log(`  ${s.name || "unnamed"}`);
+            console.log(`    cron: ${s.cron || "manual"}`);
+            console.log(`    trigger: ${s.triggerId}`);
+            if (s.text) console.log(`    context: ${s.text.slice(0, 80)}...`);
+            console.log();
+          }
+        }
+      }
+      return;
+    }
+
+    console.error(`❌ Unknown routine subcommand: ${sub}`);
+    console.error(`   Use: solo-cto-agent routine fire|schedules`);
+    process.exit(1);
+    return;
+  }
+
+  // =========================================================================
+  // Claude Managed Agents — deep-review (PR-G26)
+  // =========================================================================
+  if (cmd === "deep-review") {
+    const dryRun = args.includes("--dry-run");
+    const forceFlag = args.includes("--force");
+    const staged = args.includes("--staged") || (!args.includes("--branch") && !args.includes("--file"));
+    const branchFlag = args.includes("--branch");
+    const fileIdx = args.indexOf("--file");
+    const targetIdx = args.indexOf("--target");
+    const target = targetIdx >= 0 ? args[targetIdx + 1] : null;
+
+    let diffSource = "staged";
+    if (branchFlag) diffSource = "branch";
+    else if (fileIdx >= 0) { diffSource = "file"; }
+
+    const cwd = process.cwd();
+    const diff = getDiff(diffSource, target || (fileIdx >= 0 ? args[fileIdx + 1] : null), { cwd });
+    if (!diff || diff.trim().length === 0) {
+      console.log("No changes found.");
+      return;
+    }
+
+    managedAgentReview({ diff, dryRun, force: forceFlag }).then((result) => {
+      if (result) {
+        if (args.includes("--json")) {
+          console.log(JSON.stringify(result, null, 2));
+        } else {
+          console.log(`\n[VERDICT] ${result.verdict}`);
+          if (result.issues && result.issues.length > 0) {
+            console.log(`\n[ISSUES] (${result.issues.length})`);
+            for (const issue of result.issues) {
+              const icon = issue.severity === "BLOCKER" ? "⛔" : issue.severity === "SUGGESTION" ? "⚠️" : "💡";
+              console.log(`${icon} [${issue.location}] ${issue.issue}`);
+              if (issue.suggestion) console.log(`  → ${issue.suggestion}`);
+            }
+          }
+          if (result.summary) console.log(`\n[SUMMARY] ${result.summary}`);
+          if (result.cost) {
+            console.log(`\n[COST] Token: $${result.cost.token} | Runtime: $${result.cost.runtime} | Total: $${result.cost.total}`);
+          }
+        }
+      } else if (!dryRun) {
+        process.exit(1);
+      }
+    }).catch((e) => {
+      console.error(`❌ ${e.message}`);
+      process.exit(1);
+    });
     return;
   }
 
