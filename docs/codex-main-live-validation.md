@@ -7,6 +7,27 @@ This runbook is for recurring end-to-end validation of the two full-auto operati
 
 Use this document when you want fresh proof that the shipped templates still work on a real GitHub repository, not just inside local tests.
 
+## Latest live result snapshot
+
+Latest real-project verification used a private Next.js commerce repo with the full codex-main wiring installed.
+
+Observed state:
+
+```text
+codex solo:
+- issue label -> product dispatch -> orchestrator route -> codex worker -> new PR
+- status: verified live
+
+codex + cowork:
+- PR open/synchronize -> auto review -> full review pipeline -> comparison/rework -> preview
+- status: verified live, with one caveat
+
+caveat:
+- older product repos may still contain copied workflow files that predate later fixes
+- specifically, stale `solo-cto-review.yml` or `preview-summary.yml` copies can break side-lane checks
+- this is a repo refresh problem, not a routing-engine or dispatch-handoff problem
+```
+
 ---
 
 ## Before you start
@@ -98,6 +119,12 @@ All of the following should happen:
 - a GitHub comment comes back onto the issue or linked PR
 - no unexpected dual-review path is triggered
 
+### Latest live outcome
+
+- passed after the orchestrator dispatch handoff fix
+- first live run exposed a real orchestrator gap: repository dispatch reached routing, but worker dispatch was missing
+- after the orchestrator fix, the same validation produced a real product-repo PR
+
 ### Evidence to keep
 
 - issue URL
@@ -178,6 +205,13 @@ All of the following should happen:
 - review comments land on the PR
 - decision/rework surface is visible in GitHub
 - if Telegram is enabled, a decision or notify message is sent
+
+### Latest live outcome
+
+- PR-open automation fired correctly on a real private repo
+- review comments, comparison output, rework output, and preview evidence all returned into GitHub
+- one product repo still contained stale copied workflow files, which broke a secondary review lane
+- that blocker belongs to workflow refresh on existing repos, not to the codex-main routing model itself
 
 ### Evidence to keep
 

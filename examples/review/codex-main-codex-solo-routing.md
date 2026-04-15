@@ -22,16 +22,7 @@ Labels: agent-codex, enhancement
 
 ## Output
 
-Command used during verification:
-
-```bash
-node templates/orchestrator/ops/orchestrator/routing-engine.js \
-  --labels "agent-codex,enhancement" \
-  --repo "masked-org/project-alpha" \
-  --issue 17
-```
-
-Observed output:
+Local routing verification:
 
 ```json
 {
@@ -50,6 +41,23 @@ Observed output:
   "labels": "agent-codex,enhancement"
 }
 ```
+
+Live validation on a real private commerce repo:
+
+```text
+Product repo run:      Codex Auto          success   10s
+Orchestrator run:      Route Issue         success   14s
+Orchestrator run:      Codex Worker        success   46s
+GitHub result:         new fix PR created
+Preview result:        preview deployment attached to the new PR
+```
+
+What this proved:
+
+- `agent-codex` stayed on the single-agent path
+- the product repo dispatch reached the orchestrator successfully
+- the orchestrator worker executed against the real target repo
+- the worker created a real PR instead of stopping at a label/comment handoff
 
 Related template files:
 

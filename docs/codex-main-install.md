@@ -216,3 +216,11 @@ One live runtime caveat also surfaced during PR testing:
 - the commit author email must be linked to a GitHub account that Vercel can match
 - if it is not, the review pipeline can still run, but preview deployment may be blocked
 
+One install-age caveat also surfaced:
+
+- older product repos can keep stale copied workflow files even after the core codex-main templates improve
+- if a repo was wired earlier and shows odd failures in side-lane checks, refresh the copied workflows first
+- the two files that most clearly surfaced in live validation were:
+  - `.github/workflows/solo-cto-review.yml`
+  - `.github/workflows/preview-summary.yml`
+

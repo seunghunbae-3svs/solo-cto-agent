@@ -54,12 +54,30 @@ Routing output:
 Live PR-open timings from the private validation run:
 
 ```text
-Telegram Notify        success   7s
-Auto Review            success   9s
-Full Review Pipeline   success  56s
-Solo CTO Auto Review   success  78s
-Cross Review Dispatch  skipped   0s
+Telegram Notify        success    9s
+Auto Review            success    9s
+Full Review Pipeline   success   57s
+Comparison Dispatch    success    7s
+Rework Dispatch        success   11s
+Vercel Preview         success   deploy completed
 ```
+
+Latest live re-check findings on the same repo:
+
+```text
+Core dual path:        still alive
+Claude/Codex comments: returned to the PR thread
+Comparison report:     returned to the PR thread
+Rework loop:           emitted follow-up rounds
+Residual blocker:      legacy copied workflow files in the product repo
+```
+
+Residual blocker detail:
+
+- the repo's copied `solo-cto-review.yml` was stale and carried invalid encoding
+- the repo's copied `preview-summary.yml` was stale and carried invalid YAML
+- this did not stop the main dual-review path, but it did poison one secondary review lane
+- result: codex-main itself validated, but older product repos still need workflow refresh
 
 See the deeper proof documents:
 
