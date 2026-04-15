@@ -30,6 +30,7 @@ const { execSync } = require("child_process");
 
 // 재사용: cowork-engine 의 공통 helper 와 personalization layer
 const cowork = require("./cowork-engine.js");
+const C = require("./constants");
 
 // ============================================================================
 // CONFIG
@@ -44,8 +45,8 @@ const skillDir = () => _skillDirOverride
 const CONFIG = {
   get baselineDir() { return path.join(skillDir(), "visual-baselines"); },
   get reviewsDir() { return path.join(skillDir(), "reviews"); },
-  defaultModel: "claude-sonnet-4-20250514",
-  visionModel: "claude-sonnet-4-20250514",
+  defaultModel: C.MODELS.claude,
+  visionModel: C.MODELS.claude,
   defaultViewports: ["mobile", "tablet", "desktop"],
 };
 
@@ -144,20 +145,20 @@ function summarizeTokens(tokens) {
 // API CALLS (Vision 지원)
 // ============================================================================
 
-function _callAnthropic({ system, messages, model, maxTokens = 4096 }) {
+function _callAnthropic({ system, messages, model, maxTokens = C.LIMITS.maxTokens }) {
   return new Promise((resolve, reject) => {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return reject(new Error("ANTHROPIC_API_KEY not set"));
 
     const body = JSON.stringify({ model, max_tokens: maxTokens, system, messages });
     const req = https.request({
-      hostname: "api.anthropic.com",
+      hostname: C.API_HOSTS.anthropic,
       path: "/v1/messages",
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+        "anthropic-version": C.ANTHROPIC_API_VERSION,
       },
     }, (res) => {
       let data = "";
@@ -187,7 +188,7 @@ async function callAnthropicWithRetry(opts) {
       lastErr = e;
       const isRate = e.statusCode === 429 || e.statusCode === 529 || (e.body || "").includes("rate_limit");
       if (i === 2) break;
-      const waitMs = isRate ? (i + 1) * 30000 : (i + 1) * 15000;
+      const waitMs = isRate ? (i + 1) * C.RETRY_DELAYS.rateLimit : (i + 1) * C.RETRY_DELAYS.generic;
       logWarn(`API ${isRate ? "rate-limited" : "error"}, retry in ${waitMs / 1000}s (${i + 1}/3)`);
       await new Promise((r) => setTimeout(r, waitMs));
     }

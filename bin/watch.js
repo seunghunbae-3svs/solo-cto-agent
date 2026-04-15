@@ -25,14 +25,15 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { spawn } = require("child_process");
+const C = require("./constants");
 
 // Load engine to read tier/mode/agent + notify hook
 const engine = require("./cowork-engine.js");
 let notify;
 try { notify = require("./notify.js"); } catch (_) { notify = null; }
 
-const DEFAULT_PATTERNS = [/\.tsx?$/, /\.jsx?$/, /\.css$/, /\.scss$/, /\.html$/, /\.svelte$/, /\.vue$/];
-const IGNORE_DIRS = new Set(["node_modules", ".git", ".next", "dist", "build", ".turbo", ".cache", ".vercel", "coverage"]);
+const DEFAULT_PATTERNS = C.WATCH_PATTERNS.extensions;
+const IGNORE_DIRS = C.WATCH_PATTERNS.ignoreDirs;
 
 function isWatchable(filename) {
   if (!filename) return false;

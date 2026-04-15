@@ -138,8 +138,9 @@ describe("provider base URL configuration", () => {
     // Verify env var is checked first in the source
     expect(src).toMatch(/process\.env\.ANTHROPIC_API_BASE/);
     expect(src).toMatch(/process\.env\.OPENAI_API_BASE/);
-    // Verify config is checked second (after env var, before default)
-    const anthropicLine = src.match(/anthropicBase:\s*process\.env\.ANTHROPIC_API_BASE[\s\S]*?"api\.anthropic\.com"/);
+    // Verify config is checked second (after env var, before default).
+    // Default may be a literal string or a C.API_HOSTS.anthropic constant reference.
+    const anthropicLine = src.match(/anthropicBase:\s*process\.env\.ANTHROPIC_API_BASE[\s\S]*?(C\.API_HOSTS\.anthropic|"api\.anthropic\.com")/);
     expect(anthropicLine).toBeTruthy();
   });
 });
