@@ -58,6 +58,7 @@ Usage:
   solo-cto-agent notify deploy-error --target <env> --commit <sha> --body <msg>
   solo-cto-agent telegram wizard [--lang <en|ko>]
   solo-cto-agent --help
+  solo-cto-agent --version | -V
   solo-cto-agent --lang <en|ko> <command>      # override CLI locale (or SOLO_CTO_LANG env)
 
 Commands:
@@ -1493,6 +1494,12 @@ async function main() {
     return;
   }
 
+  if (cmd === "--version" || cmd === "-V") {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+    console.log(pkg.version);
+    return;
+  }
+
   const force = args.includes("--force");
 
   if (cmd === "init") {
@@ -2101,4 +2108,14 @@ async function main() {
   process.exit(1);
 }
 
-main();
+// Global safety net — catch unhandled async errors so the CLI never
+// exits silently on a rejected promise.
+process.on("unhandledRejection", (err) => {
+  console.error("❌ Unexpected error:", err && err.message ? err.message : err);
+  process.exit(1);
+});
+
+main().catch((err) => {
+  console.error("❌ Fatal:", err && err.message ? err.message : err);
+  process.exit(1);
+});
