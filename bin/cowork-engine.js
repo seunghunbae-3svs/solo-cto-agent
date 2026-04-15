@@ -129,6 +129,97 @@ const CONFIG = {
  * A user with a paid Opus subscription can set CLAUDE_MODEL_CTO=claude-opus-... and
  * keep Haiku for maker tier. A user who wants everything on one model can set CLAUDE_MODEL.
  */
+/**
+ * Split a unified diff into chunks that each fit within maxBytes.
+ * Splits at "diff --git" file boundaries. If a single file exceeds maxBytes,
+ * that file is truncated (unavoidable — better than dropping it entirely).
+ * @param {string} diffText - full unified diff
+ * @param {number} maxBytes - max bytes per chunk
+ * @returns {string[]} array of diff chunks
+ */
+function _splitDiffIntoChunks(diffText, maxBytes) {
+  // If entire diff fits, return as-is
+  if (Buffer.byteLength(diffText, "utf8") <= maxBytes) {
+    return [diffText];
+  }
+  // Split at file boundaries
+  const fileParts = diffText.split(/(?=^diff --git )/m).filter(Boolean);
+
+  if (fileParts.length <= 1) {
+    // Single file exceeds limit — truncate it
+    const truncated = Buffer.from(diffText, "utf8").subarray(0, maxBytes).toString("utf8");
+    const lastNl = truncated.lastIndexOf("\n");
+    return [(lastNl > 0 ? truncated.slice(0, lastNl) : truncated)
+      + `\n\n[... single file truncated — ${(Buffer.byteLength(diffText, "utf8") / 1024).toFixed(0)}KB total]`];
+  }
+
+  const chunks = [];
+  let current = "";
+
+  for (const part of fileParts) {
+    const partBytes = Buffer.byteLength(part, "utf8");
+    const currentBytes = Buffer.byteLength(current, "utf8");
+
+    if (currentBytes + partBytes <= maxBytes) {
+      current += part;
+    } else {
+      if (current) chunks.push(current);
+      // If this single file exceeds limit, truncate it
+      if (partBytes > maxBytes) {
+        const trunc = Buffer.from(part, "utf8").subarray(0, maxBytes).toString("utf8");
+        const nl = trunc.lastIndexOf("\n");
+        current = (nl > 0 ? trunc.slice(0, nl) : trunc)
+          + `\n\n[... file truncated — ${(partBytes / 1024).toFixed(0)}KB]`;
+      } else {
+        current = part;
+      }
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+/**
+ * Merge multiple parsed review results into a single consolidated review.
+ * Deduplicates issues by location, escalates verdict to worst-case.
+ * @param {Array<{verdict: string, issues: Array, summary: string, nextAction: string}>} reviews
+ * @returns {{verdict: string, issues: Array, summary: string, nextAction: string, chunkCount: number}}
+ */
+function _mergeChunkReviews(reviews) {
+  const verdictRank = { APPROVE: 0, COMMENT: 1, REQUEST_CHANGES: 2 };
+  let worstVerdict = "APPROVE";
+  const allIssues = [];
+  const seenLocations = new Set();
+  const summaries = [];
+  const nextActions = [];
+
+  for (const r of reviews) {
+    // Escalate verdict
+    if ((verdictRank[r.verdict] || 0) > (verdictRank[worstVerdict] || 0)) {
+      worstVerdict = r.verdict;
+    }
+    // Collect issues, dedup by location+issue
+    for (const issue of (r.issues || [])) {
+      const key = `${issue.location}::${issue.issue}`;
+      if (!seenLocations.has(key)) {
+        seenLocations.add(key);
+        allIssues.push(issue);
+      }
+    }
+    if (r.summary) summaries.push(r.summary);
+    if (r.nextAction) nextActions.push(r.nextAction);
+  }
+
+  return {
+    verdict: worstVerdict,
+    verdictKo: verdictLabel(worstVerdict),
+    issues: allIssues,
+    summary: summaries.join(" "),
+    nextAction: nextActions.join("\n"),
+    chunkCount: reviews.length,
+  };
+}
+
 function resolveModelForTier(tier, opts = {}) {
   const env = opts.env || process.env;
   const normalized = (tier || "").toLowerCase();
@@ -1887,18 +1978,16 @@ async function localReview(options = {}) {
 
   logInfo(`Diff: ${diff.split("\n").length} lines`);
 
-  // Chunk large diffs — if the diff exceeds maxChunkBytes, truncate and warn.
-  // Full multi-chunk review (review each chunk, merge results) is a future enhancement;
-  // for now we truncate to keep API calls reliable and costs predictable.
+  // Multi-chunk review — split large diffs by file boundary (diff --git),
+  // group files into chunks that fit within maxChunkBytes, review each chunk
+  // independently, then merge results. Falls back to truncation if a single
+  // file exceeds the limit.
   const diffBytes = Buffer.byteLength(diff, "utf8");
   const maxBytes = CONFIG.diff.maxChunkBytes;
+  let diffChunks = null; // null = single-pass (diff fits), array = multi-chunk
   if (diffBytes > maxBytes) {
-    logWarn(`Diff is large (${(diffBytes / 1024).toFixed(0)}KB > ${(maxBytes / 1024).toFixed(0)}KB limit). Truncating to fit API token limits.`);
-    // Truncate by bytes, then trim to last complete line
-    const truncated = Buffer.from(diff, "utf8").subarray(0, maxBytes).toString("utf8");
-    const lastNewline = truncated.lastIndexOf("\n");
-    diff = (lastNewline > 0 ? truncated.slice(0, lastNewline) : truncated)
-      + `\n\n[... truncated — ${(diffBytes / 1024).toFixed(0)}KB total, showing first ${(maxBytes / 1024).toFixed(0)}KB]`;
+    diffChunks = _splitDiffIntoChunks(diff, maxBytes);
+    logWarn(`Diff is large (${(diffBytes / 1024).toFixed(0)}KB > ${(maxBytes / 1024).toFixed(0)}KB limit). Split into ${diffChunks.length} chunk${diffChunks.length === 1 ? "" : "s"} for review.`);
   }
 
   // Load context
@@ -1994,22 +2083,24 @@ ${errorPatterns}
 - BLOCKER가 1개라도 있으면 REQUEST_CHANGES.
 - diff 범위 밖 파일은 언급하지 않는다.`;
 
-  const userPrompt = `## 프로젝트 컨텍스트 (SKILL.md)
+  // Build user prompt — used for single-pass or as template for multi-chunk
+  const _buildUserPrompt = (diffContent) => `## 프로젝트 컨텍스트 (SKILL.md)
 ${skillContext}
 
 ## 리뷰 대상 diff
 \`\`\`diff
-${diff}
+${diffContent}
 \`\`\`
 
 위 출력 형식 그대로 리뷰하라.`;
+
+  const userPrompt = _buildUserPrompt(diff);
 
   if (dryRun) {
     log("\n[DRY RUN] Would call Anthropic API with:");
     log(`System prompt length: ${systemPrompt.length} chars`);
     log(`User prompt length: ${userPrompt.length} chars`);
-    // B3: Self-loop warning is free to compute — surface it on --dry-run too so
-    // operators can audit their external-signal config without paying for an API call.
+    if (diffChunks) log(`Multi-chunk: ${diffChunks.length} chunks`);
     try {
       const signals = assessExternalSignals();
       const warning = formatSelfLoopWarning(signals);
@@ -2022,11 +2113,29 @@ ${diff}
     return null;
   }
 
-  logInfo(`Calling Anthropic API (maxRetries=${tierLimits.maxRetries})...`);
+  let review, response, rawTexts;
 
   try {
-    const response = await callAnthropic(userPrompt, systemPrompt, model, { maxRetries: tierLimits.maxRetries });
-    const review = parseReviewResponse(response.text);
+    if (diffChunks && diffChunks.length > 1) {
+      // Multi-chunk review: review each chunk independently, merge results
+      logInfo(`Calling Anthropic API — ${diffChunks.length} chunks (maxRetries=${tierLimits.maxRetries})...`);
+      const chunkResults = [];
+      rawTexts = [];
+      for (let i = 0; i < diffChunks.length; i++) {
+        logInfo(`  Chunk ${i + 1}/${diffChunks.length} (${(Buffer.byteLength(diffChunks[i], "utf8") / 1024).toFixed(0)}KB)...`);
+        const chunkPrompt = _buildUserPrompt(diffChunks[i]);
+        const chunkResp = await callAnthropic(chunkPrompt, systemPrompt, model, { maxRetries: tierLimits.maxRetries });
+        chunkResults.push(parseReviewResponse(chunkResp.text));
+        rawTexts.push(chunkResp.text);
+      }
+      review = _mergeChunkReviews(chunkResults);
+      response = { text: rawTexts.join("\n\n---\n\n"), usage: { input_tokens: 0, output_tokens: 0 } };
+    } else {
+      // Single-pass review (fits within limit or single-chunk fallback)
+      logInfo(`Calling Anthropic API (maxRetries=${tierLimits.maxRetries})...`);
+      response = await callAnthropic(userPrompt, systemPrompt, model, { maxRetries: tierLimits.maxRetries });
+      review = parseReviewResponse(response.text);
+    }
 
     // Estimate tokens
     const inputTokens = Math.ceil(
@@ -3174,6 +3283,8 @@ module.exports = {
   readSkillContext,
   readFailureCatalog,
   _setSkillDirOverride,
+  _splitDiffIntoChunks,
+  _mergeChunkReviews,
   // Tier-aware model resolution (PR-G2)
   resolveModelForTier,
   estimateCost,
