@@ -127,6 +127,28 @@ describe("cli status", () => {
   });
 });
 
+describe("cli --completions", () => {
+  it("outputs bash completions", () => {
+    const r = run(["--completions", "bash"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("complete -F");
+    expect(r.stdout).toContain("solo-cto-agent");
+  });
+
+  it("outputs zsh completions", () => {
+    const r = run(["--completions", "zsh"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("#compdef");
+    expect(r.stdout).toContain("solo-cto-agent");
+  });
+
+  it("defaults to bash when no shell specified", () => {
+    const r = run(["--completions"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("complete -F");
+  });
+});
+
 describe("cli lint", () => {
   it("passes on repo skills", () => {
     const r = run(["lint"]);
