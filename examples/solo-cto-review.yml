@@ -1,0 +1,195 @@
+# ============================================================
+# Solo CTO 3-Pass PR Review
+# ============================================================
+# Pass 1: Code Review (구조, 보안, 성능, 버그)
+# Pass 2: Cross-Check (1차 리뷰 검증 + 누락 발견)
+# Pass 3: UI/UX Review (접근성, 반응형, 사용성)
+#
+# 프로세스:
+#   APPROVE  → ✅ 완료 (머지 가능)
+#   REQUEST_CHANGES → 🔄 재작업 필요 (수정 후 push → 자동 재리뷰)
+# ============================================================
+
+name: "Solo CTO Review"
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install solo-cto-agent
+        run: npm install -g solo-cto-agent
+
+      - name: Get PR diff
+        id: diff
+        run: |
+          # Fetch base branch for accurate diff
+          git fetch origin ${{ github.base_ref }} --depth=50 2>/dev/null || true
+          DIFF=$(git diff origin/${{ github.base_ref }}...HEAD -- . ':!package-lock.json' ':!*.lock' ':!*.min.js' ':!*.min.css' | head -c 50000)
+          DIFF_FILE="/tmp/pr-diff.txt"
+          echo "$DIFF" > "$DIFF_FILE"
+          echo "diff_file=$DIFF_FILE" >> $GITHUB_OUTPUT
+          echo "diff_lines=$(echo "$DIFF" | wc -l)" >> $GITHUB_OUTPUT
+
+      - name: Pass 1 — Code Review
+        id: pass1
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo "=== Pass 1: Code Review ==="
+          RESULT=$(solo-cto-agent review 2>&1 || true)
+          RESULT_FILE="/tmp/pass1-result.txt"
+          echo "$RESULT" > "$RESULT_FILE"
+          echo "result_file=$RESULT_FILE" >> $GITHUB_OUTPUT
+
+      - name: Pass 2 — Cross-Check
+        id: pass2
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo "=== Pass 2: Cross-Check ==="
+          RESULT=$(solo-cto-agent dual-review 2>&1 || true)
+          RESULT_FILE="/tmp/pass2-result.txt"
+          echo "$RESULT" > "$RESULT_FILE"
+          echo "result_file=$RESULT_FILE" >> $GITHUB_OUTPUT
+
+      - name: Pass 3 — UI/UX Review
+        id: pass3
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo "=== Pass 3: UI/UX Review ==="
+          RESULT=$(solo-cto-agent review --mode uiux 2>&1 || true)
+          RESULT_FILE="/tmp/pass3-result.txt"
+          echo "$RESULT" > "$RESULT_FILE"
+          echo "result_file=$RESULT_FILE" >> $GITHUB_OUTPUT
+
+      - name: Determine final verdict
+        id: verdict
+        run: |
+          PASS1=$(cat /tmp/pass1-result.txt)
+          PASS2=$(cat /tmp/pass2-result.txt)
+          PASS3=$(cat /tmp/pass3-result.txt)
+
+          # Check for blockers in any pass
+          HAS_BLOCKER=false
+          if echo "$PASS1 $PASS2 $PASS3" | grep -qi "REQUEST_CHANGES\|BLOCKER\|수정요청"; then
+            HAS_BLOCKER=true
+          fi
+
+          if [ "$HAS_BLOCKER" = "true" ]; then
+            echo "final=REQUEST_CHANGES" >> $GITHUB_OUTPUT
+            echo "emoji=🔄" >> $GITHUB_OUTPUT
+            echo "action=재작업 필요 — 수정 후 push하면 자동으로 재리뷰됩니다." >> $GITHUB_OUTPUT
+          else
+            echo "final=APPROVE" >> $GITHUB_OUTPUT
+            echo "emoji=✅" >> $GITHUB_OUTPUT
+            echo "action=완료 — 머지 가능합니다." >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post 3-pass review comment
+        uses: actions/github-script@v7
+        env:
+          PASS1_FILE: /tmp/pass1-result.txt
+          PASS2_FILE: /tmp/pass2-result.txt
+          PASS3_FILE: /tmp/pass3-result.txt
+          FINAL_VERDICT: ${{ steps.verdict.outputs.final }}
+          FINAL_EMOJI: ${{ steps.verdict.outputs.emoji }}
+          FINAL_ACTION: ${{ steps.verdict.outputs.action }}
+          DIFF_LINES: ${{ steps.diff.outputs.diff_lines }}
+        with:
+          script: |
+            const fs = require('fs');
+            const pass1 = fs.readFileSync(process.env.PASS1_FILE, 'utf8').trim();
+            const pass2 = fs.readFileSync(process.env.PASS2_FILE, 'utf8').trim();
+            const pass3 = fs.readFileSync(process.env.PASS3_FILE, 'utf8').trim();
+
+            // Strip ANSI color codes
+            const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+
+            const body = `## ${process.env.FINAL_EMOJI} Solo CTO 3-Pass Review — ${process.env.FINAL_VERDICT}
+
+            > **${process.env.FINAL_ACTION}**
+            > Diff: ${process.env.DIFF_LINES} lines
+
+            ---
+
+            ### Pass 1 — Code Review
+            \`\`\`
+            ${strip(pass1).slice(0, 3000)}
+            \`\`\`
+
+            ### Pass 2 — Cross-Check
+            \`\`\`
+            ${strip(pass2).slice(0, 3000)}
+            \`\`\`
+
+            ### Pass 3 — UI/UX Review
+            \`\`\`
+            ${strip(pass3).slice(0, 3000)}
+            \`\`\`
+
+            ---
+
+            | 프로세스 | 설명 |
+            |---|---|
+            | ✅ **APPROVE** | 3-pass 모두 통과 → 머지 가능 |
+            | 🔄 **REQUEST_CHANGES** | 수정 필요 → push하면 자동 재리뷰 |
+
+            *Automated 3-pass review by [solo-cto-agent](https://www.npmjs.com/package/solo-cto-agent) v1.1.0*`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const botComment = comments.find(c =>
+              c.body.includes('Solo CTO') && c.user.type === 'Bot'
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Set PR status
+        if: steps.verdict.outputs.final == 'REQUEST_CHANGES'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              event: 'REQUEST_CHANGES',
+              body: '🔄 Solo CTO 3-pass 리뷰에서 수정 요청이 있습니다. 위 코멘트를 확인해주세요.',
+            });
