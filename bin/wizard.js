@@ -229,10 +229,26 @@ async function runWizard(targetDir, force = false) {
 
     // Next steps based on mode
     if (mode === 'codex-main') {
-      const setupPipeline = await ask(rl, 'Set up CI/CD pipeline now?', 'y');
+      console.log('\n📋 codex-main requires a few more steps:\n');
+      console.log('  1. Set API keys (both required for codex-main):');
+      console.log('     export ANTHROPIC_API_KEY="sk-ant-..."');
+      console.log('     export OPENAI_API_KEY="sk-..."');
+      console.log('');
+      console.log('  2. Run setup-pipeline to create the orchestrator repo');
+      console.log('     and install GitHub Actions workflows:');
+      console.log('');
+      console.log('     solo-cto-agent setup-pipeline --org <your-org> --repos <repo1,repo2>');
+      console.log('');
+      console.log('  3. Add GitHub Secrets to your repos:');
+      console.log('     - Orchestrator: ANTHROPIC_API_KEY, OPENAI_API_KEY');
+      console.log('     - Product repos: ORCHESTRATOR_PAT (GitHub PAT with repo scope)');
+      console.log('');
+      console.log('  Full guide: docs/codex-main-install.md');
+
+      const setupPipeline = await ask(rl, '\nRun setup-pipeline now?', 'y');
       const wantsPipeline = setupPipeline.toLowerCase() === 'y' || setupPipeline.toLowerCase() === 'yes';
       if (wantsPipeline) {
-        console.log('\nNext step: Run the following command to configure CI/CD:\n');
+        console.log('\nRun:\n');
         console.log('  solo-cto-agent setup-pipeline --org <your-org> --repos <repo1,repo2>\n');
       }
     } else {
