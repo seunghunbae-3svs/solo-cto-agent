@@ -519,10 +519,25 @@ function readSkillContext() {
 function readFailureCatalog() {
   const catPath = path.join(CONFIG.skillDir, "failure-catalog.json");
   try {
-    return JSON.parse(fs.readFileSync(catPath, "utf8"));
+    return normalizeFailureCatalog(JSON.parse(fs.readFileSync(catPath, "utf8")));
   } catch {
-    return { patterns: [] };
+    return { items: [] };
   }
+}
+
+function normalizeFailureCatalog(catalog) {
+  const base = catalog && typeof catalog === "object" ? { ...catalog } : {};
+  const items = Array.isArray(base.items)
+    ? base.items
+    : Array.isArray(base.patterns)
+      ? base.patterns
+      : [];
+  delete base.patterns;
+  return { ...base, items };
+}
+
+function getCatalogItems(catalog) {
+  return normalizeFailureCatalog(catalog).items;
 }
 
 function getRecentCommits(hours = 24) {
@@ -849,7 +864,7 @@ async function localReview(options = {}) {
   const groundTruthCtx = formatGroundTruthContext(groundTruth);
   const externalKnowledgeCtx = formatExternalKnowledgeContext(externalKnowledge);
 
-  const errorPatterns = failureCatalog.patterns
+  const errorPatterns = getCatalogItems(failureCatalog)
     ?.map((p) => `- ${p.pattern}: ${p.fix}`)
     .join("\n") || "No patterns loaded";
 
@@ -1360,13 +1375,13 @@ ${content}`;
       .match(/\[ERROR_PATTERNS\]:([\s\S]*?)(?=\[|$)/i)?.[1] || "";
     if (patterns.trim()) {
       const catalogPath = path.join(CONFIG.skillDir, "failure-catalog.json");
-      let catalog = { patterns: [] };
+      let catalog = { items: [] };
 
       if (fs.existsSync(catalogPath)) {
         try {
-          catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
+          catalog = normalizeFailureCatalog(JSON.parse(fs.readFileSync(catalogPath, "utf8")));
         } catch {
-          catalog = { patterns: [] };
+          catalog = { items: [] };
         }
       }
 
@@ -1379,7 +1394,7 @@ ${content}`;
         })
         .filter((p) => p !== null);
 
-      catalog.patterns = [...catalog.patterns, ...newPatterns];
+      catalog.items = [...getCatalogItems(catalog), ...newPatterns];
       fs.writeFileSync(catalogPath, JSON.stringify(catalog, null, 2));
       logSuccess(`Updated failure catalog with ${newPatterns.length} patterns`);
     }
@@ -1430,7 +1445,7 @@ async function dualReview(options = {}) {
 
   const skillContext = readSkillContext();
   const failureCatalog = readFailureCatalog();
-  const errorPatterns = failureCatalog.patterns
+  const errorPatterns = getCatalogItems(failureCatalog)
     ?.map((p) => `- ${p.pattern}: ${p.fix}`)
     .join("\n") || "No patterns loaded";
 
@@ -2211,7 +2226,7 @@ async function managedAgentReview(options = {}) {
 
   const skillContext = readSkillContext();
   const failureCatalog = readFailureCatalog();
-  const errorPatterns = failureCatalog.patterns
+  const errorPatterns = getCatalogItems(failureCatalog)
     ?.map((p) => `- ${p.pattern}: ${p.fix}`)
     .join("\n") || "No patterns loaded";
 

@@ -41,7 +41,7 @@ solo-cto-agent setup-pipeline --org <github-org> --repos <repo1,repo2>
 ```
 
 실행 결과:
-- `dual-agent-orchestrator/` 디렉터리 생성 (orchestrator repo)
+- `dual-agent-review-orchestrator/` 디렉터리 생성 (orchestrator repo)
   - `.github/workflows/` — claude-auto, codex-auto, cross-review, rework-auto 등
   - `ops/agents/` — codex-worker.js, claude-worker.js, cross-reviewer.js 등
   - `ops/scripts/` — 유틸리티 스크립트
@@ -81,9 +81,9 @@ PAT 발급: GitHub > Settings > Developer settings > Personal access tokens > Ge
 ### 4. Push + 확인
 
 ```bash
-cd dual-agent-orchestrator
+cd dual-agent-review-orchestrator
 git add -A && git commit -m "init orchestrator"
-git remote add origin https://github.com/<org>/dual-agent-orchestrator.git
+git remote add origin https://github.com/<org>/dual-agent-review-orchestrator.git
 git push -u origin main
 ```
 

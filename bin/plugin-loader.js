@@ -185,7 +185,7 @@ function resolveEntry(plugin) {
   if (source.startsWith("path:")) {
     const rest = source.slice("path:".length);
     const [dir, sub] = rest.split("#");
-    if (sub) return path.join(dir, sub);
+    if (sub) return `${dir.replace(/[\\/]+$/, "")}/${sub.replace(/^[\\/]+/, "")}`;
     return dir;
   }
   if (source.startsWith("npm:")) {

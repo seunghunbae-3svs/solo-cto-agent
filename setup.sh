@@ -1,23 +1,23 @@
 #!/bin/bash
 set -euo pipefail
 
-# ═══════════════════════════════════════════════════════
-# solo-cto-agent — One-Command Setup
+# ??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??
+# solo-cto-agent ??One-Command Setup
 # Usage:
 #   curl -sSL https://raw.githubusercontent.com/seunghunbae-3svs/solo-cto-agent/main/setup.sh | bash
 #   bash setup.sh --org myorg --tier cto --repos app1,app2
-# ═══════════════════════════════════════════════════════
+# ??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??믊삳쫫??
 
 REPO="https://github.com/seunghunbae-3svs/solo-cto-agent.git"
 CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
 SKILLS_DIR="$CLAUDE_DIR/skills"
 TEMP_DIR="$(mktemp -d)"
 
-# ─── Parse Arguments ───
+# ?????? Parse Arguments ??????
 ORG=""
 TIER="builder"
 REPOS=""
-ORCH_NAME="dual-agent-orchestrator"
+ORCH_NAME="dual-agent-review-orchestrator"
 MODE="--install"
 
 while [[ $# -gt 0 ]]; do
@@ -34,7 +34,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --org <org>                GitHub org or username (REQUIRED)"
       echo "  --tier builder|cto         builder=Lv4 base (default), cto=Lv5+6 pro"
       echo "  --repos <repo1,repo2>      Product repos to install workflows into"
-      echo "  --orchestrator-name <name> Custom orchestrator repo name (default: dual-agent-orchestrator)"
+      echo "  --orchestrator-name <name> Custom orchestrator repo name (default: dual-agent-review-orchestrator)"
       echo "  --update                   Overwrite existing skills"
       exit 0
       ;;
@@ -43,7 +43,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ -z "$ORG" ]; then
-  echo "❌ --org is required."
+  echo "??--org is required."
   echo ""
   echo "Usage: bash setup.sh --org <github-org> [--tier builder|cto]"
   echo "Example: bash setup.sh --org mycompany --tier cto --repos myapp1,myapp2"
@@ -53,14 +53,14 @@ fi
 cleanup() { rm -rf "$TEMP_DIR"; }
 trap cleanup EXIT
 
-echo "╔══════════════════════════════════════════════════╗"
-echo "║  solo-cto-agent — Full Setup                    ║"
-echo "║  Org:  $ORG"
-echo "║  Tier: $TIER"
-echo "╚══════════════════════════════════════════════════╝"
+echo "============================================================"
+echo "solo-cto-agent setup"
+echo "Org:  $ORG"
+echo "Tier: $TIER"
+echo "============================================================"
 echo ""
 
-# ─── Step 1: Download ───
+# ?????? Step 1: Download ??????
 
 echo "[1/7] Downloading repository..."
 git clone --depth 1 "$REPO" "$TEMP_DIR/solo-cto-agent" >/dev/null 2>&1
@@ -69,7 +69,7 @@ echo "  done"
 SRC="$TEMP_DIR/solo-cto-agent"
 mkdir -p "$SKILLS_DIR" "$CLAUDE_DIR" "$CLAUDE_DIR/templates"
 
-# ─── Step 2: Install Skills ───
+# ?????? Step 2: Install Skills ??????
 
 # Builder (Lv4): build + ship + craft + spark + review + memory
 # CTO (Lv5+6): Builder + orchestrate
@@ -85,7 +85,7 @@ install_skill() {
   local dst="$SKILLS_DIR/$skill"
 
   if [ ! -d "$src" ]; then
-    echo "  $skill — not found, skipping"
+    echo "  $skill ??not found, skipping"
     return
   fi
 
@@ -93,14 +93,14 @@ install_skill() {
     --update|--force)
       rm -rf "$dst"
       cp -r "$src" "$dst"
-      echo "  $skill — updated"
+      echo "  $skill ??updated"
       ;;
     *)
       if [ -d "$dst" ]; then
-        echo "  $skill — exists, skipping"
+        echo "  $skill ??exists, skipping"
       else
         cp -r "$src" "$dst"
-        echo "  $skill — installed"
+        echo "  $skill ??installed"
       fi
       ;;
   esac
@@ -111,14 +111,14 @@ for skill in "${SKILLS[@]}"; do
   install_skill "$skill"
 done
 
-# ─── Step 3: Templates ───
+# ?????? Step 3: Templates ??????
 
 echo "[3/7] Copying templates..."
 cp "$SRC/templates/context.md" "$CLAUDE_DIR/templates/" 2>/dev/null || true
 cp "$SRC/templates/project.md" "$CLAUDE_DIR/templates/" 2>/dev/null || true
 echo "  done"
 
-# ─── Step 4: CLAUDE.md Autopilot Block ───
+# ?????? Step 4: CLAUDE.md Autopilot Block ??????
 
 AUTOPILOT_SRC="$SRC/autopilot.md"
 CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
@@ -160,7 +160,7 @@ else
   echo "  autopilot.md not found, skipping"
 fi
 
-# ─── Step 5: Setup Orchestrator Repo ───
+# ?????? Step 5: Setup Orchestrator Repo ??????
 
 echo "[5/7] Setting up orchestrator repo..."
 
@@ -267,13 +267,13 @@ if [ "$TIER" != "cto" ]; then
   # Replace timestamp placeholder in agent-scores
   TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   sed "s|{{SETUP_TIMESTAMP}}|$TIMESTAMP|g" "$BUILDER_DEFAULTS/agent-scores.json" > "$ORCH_DIR/ops/orchestrator/agent-scores.json"
-  echo "  ✅ Single-agent config applied"
+  echo "  ??Single-agent config applied"
 fi
 
 WF_COUNT=$(ls -1 "$ORCH_DIR/.github/workflows/"*.yml 2>/dev/null | wc -l)
-echo "  ✅ Orchestrator: $WF_COUNT workflows deployed"
+echo "  ??Orchestrator: $WF_COUNT workflows deployed"
 
-# ─── Step 6: Install Product Repo Workflows ───
+# ?????? Step 6: Install Product Repo Workflows ??????
 
 echo "[6/7] Installing product repo workflows..."
 
@@ -313,7 +313,7 @@ else
       repo_dir="$repo"
     fi
     if [ ! -d "$repo_dir" ]; then
-      echo "  ⚠️  $repo — not found, skipping"
+      echo "  ??ル쵑?? $repo ??not found, skipping"
       continue
     fi
 
@@ -352,26 +352,26 @@ else
     done
 
     AGENT_LABEL=$([ "$TIER" = "cto" ] && echo "multi-agent" || echo "single-agent")
-    echo "  ✅ $repo — $WF_INSTALLED workflows ($AGENT_LABEL)"
+    echo "  ??$repo ??$WF_INSTALLED workflows ($AGENT_LABEL)"
   done
 fi
 
-# ─── Step 7: Summary + Required Secrets ───
+# ?????? Step 7: Summary + Required Secrets ??????
 
 echo ""
 echo "[7/7] Setup complete!"
 echo ""
-echo "┌──────────────────────────────────────────────────────────┐"
-echo "│  Summary                                                 │"
-echo "├──────────────────────────────────────────────────────────┤"
-echo "│  Org:          $ORG"
-echo "│  Tier:         $TIER ($([ "$TIER" = "cto" ] && echo "Lv5+6 Pro" || echo "Lv4 Base"))"
-echo "│  Skills:       ${#SKILLS[@]} installed"
-echo "│  Orchestrator: $ORCH_DIR"
-echo "│  Workflows:    $WF_COUNT"
-echo "└──────────────────────────────────────────────────────────┘"
+echo "============================================================"
+echo "Summary"
+echo "============================================================"
+echo "Org:          $ORG"
+echo "Tier:         $TIER ($([ \"$TIER\" = \"cto\" ] && echo \"Lv5+6 Pro\" || echo \"Lv4 Base\"))"
+echo "Skills:       ${#SKILLS[@]} installed"
+echo "Orchestrator: $ORCH_DIR"
+echo "Workflows:    $WF_COUNT"
+echo "============================================================"
 echo ""
-echo "═══ REQUIRED: Set GitHub Secrets ═══"
+echo "Required: set GitHub Secrets"
 echo ""
 echo "Run these commands in your orchestrator repo:"
 echo ""
@@ -388,7 +388,7 @@ echo "  # 2. Anthropic API key (for Claude code review + visual analysis)"
 echo "  gh secret set ANTHROPIC_API_KEY"
 echo ""
 if [ "$TIER" = "cto" ]; then
-echo "  # 3. OpenAI API key (for Codex agent + AI-powered analysis — CTO tier)"
+echo "  # 3. OpenAI API key (for Codex agent + AI-powered analysis ??CTO tier)"
 echo "  gh secret set OPENAI_API_KEY"
 echo ""
 fi
@@ -405,9 +405,9 @@ else
 echo "  gh secret set ORCHESTRATOR_PAT && gh secret set ANTHROPIC_API_KEY"
 fi
 echo ""
-echo "═══ Why each secret is needed ═══"
+echo "Why each secret is needed"
 echo ""
-echo "  ORCHESTRATOR_PAT  Cross-repo dispatch (product → orchestrator)"
+echo "  ORCHESTRATOR_PAT  Cross-repo dispatch (product ??orchestrator)"
 echo "                    Required scope: repo, workflow"
 echo "                    Create at: https://github.com/settings/tokens"
 echo ""

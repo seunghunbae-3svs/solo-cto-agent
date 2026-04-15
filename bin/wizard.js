@@ -1,65 +1,57 @@
-const readline = require('readline');
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
+const readline = require("readline");
+const path = require("path");
+const fs = require("fs");
+const os = require("os");
 
-// Shared interactive helpers (extracted in PR-G7-impl).
-const { ask, isTTY } = require('./prompt-utils');
+const { ask, isTTY } = require("./prompt-utils");
 
-/**
- * Check if --wizard or -w flag is present in arguments
- */
 function hasWizardFlag(args) {
-  return args.includes('--wizard') || args.includes('-w');
+  return args.includes("--wizard") || args.includes("-w");
 }
 
-/**
- * Detect package.json presence and read build scripts
- */
 function detectBuildScripts(targetDir) {
-  const pkgPath = path.join(targetDir, 'package.json');
+  const pkgPath = path.join(targetDir, "package.json");
   const scripts = {
-    dev: 'npm run dev',
-    build: 'npm run build',
-    test: 'npm test',
-    lint: 'npm run lint',
+    dev: "npm run dev",
+    build: "npm run build",
+    test: "npm test",
+    lint: "npm run lint",
   };
 
-  if (fs.existsSync(pkgPath)) {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-      if (pkg.scripts) {
-        if (pkg.scripts.dev) scripts.dev = `npm run dev`;
-        if (pkg.scripts.build) scripts.build = `npm run build`;
-        if (pkg.scripts.test) scripts.test = `npm test`;
-        if (pkg.scripts.lint) scripts.lint = `npm run lint`;
-      }
-    } catch (err) {
-      // Silently continue with defaults
+  if (!fs.existsSync(pkgPath)) return scripts;
+
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+    if (pkg.scripts) {
+      if (pkg.scripts.dev) scripts.dev = "npm run dev";
+      if (pkg.scripts.build) scripts.build = "npm run build";
+      if (pkg.scripts.test) scripts.test = "npm test";
+      if (pkg.scripts.lint) scripts.lint = "npm run lint";
     }
+  } catch (_) {
+    // keep defaults
   }
 
   return scripts;
 }
 
-/**
- * Detect if Prisma is used
- */
 function detectPrisma(targetDir) {
-  const prismaPath = path.join(targetDir, 'prisma');
-  return fs.existsSync(prismaPath);
+  return fs.existsSync(path.join(targetDir, "prisma"));
 }
 
-/**
- * Generate SKILL.md content
- */
-function generateSkillMD(config) {
-  const hasPrisma = config.hasPrisma ? '\nORM: Prisma' : '';
-  const modeLabel = config.mode === 'codex-main'
-    ? 'codex-main (full CI/CD automation)'
-    : 'cowork-main (local-first, manual sync)';
+function formatEnvSetupCommand(name, example) {
+  return process.platform === "win32"
+    ? `$env:${name}="${example}"`
+    : `export ${name}="${example}"`;
+}
 
-  const autoSettings = config.mode === 'codex-main'
+function generateSkillMD(config) {
+  const hasPrisma = config.hasPrisma ? "\nORM: Prisma" : "";
+  const modeLabel = config.mode === "codex-main"
+    ? "codex-main (full CI/CD automation)"
+    : "cowork-main (local-first, manual sync)";
+
+  const autoSettings = config.mode === "codex-main"
     ? `
 # Automation Settings (codex-main)
 auto_sync: true
@@ -77,8 +69,8 @@ agent_score_tracking: false
 
   return `---
 name: solo-cto-agent
-description: "Project-specific CTO skill pack — auto-configured for ${config.framework}."
-mode: ${config.mode || 'codex-main'}
+description: "Project-specific CTO skill pack - auto-configured for ${config.framework}."
+mode: ${config.mode || "codex-main"}
 user-invocable: true
 ---
 
@@ -117,13 +109,13 @@ ${config.scripts.lint}
 **Platform:** ${config.deployTarget}
 **Preview Deployments:** Automatic on PR
 **Production:** Main branch trigger
-**Environment:** ${config.deployTarget === 'Vercel' ? 'Configure in vercel.json' : 'Configure in deployment config'}
+**Environment:** ${config.deployTarget === "Vercel" ? "Configure in vercel.json" : "Configure in deployment config"}
 
 # Database
 
 **Provider:** ${config.database}${hasPrisma}
-**Location:** ${config.database === 'Supabase' ? 'PostgreSQL (EU/US region)' : 'See provider docs'}
-**Migrations:** Managed by ${hasPrisma ? 'Prisma' : 'database provider'}
+**Location:** ${config.database === "Supabase" ? "PostgreSQL (EU/US region)" : "See provider docs"}
+**Migrations:** Managed by ${hasPrisma ? "Prisma" : "database provider"}
 
 # Development Workflow
 
@@ -132,28 +124,24 @@ ${config.scripts.lint}
 3. Start dev server: \`${config.scripts.dev}\`
 4. Push branch + create PR
 5. Test on preview deployment
-6. Merge to main → auto-deploy to production
+6. Merge to main - auto-deploy to production
 
 # Notes
 
 This SKILL.md was auto-generated. Edit this file to customize commands, deployment settings, or add project-specific information.
 ${autoSettings}
 
-${config.mode === 'codex-main'
-    ? 'For CI/CD pipeline setup, run: `solo-cto-agent setup-pipeline`'
-    : 'For manual sync, run: `solo-cto-agent sync --org <org> --apply`'}
+${config.mode === "codex-main"
+    ? "For CI/CD pipeline setup, run: `solo-cto-agent setup-pipeline`"
+    : "For manual sync, run: `solo-cto-agent sync --org <org> --apply`"}
 `;
 }
 
-/**
- * Main wizard function
- */
 async function runWizard(targetDir, force = false) {
-  // TTY guard: wizard requires interactive terminal
   if (!isTTY()) {
-    console.error("❌ --wizard requires an interactive terminal (TTY).");
-    console.error("   In CI or non-interactive environments, edit SKILL.md manually after init.");
-    console.error("   File: ~/.claude/skills/solo-cto-agent/SKILL.md");
+    console.error("--wizard requires an interactive terminal (TTY).");
+    console.error("In CI or non-interactive environments, edit SKILL.md manually after init.");
+    console.error("File: ~/.claude/skills/solo-cto-agent/SKILL.md");
     return { cancelled: true, reason: "no-tty" };
   }
 
@@ -163,121 +151,97 @@ async function runWizard(targetDir, force = false) {
   });
 
   try {
-    // Banner
-    console.log('\n╔══════════════════════════════════════════════════╗');
-    console.log('║  solo-cto-agent — Interactive Setup              ║');
-    console.log('╚══════════════════════════════════════════════════╝\n');
-    // Step 0: Mode selection
-    console.log('Choose your primary workflow mode:\n');
-    console.log('  [1] codex-main  — Full CI/CD automation (GitHub Actions, webhooks, auto-rework)');
-    console.log('  [2] cowork-main — Local-first with manual sync (stable, no webhook dependency)\n');
-    const modeChoice = await ask(rl, 'Mode (1 or 2)', '1');
-    const mode = modeChoice === '2' ? 'cowork-main' : 'codex-main';
+    console.log("\nsolo-cto-agent interactive setup\n");
+    console.log("Choose your primary workflow mode:\n");
+    console.log("  [1] codex-main  - Full CI/CD automation (GitHub Actions, webhooks, auto-rework)");
+    console.log("  [2] cowork-main - Local-first with manual sync (stable, no webhook dependency)\n");
+
+    const modeChoice = await ask(rl, "Mode (1 or 2)", "1");
+    const mode = modeChoice === "2" ? "cowork-main" : "codex-main";
 
     console.log(`\nMode: ${mode}\n`);
-    console.log("Let's configure your project stack.");
-    console.log('Press Enter to accept defaults shown in [brackets].\n');
+    console.log("Configure your project stack.");
+    console.log("Press Enter to accept defaults shown in [brackets].\n");
 
-    // Collect configuration
     const config = {
       mode,
-      os: await ask(rl, 'OS', 'macOS'),
-      editor: await ask(rl, 'Editor', 'Claude Cowork'),
-      framework: await ask(rl, 'Framework', 'Next.js'),
-      style: await ask(rl, 'Style', 'Tailwind CSS'),
-      deployTarget: await ask(rl, 'Deploy target', 'Vercel'),
-      database: await ask(rl, 'Database', 'Supabase'),
-      packageManager: await ask(rl, 'Package manager', 'npm'),
+      os: await ask(rl, "OS", process.platform === "win32" ? "Windows" : "macOS"),
+      editor: await ask(rl, "Editor", "Claude Cowork"),
+      framework: await ask(rl, "Framework", "Next.js"),
+      style: await ask(rl, "Style", "Tailwind CSS"),
+      deployTarget: await ask(rl, "Deploy target", "Vercel"),
+      database: await ask(rl, "Database", "Supabase"),
+      packageManager: await ask(rl, "Package manager", "npm"),
     };
 
-    console.log('\nOptional — leave blank to skip:');
-    const githubOrg = await ask(rl, 'GitHub org/username', '');
-    const language = await ask(rl, 'Primary language', 'TypeScript');
+    console.log("\nOptional - leave blank to skip:");
+    const githubOrg = await ask(rl, "GitHub org/username", "");
+    const language = await ask(rl, "Primary language", "TypeScript");
 
     config.language = language;
     config.githubOrg = githubOrg;
-
-    // Detect build scripts and Prisma
     config.scripts = detectBuildScripts(targetDir);
     config.hasPrisma = detectPrisma(targetDir);
 
-    // Generate SKILL.md
-    console.log('\nGenerating SKILL.md...');
+    console.log("\nGenerating SKILL.md...");
     const skillMdContent = generateSkillMD(config);
 
-    // Ensure .claude/skills/solo-cto-agent directory
-    const homeDir = os.homedir();
-    const skillsDir = path.join(homeDir, '.claude', 'skills', 'solo-cto-agent');
-
+    const skillsDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
     fs.mkdirSync(skillsDir, { recursive: true });
 
-    const skillMdPath = path.join(skillsDir, 'SKILL.md');
-
-    // Check if file exists and ask to overwrite
+    const skillMdPath = path.join(skillsDir, "SKILL.md");
     if (fs.existsSync(skillMdPath) && !force) {
-      const overwrite = await ask(rl, '\nSKILL.md already exists. Overwrite?', 'y');
-      if (overwrite.toLowerCase() !== 'y' && overwrite.toLowerCase() !== 'yes') {
-        console.log('Cancelled. No changes made.');
+      const overwrite = await ask(rl, "\nSKILL.md already exists. Overwrite?", "y");
+      if (!["y", "yes"].includes(overwrite.toLowerCase())) {
+        console.log("Cancelled. No changes made.");
         rl.close();
         return { cancelled: true };
       }
     }
 
-    fs.writeFileSync(skillMdPath, skillMdContent, 'utf8');
+    fs.writeFileSync(skillMdPath, skillMdContent, "utf8");
+    console.log(`Configured: ${skillMdPath}\n`);
 
-    console.log(`✅ Stack configured at ${skillMdPath}\n`);
-
-    // Next steps based on mode
-    if (mode === 'codex-main') {
-      console.log('\n📋 codex-main requires a few more steps:\n');
-      console.log('  1. Set API keys (both required for codex-main):');
-      console.log('     export ANTHROPIC_API_KEY="sk-ant-..."');
-      console.log('     export OPENAI_API_KEY="sk-..."');
-      console.log('');
-      console.log('  2. Run setup-pipeline to create the orchestrator repo');
-      console.log('     and install GitHub Actions workflows:');
-      console.log('');
-      console.log('     solo-cto-agent setup-pipeline --org <your-org> --repos <repo1,repo2>');
-      console.log('');
-      console.log('  3. Add GitHub Secrets to your repos:');
-      console.log('     - Orchestrator: ANTHROPIC_API_KEY, OPENAI_API_KEY');
-      console.log('     - Product repos: ORCHESTRATOR_PAT (GitHub PAT with repo scope)');
-      console.log('');
-      console.log('  Full guide: docs/codex-main-install.md');
-
-      const setupPipeline = await ask(rl, '\nRun setup-pipeline now?', 'y');
-      const wantsPipeline = setupPipeline.toLowerCase() === 'y' || setupPipeline.toLowerCase() === 'yes';
-      if (wantsPipeline) {
-        console.log('\nRun:\n');
-        console.log('  solo-cto-agent setup-pipeline --org <your-org> --repos <repo1,repo2>\n');
-      }
+    if (mode === "codex-main") {
+      console.log("codex-main next steps:\n");
+      console.log("  1. Create API keys:");
+      console.log("     Anthropic: https://console.anthropic.com/settings/keys");
+      console.log("     OpenAI:    https://platform.openai.com/api-keys");
+      console.log(`     ${formatEnvSetupCommand("ANTHROPIC_API_KEY", "sk-ant-...")}`);
+      console.log(`     ${formatEnvSetupCommand("OPENAI_API_KEY", "sk-...")}`);
+      console.log("");
+      console.log("  2. Run setup-pipeline to create the orchestrator repo and workflows:");
+      console.log("     solo-cto-agent setup-pipeline --org <your-org> --repos <repo1,repo2>");
+      console.log("");
+      console.log("  3. Add GitHub Secrets to your repos:");
+      console.log("     - Orchestrator: ANTHROPIC_API_KEY, OPENAI_API_KEY");
+      console.log("     - Product repos: ORCHESTRATOR_PAT (GitHub PAT with repo scope)");
+      console.log("");
+      console.log("  Full guide: docs/codex-main-install.md");
     } else {
-      console.log('\ncowork-main mode: No CI/CD setup needed.');
-      console.log('Automation runs inside your Claude Cowork session.');
-      console.log('Use these commands as needed:\n');
-      console.log('  solo-cto-agent review                     # local review (solo or dual auto-detected)');
-      console.log('  solo-cto-agent knowledge                  # capture decisions / error patterns');
-      console.log('  solo-cto-agent sync --org <org>           # dry-run fetch from orchestrator');
-      console.log('  solo-cto-agent sync --org <org> --apply   # merge remote cache');
-      console.log('  solo-cto-agent session save|restore|list  # persist context across sessions');
-      console.log('\nSee: docs/cowork-main-install.md\n');
+      console.log("cowork-main mode: No CI/CD setup needed.");
+      console.log("Automation runs inside your Claude Cowork session.");
+      console.log("Use these commands as needed:\n");
+      console.log("  solo-cto-agent review                     # local review (solo or dual auto-detected)");
+      console.log("  solo-cto-agent knowledge                  # capture decisions / error patterns");
+      console.log(`  solo-cto-agent sync --org ${githubOrg || "<org>"}           # dry-run fetch from orchestrator`);
+      console.log(`  solo-cto-agent sync --org ${githubOrg || "<org>"} --apply   # merge remote cache`);
+      console.log("  solo-cto-agent session save|restore|list  # persist context across sessions");
+      console.log("\nSee: docs/cowork-main-install.md\n");
     }
 
-    const wantsPipeline = mode === 'codex-main';
-    console.log('Setup complete! Your project is ready.\n');
-
+    console.log("Setup complete.\n");
     rl.close();
 
     return {
       success: true,
       config,
       skillMdPath,
-      pipelineRequested: wantsPipeline,
+      pipelineRequested: mode === "codex-main",
     };
   } catch (err) {
-    if (err.code === 'ERR_USE_AFTER_CLOSE') {
-      // User pressed Ctrl+C
-      console.log('\n\n⚠️  Setup cancelled by user.');
+    if (err.code === "ERR_USE_AFTER_CLOSE") {
+      console.log("\n\nSetup cancelled by user.");
       return { cancelled: true };
     }
     rl.close();
@@ -289,5 +253,5 @@ module.exports = {
   runWizard,
   hasWizardFlag,
   isTTY,
-  ask, // Export for testing
+  ask,
 };
