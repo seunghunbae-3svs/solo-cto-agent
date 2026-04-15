@@ -51,3 +51,5 @@ The `build/` examples exercise the [`build`](../skills/build/SKILL.md) skill. `s
 
 Skill definitions live under [`../skills/`](../skills/). The CLI surface that invokes them is [`../bin/cli.js`](../bin/cli.js) - every command referenced in the examples is a real sub-command you can run today.
 
+If you need to refresh the live proof on your own repos, use [`../docs/codex-main-live-validation.md`](../docs/codex-main-live-validation.md). It gives the exact capture flow for codex solo and codex + cowork runs.
+

@@ -119,6 +119,7 @@ Proof:
 
 - `examples/review/codex-main-codex-solo-routing.md`
 - `docs/codex-main-validation.svg`
+- `docs/codex-main-live-validation.md`
 
 ### 2. Codex + Cowork
 
@@ -138,6 +139,7 @@ Proof:
 - `examples/review/codex-main-live-pr-review.md`
 - `examples/founder-workflow/codex-main-live-rework-and-digest.md`
 - `docs/codex-main-validation.svg`
+- `docs/codex-main-live-validation.md`
 
 ---
 
