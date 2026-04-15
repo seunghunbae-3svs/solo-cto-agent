@@ -1,5 +1,15 @@
 # Codex-Main Setup Guide
 
+## Template Audit Default
+
+`codex-main` now turns on template drift detection by default.
+
+- local command: `solo-cto-agent template-audit`
+- scheduled workflow: `template-audit.yml` in the orchestrator repo
+- default policy: `report-only`
+
+This means older copied workflows are detected automatically, but nothing is overwritten without an explicit setup or refresh run.
+
 > `codex-main` = **Full-auto mode**. GitHub Actions가 PR/이슈마다 자동으로 Claude + Codex 리뷰를 실행하고, rework을 디스패치하고, agent-scores를 추적합니다.
 
 Semi-auto (cowork-main)와 다른 점: 로컬 CLI 실행이 아니라 **CI/CD에서 자동 실행**됩니다. 로컬 `review` / `dual-review` 명령도 동일하게 작동합니다.

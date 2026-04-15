@@ -57,6 +57,11 @@ If you choose `codex-main` during the wizard, also install:
 - GitHub CLI: [cli.github.com](https://cli.github.com/)
 - GitHub PAT for cross-repo dispatch: [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
 
+If you choose `codex-main`, template drift audit is enabled by default:
+- local check: `solo-cto-agent template-audit`
+- scheduled check: `template-audit.yml` in the orchestrator repo
+- policy: `report-only` by default, so drift is detected but never auto-overwritten
+
 ---
 
 I made this because I got tired of using AI coding tools that were good at writing code, but still left me doing all the messy CTO work around it.

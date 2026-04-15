@@ -12,7 +12,8 @@
         "preview-ready.yml",
         "preview-summary.yml",
         "rework-auto.yml",
-        "route-issue.yml"
+        "route-issue.yml",
+        "template-audit.yml"
       ],
       "ops_agents": ["*"],
       "ops_scripts": [
@@ -20,7 +21,8 @@
         "comparison-report.js",
         "auto-diagnose.js",
         "sync-preview-workflow.js",
-        "visual-check.js"
+        "visual-check.js",
+        "template-audit.js"
       ],
       "ops_libs": [
         "build-verifier.js",

@@ -69,6 +69,7 @@ user-invocable: true
     expect([0, 1]).toContain(r.status);
     expect(r.stdout).toContain("doctor --quick");
     expect(r.stdout).toContain("https://console.anthropic.com/settings/keys");
+    expect(r.stdout).toContain("Template Audit");
   });
 
   it("shows codex-main setup links when mode is codex-main", () => {

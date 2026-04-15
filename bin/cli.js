@@ -7,6 +7,7 @@ const https = require("https");
 const { execSync } = require("child_process");
 
 const { syncCommand } = require("./sync");
+const { auditManagedRepos, defaultAuditSettings, loadManifest, makeManagedRepoEntry, upsertManagedRepo, writeManifest } = require("./template-audit");
 const { runWizard, hasWizardFlag } = require("./wizard");
 const i18n = require("./i18n");
 const { localReview, knowledgeCapture, dualReview, detectMode, sessionSave, sessionRestore, sessionList, recordFeedback, setLogChannel, fireRoutine, buildRoutineSchedules, managedAgentReview, getDiff } = require("./cowork-engine");
@@ -36,6 +37,18 @@ const PRESETS = {
 };
 const DEFAULT_PRESET = "builder";
 
+function localSkillDir() {
+  return path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
+}
+
+function localManagedReposPath() {
+  return path.join(localSkillDir(), "managed-repos.json");
+}
+
+function orchestratorManagedReposPath(orchestratorDir) {
+  return path.join(orchestratorDir, "ops", "orchestrator", "managed-repos.json");
+}
+
 // ─── Helpers ────────────────────────────────────────────────
 
 function printHelp() {
@@ -47,6 +60,7 @@ Usage:
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent upgrade --org <github-org> [--repos <repo1,repo2,...>]
   solo-cto-agent sync --org <github-org> [--apply] [--repos <repo1,repo2,...>]
+  solo-cto-agent template-audit
   solo-cto-agent review [--staged|--branch [--target <base>]|--file <path>] [--dry-run] [--solo] [--json|--markdown]
   solo-cto-agent dual-review [--staged|--branch [--target <base>]]
   solo-cto-agent deep-review [--staged|--branch|--file <path>] [--dry-run] [--json]  # CTO tier
@@ -71,6 +85,7 @@ Commands:
   setup-repo        Install dual-agent workflows to a single product repo
   upgrade           Upgrade Builder (Lv4) → CTO (Lv5+6): add multi-agent workflows + config
   sync              Fetch CI/CD results from GitHub (dry-run by default, --apply to write)
+  template-audit    Scan managed repos for missing, drifted, or customized templates
   review            Local code review via Claude API (auto-detects dual mode if both keys set)
   dual-review       Explicit dual-agent cross-review (Claude + OpenAI)
   knowledge         Extract session decisions into knowledge articles via Claude API
@@ -99,6 +114,7 @@ Examples:
   npx solo-cto-agent setup-repo ./my-project --org myorg
   npx solo-cto-agent sync --org myorg --repos app1,app2   # dry-run: fetch + display
   npx solo-cto-agent sync --org myorg --apply              # apply: merge remote data into local
+  npx solo-cto-agent template-audit                        # audit managed repos against current templates
   npx solo-cto-agent review                                # Claude review of staged changes
   npx solo-cto-agent review --branch                       # review branch diff vs auto-detected default
   npx solo-cto-agent review --branch --target develop      # review branch diff vs explicit base
@@ -211,6 +227,90 @@ function loadTiers() {
   return JSON.parse(fs.readFileSync(TIERS_FILE, "utf8"));
 }
 
+function registerManagedRepoForLocal(managedRepo) {
+  upsertManagedRepo(localManagedReposPath(), managedRepo);
+}
+
+function writeOrchestratorManagedRepos(orchestratorDir, managedRepos) {
+  const manifestPath = orchestratorManagedReposPath(orchestratorDir);
+  const manifest = loadManifest(manifestPath);
+  manifest.templateAudit = defaultAuditSettings();
+  manifest.repos = managedRepos.map((repo) => sanitizeRepoForOrchestratorManifest(repo));
+  writeManifest(manifestPath, manifest);
+}
+
+function sanitizeRepoForOrchestratorManifest(repo) {
+  return {
+    type: repo.type,
+    tier: repo.tier,
+    mode: repo.mode,
+    owner: repo.owner,
+    repoName: repo.repoName,
+    repoSlug: repo.repoSlug,
+    repoPath: repo.type === "orchestrator" ? repo.repoPath : null,
+    orchestratorName: repo.orchestratorName || null,
+    templateAudit: defaultAuditSettings(),
+    lastInstalledAt: repo.lastInstalledAt,
+    files: (repo.files || []).map((file) => ({
+      targetPath: file.targetPath,
+      installedHash: file.installedHash,
+      optional: !!file.optional,
+      category: file.category || "template",
+    })),
+  };
+}
+
+function upsertOrchestratorManagedRepo(orchestratorDir, repo) {
+  if (!fs.existsSync(path.join(orchestratorDir, "ops", "orchestrator"))) return;
+  upsertManagedRepo(orchestratorManagedReposPath(orchestratorDir), sanitizeRepoForOrchestratorManifest(repo));
+}
+
+function findLikelyOrchestratorDir(orchestratorRepo, productRepoDir) {
+  const candidates = [
+    path.resolve(orchestratorRepo),
+    path.resolve(process.cwd(), orchestratorRepo),
+    path.resolve(path.dirname(productRepoDir), orchestratorRepo),
+    path.resolve(productRepoDir, "..", orchestratorRepo),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, "ops", "orchestrator"))) return candidate;
+  }
+  return null;
+}
+
+function summarizeTemplateAudit(audit) {
+  const repoCount = audit.repos.length;
+  const driftRepos = audit.repos.filter((repo) => repo.summary.drift > 0 || repo.summary.missing > 0 || repo.summary.custom > 0);
+  return {
+    repoCount,
+    driftRepos: driftRepos.length,
+    totals: audit.totals,
+  };
+}
+
+function printTemplateAudit(audit, opts = {}) {
+  const quietOk = opts.quietOk === true;
+  const summary = summarizeTemplateAudit(audit);
+  if (audit.repos.length === 0) {
+    console.log("   INFO No managed repos registered yet");
+    return summary;
+  }
+
+  console.log(`   INFO Managed repos: ${summary.repoCount}`);
+  for (const repo of audit.repos) {
+    const label = repo.entry.repoSlug || repo.entry.repoPath || repo.entry.repoName;
+    const parts = [];
+    if (repo.summary.drift) parts.push(`drift ${repo.summary.drift}`);
+    if (repo.summary.custom) parts.push(`custom ${repo.summary.custom}`);
+    if (repo.summary.missing) parts.push(`missing ${repo.summary.missing}`);
+    if (repo.summary.optionalMissing) parts.push(`optional-missing ${repo.summary.optionalMissing}`);
+    if (parts.length === 0 && !quietOk) parts.push(`ok ${repo.summary.ok}`);
+    if (parts.length === 0) continue;
+    console.log(`   ${parts[0].startsWith("ok") ? "OK" : "WARN"} ${label}: ${parts.join(", ")}`);
+  }
+  return summary;
+}
+
 function run(cmd, opts = {}) {
   try {
     return execSync(cmd, { encoding: "utf8", stdio: "pipe", ...opts }).trim();
@@ -232,8 +332,9 @@ function ghAvailable() {
 
 function initCommand(force, preset) {
   const resolvedPreset = PRESETS[preset] ? preset : DEFAULT_PRESET;
-  const targetDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
+  const targetDir = localSkillDir();
   ensureDir(targetDir);
+  writeManifest(localManagedReposPath(), loadManifest(localManagedReposPath()));
 
   // Copy failure-catalog.json
   const targetCatalog = path.join(targetDir, "failure-catalog.json");
@@ -511,6 +612,22 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
 
   const orchFileCount = countFiles(orchDir);
   console.log(`   ✅ Orchestrator: ${orchFileCount} files deployed`);
+  const managedRepoEntries = [];
+  const orchestratorEntry = makeManagedRepoEntry({
+    packageRoot: ROOT,
+    tiersData,
+    type: "orchestrator",
+    tier: normalizedTier,
+    mode: "codex-main",
+    owner: org,
+    repoName: orchestratorRepo,
+    repoPath: orchDir,
+    orchestratorName: orchestratorRepo,
+    replacements,
+  });
+  managedRepoEntries.push(orchestratorEntry);
+  registerManagedRepoForLocal(orchestratorEntry);
+
 
   // ── Step 2: Install product-repo workflows ──
   console.log("");
@@ -567,6 +684,24 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
 
       // Detect services in each product repo
       printServiceDetection(repoDir, isPro);
+
+      const productEntry = makeManagedRepoEntry({
+        packageRoot: ROOT,
+        tiersData,
+        type: "product-repo",
+        tier: normalizedTier,
+        mode: "codex-main",
+        owner: org,
+        repoName: path.basename(repo),
+        repoPath: repoDir,
+        orchestratorName: orchestratorRepo,
+        replacements: {
+          ...replacements,
+          "{{PRODUCT_REPO_1}}": path.basename(repo),
+        },
+      });
+      managedRepoEntries.push(productEntry);
+      registerManagedRepoForLocal(productEntry);
     }
   }
 
@@ -578,6 +713,8 @@ function setupPipelineCommand(tier, org, repos, orchName, force) {
   const envPath = path.join(orchDir, ".env.setup-guide");
   fs.writeFileSync(envPath, envContent, "utf8");
   console.log(`   ✅ Setup guide: ${envPath}`);
+  writeOrchestratorManagedRepos(orchDir, managedRepoEntries);
+  console.log(`   Template audit manifest: ${orchestratorManagedReposPath(orchDir)}`);
 
   // ── Step 4: Summary + Secret Guide ──
   const wfCount = isPro
@@ -869,6 +1006,26 @@ function setupRepoCommand(repoPath, tier, org, orchName) {
 
   // Detect services in the repo
   printServiceDetection(resolved, isPro);
+
+  const managedRepo = makeManagedRepoEntry({
+    packageRoot: ROOT,
+    tiersData,
+    type: "product-repo",
+    tier: isPro ? "cto" : "builder",
+    mode: "codex-main",
+    owner: org,
+    repoName: path.basename(resolved),
+    repoPath: resolved,
+    orchestratorName: orchestratorRepo,
+    replacements,
+  });
+  registerManagedRepoForLocal(managedRepo);
+
+  const linkedOrchestratorDir = findLikelyOrchestratorDir(orchestratorRepo, resolved);
+  if (linkedOrchestratorDir) {
+    upsertOrchestratorManagedRepo(linkedOrchestratorDir, managedRepo);
+    console.log(`   Audit manifest updated: ${orchestratorManagedReposPath(linkedOrchestratorDir)}`);
+  }
   console.log(`   Location: ${wfDir}`);
   console.log("");
   console.log("Next: git add .github/ && git commit -m 'ci: add dual-agent workflows' && git push");
@@ -902,7 +1059,7 @@ function countFiles(dir) {
 // status is now pure-local — no network calls. Use `sync` to fetch remote data.
 
 function statusCommand() {
-  const targetDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
+  const targetDir = localSkillDir();
   const skillPath = path.join(targetDir, "SKILL.md");
   const catalogPath = path.join(targetDir, "failure-catalog.json");
   const syncStatusPath = path.join(targetDir, "sync-status.json");
@@ -975,6 +1132,46 @@ function statusCommand() {
   } else {
     console.log(`  CI data:       no data (run: solo-cto-agent sync --org <org>)`);
   }
+
+  const audit = auditManagedRepos(localManagedReposPath(), ROOT);
+  if (audit.repos.length === 0) {
+    console.log("  Template audit: no managed repos yet");
+  } else if (audit.totals.drift || audit.totals.missing || audit.totals.custom) {
+    console.log(`  Template audit: WARN drift ${audit.totals.drift} / custom ${audit.totals.custom} / missing ${audit.totals.missing}`);
+  } else {
+    console.log(`  Template audit: OK ${audit.totals.ok} tracked files`);
+  }
+  console.log("");
+}
+
+function templateAuditCommand() {
+  const audit = auditManagedRepos(localManagedReposPath(), ROOT);
+
+  console.log("");
+  console.log("solo-cto-agent template-audit");
+  console.log("-".repeat(40));
+  const summary = printTemplateAudit(audit);
+  console.log("");
+
+  if (summary.repoCount === 0) {
+    console.log("No managed repos registered yet.");
+    console.log("Run setup-pipeline or setup-repo first.");
+    console.log("");
+    return;
+  }
+
+  console.log("Summary");
+  console.log(`  Repos:            ${summary.repoCount}`);
+  console.log(`  Drifted files:    ${summary.totals.drift}`);
+  console.log(`  Customized files: ${summary.totals.custom}`);
+  console.log(`  Missing files:    ${summary.totals.missing}`);
+  console.log(`  Optional missing: ${summary.totals.optionalMissing}`);
+  console.log(`  OK files:         ${summary.totals.ok}`);
+  console.log("");
+  console.log("Default policy");
+  console.log("  Audit:   enabled");
+  console.log("  Mode:    report-only");
+  console.log("  When:    daily");
   console.log("");
 }
 
@@ -1051,7 +1248,7 @@ function lintCommand(targetPath) {
 
 function doctorCommand(opts = {}) {
   const isQuick = opts.quick === true;
-  const targetDir = path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
+  const targetDir = localSkillDir();
   const skillPath = path.join(targetDir, "SKILL.md");
   const catalogPath = path.join(targetDir, "failure-catalog.json");
   const syncStatusPath = path.join(targetDir, "sync-status.json");
@@ -1265,6 +1462,26 @@ function doctorCommand(opts = {}) {
   }
 
   console.log("");
+  console.log("Template Audit");
+  const managedManifestPath = localManagedReposPath();
+  const managedManifest = loadManifest(managedManifestPath);
+  if (managedManifest.templateAudit && managedManifest.templateAudit.enabled === false) {
+    console.log("   INFO Template audit disabled");
+  } else {
+    const audit = auditManagedRepos(managedManifestPath, ROOT);
+    const auditSummary = printTemplateAudit(audit, { quietOk: isQuick });
+    if (isCodexMain) {
+      console.log(`   INFO Default policy: ${managedManifest.templateAudit.mode} / ${managedManifest.templateAudit.schedule}`);
+    }
+    if (auditSummary.repoCount > 0 && (auditSummary.totals.drift > 0 || auditSummary.totals.missing > 0 || auditSummary.totals.custom > 0)) {
+      issues.push({
+        level: "warn",
+        msg: `Template drift detected - drift ${auditSummary.totals.drift}, custom ${auditSummary.totals.custom}, missing ${auditSummary.totals.missing}`
+      });
+    }
+  }
+
+  console.log("");
   console.log("Error Catalog");
   if (fs.existsSync(catalogPath)) {
     try {
@@ -1316,7 +1533,8 @@ function doctorCommand(opts = {}) {
       console.log("Next:");
       console.log("   1. Run: solo-cto-agent setup-pipeline --org <your-org> --repos <repo1,repo2>");
       console.log("   2. Add GitHub Actions secrets in each product repo");
-      console.log("   3. Open a PR and verify auto-review starts");
+      console.log("   3. Run: solo-cto-agent template-audit");
+      console.log("   4. Open a PR and verify auto-review starts");
     } else {
       console.log("Try your first review:");
       console.log("   cd <your-git-repo>");
@@ -1347,6 +1565,7 @@ function doctorCommand(opts = {}) {
     console.log("   GitHub CLI:     https://cli.github.com/");
     console.log("   GitHub PAT:     https://github.com/settings/personal-access-tokens/new");
     console.log("   Install guide:  docs/codex-main-install.md");
+    console.log("   Audit command:  solo-cto-agent template-audit");
   } else {
     console.log("   Install guide:  docs/cowork-main-install.md");
   }
@@ -1691,6 +1910,11 @@ async function main() {
 
   if (cmd === "status") {
     statusCommand();
+    return;
+  }
+
+  if (cmd === "template-audit") {
+    templateAuditCommand();
     return;
   }
 
