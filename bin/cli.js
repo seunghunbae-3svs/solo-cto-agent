@@ -80,6 +80,7 @@ Commands:
   doctor            Complete system health check (skills, engine, API keys, notifications, catalog)
   notify            Send event-tagged notification (deploy-ready / deploy-error)
   telegram wizard   Interactive setup for Telegram notifications (SOLO_CTO_EXPERIMENTAL=1)
+  ci-setup          Deploy 3-pass review workflow to a GitHub repo (auto-creates .github/workflows/)
   deep-review       Managed Agent deep-review with sandboxed code execution (CTO tier, $0.08/session-hr)
   routine fire      Fire a Claude Code Routine via /fire API endpoint (CTO tier)
   routine schedules List configured routine schedules
@@ -110,6 +111,8 @@ Examples:
   npx solo-cto-agent session list --limit 5                # show 5 recent sessions
   npx solo-cto-agent notify deploy-ready --target production --url https://myapp.com --commit abc1234
   npx solo-cto-agent notify deploy-error --target preview --body "$(tail -50 build.log)"
+  npx solo-cto-agent ci-setup --repo owner/repo              # deploy 3-pass review workflow
+  npx solo-cto-agent ci-setup --repo owner/repo --branch master  # specify default branch
   SOLO_CTO_EXPERIMENTAL=1 npx solo-cto-agent telegram wizard   # setup Telegram alerts
 
   # Claude Code Routines (CTO tier — cloud-based, laptop can be closed)
@@ -2132,6 +2135,141 @@ async function main() {
       if (!res || !res.ok) process.exit(1);
     }).catch((e) => {
       console.error(`❌ ${e.message}`);
+      process.exit(1);
+    });
+    return;
+  }
+
+  // ─── ci-setup: Deploy 3-pass review workflow to a GitHub repo ───
+  if (cmd === "ci-setup") {
+    const repoIdx = args.indexOf("--repo");
+    const branchIdx = args.indexOf("--branch");
+    const repo = repoIdx >= 0 ? args[repoIdx + 1] : null;
+    const branch = branchIdx >= 0 ? args[branchIdx + 1] : null;
+    const dryRun = args.includes("--dry-run");
+
+    if (!repo || !repo.includes("/")) {
+      console.error("❌ --repo owner/name is required.");
+      console.error("   Usage: solo-cto-agent ci-setup --repo owner/repo [--branch main]");
+      process.exit(1);
+    }
+
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    if (!token) {
+      console.error("❌ GITHUB_TOKEN or GH_TOKEN environment variable is required.");
+      process.exit(1);
+    }
+
+    const templatePath = path.join(ROOT, "templates", "workflows", "solo-cto-review.yml");
+    if (!fs.existsSync(templatePath)) {
+      console.error("❌ Workflow template not found:", templatePath);
+      process.exit(1);
+    }
+
+    const templateContent = fs.readFileSync(templatePath, "utf8");
+    const filePath = ".github/workflows/solo-cto-review.yml";
+    const [owner, repoName] = repo.split("/");
+
+    /** GitHub API helper */
+    function ghApi(method, apiPath, body) {
+      return new Promise((resolve, reject) => {
+        const payload = body ? JSON.stringify(body) : null;
+        const req = https.request({
+          hostname: "api.github.com",
+          path: apiPath,
+          method,
+          headers: {
+            "Authorization": `token ${token}`,
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "solo-cto-agent",
+            ...(payload ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) } : {}),
+          },
+        }, (res) => {
+          let data = "";
+          res.on("data", (chunk) => { data += chunk; });
+          res.on("end", () => {
+            if (res.statusCode >= 400) {
+              reject(new Error(`GitHub API ${res.statusCode}: ${data.slice(0, 300)}`));
+            } else {
+              resolve(data ? JSON.parse(data) : {});
+            }
+          });
+        });
+        req.on("error", reject);
+        if (payload) req.write(payload);
+        req.end();
+      });
+    }
+
+    (async () => {
+      console.log(`\n🚀 Solo CTO CI Setup — ${repo}`);
+      console.log("─".repeat(50));
+
+      // 1. Detect default branch if not specified
+      let defaultBranch = branch;
+      if (!defaultBranch) {
+        console.log("🔍 Detecting default branch...");
+        const repoInfo = await ghApi("GET", `/repos/${owner}/${repoName}`);
+        defaultBranch = repoInfo.default_branch || "main";
+      }
+      console.log(`   Branch: ${defaultBranch}`);
+
+      if (dryRun) {
+        console.log("\n📋 [DRY RUN] Would deploy:");
+        console.log(`   File: ${filePath}`);
+        console.log(`   Repo: ${repo} (${defaultBranch})`);
+        console.log(`   Template: ${templatePath}`);
+        console.log("\n✅ Dry run complete — no changes made.");
+        return;
+      }
+
+      // 2. Check if workflow already exists
+      let existingSha = null;
+      try {
+        const existing = await ghApi("GET", `/repos/${owner}/${repoName}/contents/${filePath}?ref=${defaultBranch}`);
+        existingSha = existing.sha;
+        console.log("📝 Existing workflow found — will update.");
+      } catch (_) {
+        console.log("📝 No existing workflow — will create.");
+      }
+
+      // 3. Push workflow file via Contents API
+      const content = Buffer.from(templateContent).toString("base64");
+      const commitMsg = existingSha
+        ? "chore: update solo-cto 3-pass review workflow"
+        : "chore: add solo-cto 3-pass review workflow";
+
+      const putBody = {
+        message: commitMsg,
+        content,
+        branch: defaultBranch,
+        committer: {
+          name: "solo-cto-agent",
+          email: "solo-cto-agent@users.noreply.github.com",
+        },
+      };
+      if (existingSha) putBody.sha = existingSha;
+
+      await ghApi("PUT", `/repos/${owner}/${repoName}/contents/${filePath}`, putBody);
+      console.log(`✅ Workflow deployed: ${filePath}`);
+
+      // 4. Check if ANTHROPIC_API_KEY secret exists
+      console.log("\n🔑 Checking secrets...");
+      try {
+        await ghApi("GET", `/repos/${owner}/${repoName}/actions/secrets/ANTHROPIC_API_KEY`);
+        console.log("   ✅ ANTHROPIC_API_KEY secret exists.");
+      } catch (_) {
+        console.log("   ⚠️  ANTHROPIC_API_KEY secret NOT found.");
+        console.log("   → Set it: gh secret set ANTHROPIC_API_KEY --repo " + repo);
+        console.log("   → Or: Settings → Secrets and variables → Actions → New repository secret");
+      }
+
+      console.log("\n─".repeat(50));
+      console.log("🎉 Setup complete!");
+      console.log(`   Workflow triggers on: pull_request [opened, synchronize]`);
+      console.log(`   Create a PR on ${repo} to test the 3-pass review.`);
+    })().catch((err) => {
+      console.error("❌ ci-setup failed:", err.message);
       process.exit(1);
     });
     return;
