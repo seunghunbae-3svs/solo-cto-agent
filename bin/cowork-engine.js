@@ -32,6 +32,21 @@ function _setSkillDirOverride(p) { _skillDirOverride = p; }
 const _skillBase = () => _skillDirOverride
   || process.env.COWORK_SKILL_DIR_OVERRIDE
   || path.join(os.homedir(), ".claude", "skills", "solo-cto-agent");
+
+// User config file: ~/.solo-cto-agent/config.json
+// Allows overriding models, API base URLs, review settings, etc.
+function _loadUserConfig() {
+  const configPath = process.env.SOLO_CTO_CONFIG
+    || path.join(os.homedir(), ".solo-cto-agent", "config.json");
+  try {
+    if (fs.existsSync(configPath)) {
+      return JSON.parse(fs.readFileSync(configPath, "utf8"));
+    }
+  } catch (_) { /* malformed config — silently use defaults */ }
+  return {};
+}
+const _userConfig = _loadUserConfig();
+
 const CONFIG = {
   get skillDir() { return _skillBase(); },
   get reviewsDir() { return path.join(_skillBase(), "reviews"); },
@@ -39,8 +54,9 @@ const CONFIG = {
   get sessionsDir() { return path.join(_skillBase(), "sessions"); },
   get personalizationFile() { return path.join(_skillBase(), "personalization.json"); },
   defaultModel: {
-    claude: "claude-sonnet-4-20250514",
-    codex: "codex-mini-latest",
+    claude: (_userConfig.models && _userConfig.models.claude) || "claude-sonnet-4-20250514",
+    codex: (_userConfig.models && _userConfig.models.codex) || "codex-mini-latest",
+    openai: (_userConfig.models && _userConfig.models.openai) || "gpt-4o",
   },
   // Tier → model mapping. Haiku for light validation (maker),
   // Sonnet for balanced dev work (builder), Opus for orchestration
@@ -50,7 +66,22 @@ const CONFIG = {
       maker:   "claude-haiku-4-5-20251001",
       builder: "claude-sonnet-4-5-20250929",
       cto:     "claude-opus-4-5-20250929",
+      ...(_userConfig.tierModels && _userConfig.tierModels.claude),
     },
+  },
+  // Provider endpoints — override to use Ollama, LM Studio, Together AI, Groq, etc.
+  // Any OpenAI-compatible API works with openaiBase.
+  providers: {
+    anthropicBase: process.env.ANTHROPIC_API_BASE
+      || (_userConfig.providers && _userConfig.providers.anthropicBase)
+      || "api.anthropic.com",
+    openaiBase: process.env.OPENAI_API_BASE
+      || (_userConfig.providers && _userConfig.providers.openaiBase)
+      || "api.openai.com",
+  },
+  // Diff chunking — split large diffs before sending to API.
+  diff: {
+    maxChunkBytes: (_userConfig.diff && _userConfig.diff.maxChunkBytes) || 50000,
   },
   // Tier × Mode 자동화 한계 (Semi-auto mode)
   tierLimits: {
@@ -680,7 +711,7 @@ function _anthropicOnce(prompt, systemPrompt, model) {
     });
 
     const options = {
-      hostname: "api.anthropic.com",
+      hostname: CONFIG.providers.anthropicBase,
       path: "/v1/messages",
       method: "POST",
       headers: {
@@ -767,7 +798,7 @@ function _openaiOnce(prompt, systemPrompt, model) {
     });
 
     const options = {
-      hostname: "api.openai.com",
+      hostname: CONFIG.providers.openaiBase,
       path: "/v1/chat/completions",
       method: "POST",
       headers: {
@@ -1829,6 +1860,20 @@ async function localReview(options = {}) {
   }
 
   logInfo(`Diff: ${diff.split("\n").length} lines`);
+
+  // Chunk large diffs — if the diff exceeds maxChunkBytes, truncate and warn.
+  // Full multi-chunk review (review each chunk, merge results) is a future enhancement;
+  // for now we truncate to keep API calls reliable and costs predictable.
+  const diffBytes = Buffer.byteLength(diff, "utf8");
+  const maxBytes = CONFIG.diff.maxChunkBytes;
+  if (diffBytes > maxBytes) {
+    logWarn(`Diff is large (${(diffBytes / 1024).toFixed(0)}KB > ${(maxBytes / 1024).toFixed(0)}KB limit). Truncating to fit API token limits.`);
+    // Truncate by bytes, then trim to last complete line
+    const truncated = Buffer.from(diff, "utf8").subarray(0, maxBytes).toString("utf8");
+    const lastNewline = truncated.lastIndexOf("\n");
+    diff = (lastNewline > 0 ? truncated.slice(0, lastNewline) : truncated)
+      + `\n\n[... truncated — ${(diffBytes / 1024).toFixed(0)}KB total, showing first ${(maxBytes / 1024).toFixed(0)}KB]`;
+  }
 
   // Load context
   const skillContext = readSkillContext();
