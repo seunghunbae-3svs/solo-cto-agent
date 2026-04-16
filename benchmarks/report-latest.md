@@ -3,34 +3,37 @@
 Repo: seunghunbae-3svs/solo-cto-agent
 Orchestrator: seunghunbae-3svs/dual-agent-review-orchestrator
 Window: last 30 days
-Collected: 2026-04-14T08:13:50.869Z
+Collected: 2026-04-16T19:20:17.511Z
 
 ## Core metrics
-- PRs: 53
-- Merged: 48
-- Mean time to merge: 0.64h
+- PRs: 92
+- Merged: 85
+- Mean time to merge: 0.38h
 - Mean time to first review: n/a
 - Avg review count per PR: 0
 - Changes requested rate: 0
 - Cross-review rate: 0
 
+## Rework metrics
+- Total rework cycles: 14
+- Avg rework cycles per PR: 0.15
+- PRs with rework: 0.09
+
 ## Decision metrics
-- Decisions recorded: 0
-- Approve rate: n/a
-- Revise rate: n/a
-- Hold rate: n/a
-- Mean decision latency: n/a
+- Decisions recorded: 58
+- Approve rate: 0.45
+- Revise rate: 0.53
+- Hold rate: 0.02
+- Mean decision latency: 11.33h
 
 ## Comparison reports
 - CTO comparison reports: 0
 
+## Cross-repo aggregate (5 managed repos)
+- Managed repos: tribo-store, 3stripe-event, golf-now, Palate-pilot, eventbadge
+- Total PRs (all repos): 62
+- Total merged (all repos): 24
+
 ## Notes
 - Cross-review rate is based on >=2 unique reviewers (excluding author).
 - Only the most recent 100 PRs are sampled.
-
-## Data gaps
-- Rework cycle count per PR (explicit) — wired, not yet populated
-- Visual regression count — requires Playwright baseline images
-- Deployment failure rate — available in Vercel logs, not yet piped to metrics
-- Cross-review rate — dual-agent scoring pipeline deployed recently, accumulating
-- Decision queue metrics — wired in orchestrator, awaiting sufficient volume

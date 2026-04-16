@@ -1716,6 +1716,130 @@ ${diff}
   return dualReviewData;
 }
 
+// ============================================================================
+// AUTO-SYNC — fetch orchestrator data from GitHub at session start (Phase 3)
+// ============================================================================
+
+function _ghApiFetch(pathname, token) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: "api.github.com",
+      path: pathname,
+      method: "GET",
+      headers: {
+        "User-Agent": "solo-cto-agent",
+        "Accept": "application/vnd.github+json",
+      },
+    };
+    if (token) options.headers.Authorization = `Bearer ${token}`;
+
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        if (res.statusCode >= 400) {
+          reject(new Error(`GitHub API ${res.statusCode}: ${data.slice(0, 200)}`));
+          return;
+        }
+        try { resolve(JSON.parse(data)); }
+        catch (e) { reject(new Error(`Invalid JSON from ${pathname}`)); }
+      });
+    });
+    req.on("error", reject);
+    req.setTimeout(15000, () => req.destroy(new Error("GitHub API timeout")));
+    req.end();
+  });
+}
+
+async function _fetchRepoFile(ownerRepo, filePath, token) {
+  const data = await _ghApiFetch(`/repos/${ownerRepo}/contents/${filePath}`, token);
+  return Buffer.from(data.content || "", "base64").toString("utf8").replace(/^\uFEFF/, "");
+}
+
+async function autoSync(options = {}) {
+  const {
+    orchestratorRepo = null,
+    verbose = false,
+  } = options;
+
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.ORCHESTRATOR_PAT;
+  if (!token) {
+    logWarn("auto_sync: No GitHub token found (GITHUB_TOKEN / GH_TOKEN / ORCHESTRATOR_PAT). Skipping.");
+    return null;
+  }
+
+  // Detect orchestrator repo from git remote or user config
+  let orchRepo = orchestratorRepo;
+  if (!orchRepo) {
+    try {
+      const url = execSync("git config --get remote.origin.url", { encoding: "utf8" }).trim();
+      const owner = url.replace("git@github.com:", "").replace("https://github.com/", "").replace(".git", "").split("/")[0];
+      if (owner) orchRepo = `${owner}/dual-agent-review-orchestrator`;
+    } catch { /* ignore */ }
+  }
+  if (!orchRepo) {
+    logWarn("auto_sync: Could not determine orchestrator repo. Use --repo owner/repo.");
+    return null;
+  }
+
+  logSection("Auto-Sync from Orchestrator");
+  logInfo(`Source: ${orchRepo}`);
+
+  const syncDir = path.join(CONFIG.sessionsDir, "sync");
+  ensureDir(syncDir);
+
+  const filesToSync = [
+    { remote: "ops/orchestrator/agent-scores.json", local: "agent-scores.json" },
+    { remote: "ops/orchestrator/error-patterns.md", local: "error-patterns.md" },
+    { remote: "ops/orchestrator/decision-log.json", local: "decision-log.json" },
+  ];
+
+  const results = { synced: [], failed: [], skipped: [] };
+
+  for (const file of filesToSync) {
+    try {
+      const content = await _fetchRepoFile(orchRepo, file.remote, token);
+      const localPath = path.join(syncDir, file.local);
+
+      // Skip if content unchanged
+      if (fs.existsSync(localPath)) {
+        const existing = fs.readFileSync(localPath, "utf8");
+        if (existing === content) {
+          results.skipped.push(file.local);
+          if (verbose) logInfo(`  ${file.local}: unchanged`);
+          continue;
+        }
+      }
+
+      fs.writeFileSync(localPath, content);
+      results.synced.push(file.local);
+      logSuccess(`  ${file.local}: synced`);
+    } catch (err) {
+      results.failed.push(file.local);
+      if (verbose) logWarn(`  ${file.local}: ${err.message}`);
+    }
+  }
+
+  // Write sync metadata
+  const meta = {
+    timestamp: new Date().toISOString(),
+    orchestrator: orchRepo,
+    synced: results.synced,
+    failed: results.failed,
+    skipped: results.skipped,
+  };
+  fs.writeFileSync(path.join(syncDir, "_sync-meta.json"), JSON.stringify(meta, null, 2));
+
+  const summary = [
+    results.synced.length ? `${results.synced.length} synced` : null,
+    results.skipped.length ? `${results.skipped.length} unchanged` : null,
+    results.failed.length ? `${results.failed.length} failed` : null,
+  ].filter(Boolean).join(", ");
+  logInfo(`Auto-sync complete: ${summary}`);
+
+  return results;
+}
+
 function sessionSave(options = {}) {
   const {
     projectTag = null,
@@ -1958,9 +2082,14 @@ async function main() {
         const limitIdx = args.indexOf("--limit");
         const limit = limitIdx >= 0 ? parseInt(args[limitIdx + 1], 10) : 10;
         sessionList({ limit });
+      } else if (subcommand === "sync" || subcommand === "auto-sync") {
+        const repoIdx = args.indexOf("--repo");
+        const orchestratorRepo = repoIdx >= 0 ? args[repoIdx + 1] : null;
+        const verbose = args.includes("--verbose") || args.includes("-v");
+        await autoSync({ orchestratorRepo, verbose });
       } else {
         logError(`Unknown session subcommand: ${subcommand}`);
-        log(`Use: session save|restore|list`);
+        log(`Use: session save|restore|list|sync`);
         process.exit(1);
       }
     } else if (command === "help" || command === "-h" || command === "--help") {
@@ -1981,6 +2110,7 @@ ${COLORS.bold}Commands:${COLORS.reset}
   session save            Save current session context
   session restore         Load most recent session context
   session list            List recent sessions
+  session sync            Sync orchestrator data (agent-scores, error-patterns, decision-log)
   help                    Show this message
 
 ${COLORS.bold}Options:${COLORS.reset}
@@ -2001,6 +2131,10 @@ ${COLORS.bold}Options:${COLORS.reset}
     --manual         Extract from manual input
     --input <text>   Input text or file path
     --project <tag>  Project tag (e.g., tribo, pista)
+
+  session sync:
+    --repo <owner/repo>  Override orchestrator repo (default: auto-detect)
+    --verbose, -v        Show details for skipped/failed files
 
   dual-review:
     --staged         Review staged changes (default)
@@ -2331,6 +2465,7 @@ module.exports = {
   sessionSave,
   sessionRestore,
   sessionList,
+  autoSync,
   // Cowork-specific layer (substantive upgrade)
   selfCrossReview,
   readTier,

@@ -110,7 +110,7 @@ async function main() {
   }
 
   const owner = repo.split('/')[0];
-  const orchName = orchArg || process.env.ORCHESTRATOR_REPO || 'dual-agent-orchestrator';
+  const orchName = orchArg || process.env.ORCHESTRATOR_REPO || 'dual-agent-review-orchestrator';
   const orchestratorRepo = orchName.includes('/') ? orchName : `${owner}/${orchName}`;
 
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.ORCHESTRATOR_PAT;
@@ -253,6 +253,63 @@ async function main() {
     metrics.notes.push('Comparison report search failed.');
   }
 
+  // Rework cycle count — count commits with "rework" in message per PR
+  let totalReworkCycles = 0;
+  let prsWithRework = 0;
+  for (const pr of scoped) {
+    try {
+      const commits = await apiGet(`/repos/${repo}/pulls/${pr.number}/commits?per_page=100`, token);
+      const reworkCommits = commits.filter((c) =>
+        /rework|fix.*review|address.*feedback/i.test(c.commit?.message || '')
+      );
+      if (reworkCommits.length > 0) {
+        prsWithRework += 1;
+        totalReworkCycles += reworkCommits.length;
+      }
+    } catch {
+      // ignore per-PR failures
+    }
+  }
+  metrics.rework_cycle_total = totalReworkCycles;
+  metrics.rework_cycle_avg = scoped.length ? Number((totalReworkCycles / scoped.length).toFixed(2)) : 0;
+  metrics.prs_with_rework_rate = scoped.length ? Number((prsWithRework / scoped.length).toFixed(2)) : 0;
+
+  // Aggregate metrics across managed repos (from orchestrator project-config)
+  const projectConfig = await fetchRepoJson(orchestratorRepo, 'ops/orchestrator/project-config.json', token);
+  const managedRepos = [];
+  if (projectConfig && projectConfig.projects) {
+    const projects = projectConfig.projects;
+    if (Array.isArray(projects)) {
+      for (const cfg of projects) {
+        if (cfg.enabled !== false) managedRepos.push({ name: cfg.repo || cfg.key, ...cfg });
+      }
+    } else {
+      for (const [name, cfg] of Object.entries(projects)) {
+        if (cfg.enabled !== false) managedRepos.push({ name, ...cfg });
+      }
+    }
+  }
+  metrics.managed_repos = managedRepos.map((r) => r.name);
+  metrics.managed_repo_count = managedRepos.length;
+
+  // Cross-repo aggregate: total PRs, merges, rework across all managed repos
+  let crossRepoPRs = 0;
+  let crossRepoMerged = 0;
+  for (const mr of managedRepos) {
+    const repoName = mr.repo || mr.name;
+    const repoFullName = `${owner}/${repoName}`;
+    try {
+      const mrPulls = await apiGet(`/repos/${repoFullName}/pulls?state=all&per_page=50`, token);
+      const mrScoped = mrPulls.filter((p) => new Date(p.created_at).getTime() >= since);
+      crossRepoPRs += mrScoped.length;
+      crossRepoMerged += mrScoped.filter((p) => p.merged_at).length;
+    } catch {
+      // skip unreachable repos
+    }
+  }
+  metrics.cross_repo_pr_count = crossRepoPRs;
+  metrics.cross_repo_merged_count = crossRepoMerged;
+
   fs.mkdirSync(path.dirname(OUTPUT_JSON), { recursive: true });
   fs.writeFileSync(OUTPUT_JSON, JSON.stringify(metrics, null, 2));
 
@@ -260,7 +317,47 @@ async function main() {
   const reviewMs = metrics.mean_time_to_first_review_hours == null ? null : metrics.mean_time_to_first_review_hours * 60 * 60 * 1000;
   const decisionMs = metrics.decision_mean_latency_hours == null ? null : metrics.decision_mean_latency_hours * 60 * 60 * 1000;
 
-  const report = `# Effectiveness Report (Latest)\n\nRepo: ${repo}\nOrchestrator: ${orchestratorRepo}\nWindow: last ${windowDays} days\nCollected: ${metrics.collected_at}\n\n## Core metrics\n- PRs: ${metrics.pr_count}\n- Merged: ${metrics.merged_count}\n- Mean time to merge: ${fmtHours(mergeMs)}\n- Mean time to first review: ${fmtHours(reviewMs)}\n- Avg review count per PR: ${metrics.review_count_avg ?? 'n/a'}\n- Changes requested rate: ${metrics.changes_requested_rate ?? 'n/a'}\n- Cross-review rate: ${metrics.cross_review_rate ?? 'n/a'}\n\n## Decision metrics\n- Decisions recorded: ${metrics.decision_count ?? 'n/a'}\n- Approve rate: ${metrics.decision_approve_rate ?? 'n/a'}\n- Revise rate: ${metrics.decision_revise_rate ?? 'n/a'}\n- Hold rate: ${metrics.decision_hold_rate ?? 'n/a'}\n- Mean decision latency: ${fmtHours(decisionMs)}\n\n## Comparison reports\n- CTO comparison reports: ${metrics.comparison_report_count ?? 'n/a'}\n\n## Notes\n${metrics.notes.map((n) => `- ${n}`).join('\n')}\n\n## Data gaps\n- Rework cycle count per PR (explicit)\n- Visual regression count\n- Deployment failure rate\n`;
+  const report = [
+    `# Effectiveness Report (Latest)`,
+    ``,
+    `Repo: ${repo}`,
+    `Orchestrator: ${orchestratorRepo}`,
+    `Window: last ${windowDays} days`,
+    `Collected: ${metrics.collected_at}`,
+    ``,
+    `## Core metrics`,
+    `- PRs: ${metrics.pr_count}`,
+    `- Merged: ${metrics.merged_count}`,
+    `- Mean time to merge: ${fmtHours(mergeMs)}`,
+    `- Mean time to first review: ${fmtHours(reviewMs)}`,
+    `- Avg review count per PR: ${metrics.review_count_avg ?? 'n/a'}`,
+    `- Changes requested rate: ${metrics.changes_requested_rate ?? 'n/a'}`,
+    `- Cross-review rate: ${metrics.cross_review_rate ?? 'n/a'}`,
+    ``,
+    `## Rework metrics`,
+    `- Total rework cycles: ${metrics.rework_cycle_total}`,
+    `- Avg rework cycles per PR: ${metrics.rework_cycle_avg}`,
+    `- PRs with rework: ${metrics.prs_with_rework_rate}`,
+    ``,
+    `## Decision metrics`,
+    `- Decisions recorded: ${metrics.decision_count ?? 'n/a'}`,
+    `- Approve rate: ${metrics.decision_approve_rate ?? 'n/a'}`,
+    `- Revise rate: ${metrics.decision_revise_rate ?? 'n/a'}`,
+    `- Hold rate: ${metrics.decision_hold_rate ?? 'n/a'}`,
+    `- Mean decision latency: ${fmtHours(decisionMs)}`,
+    ``,
+    `## Comparison reports`,
+    `- CTO comparison reports: ${metrics.comparison_report_count ?? 'n/a'}`,
+    ``,
+    `## Cross-repo aggregate (${metrics.managed_repo_count} managed repos)`,
+    `- Managed repos: ${metrics.managed_repos.join(', ') || 'none'}`,
+    `- Total PRs (all repos): ${metrics.cross_repo_pr_count}`,
+    `- Total merged (all repos): ${metrics.cross_repo_merged_count}`,
+    ``,
+    `## Notes`,
+    ...metrics.notes.map((n) => `- ${n}`),
+    ``,
+  ].join('\n');
 
   fs.writeFileSync(OUTPUT_MD, report, 'utf8');
 

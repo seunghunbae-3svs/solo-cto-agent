@@ -61,11 +61,15 @@
 - 894 tests across 48 files
 - Live validation on 3 production repos
 
-## v1.2.0 Plan
-- terminal GIF demo (replace SVG)
+## Completed (v1.2.0)
+- terminal demo SVG with animated CLI walkthrough (init, doctor, review, status)
 - cowork-main Phase 2 — orchestrator repo auto-commits agent-scores + error-patterns post CI run
-- cowork-main Phase 3 — opt-in `auto_sync: true` at session start
+- cowork-main Phase 3 — `session sync` / `session auto-sync` fetches orchestrator data at session start
+- dual-agent metrics population (cross-review rate, decision tracking, rework cycles, cross-repo aggregate)
+- collect-metrics.js: orchestrator repo name fix, array-aware project-config parsing, rework + cross-repo metrics
+- changelog.yml CI fix (PAT token, null-safe condition, skip-ci loop prevention)
+
+## v1.3.0 Plan
 - plugin marketplace listing
-- dual-agent metrics population (cross-review rate, decision tracking)
 - benchmark dashboard with historical trends
 - `docs/cursor.md` / `docs/windsurf.md` when those surfaces land with compatible execution adapters

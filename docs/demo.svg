@@ -1,14 +1,65 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420">
-  <rect width="900" height="420" fill="#0b0f16"/>
-  <rect x="20" y="20" width="860" height="380" rx="10" fill="#111827" stroke="#1f2937"/>
-  <text x="40" y="60" fill="#93c5fd" font-family="monospace" font-size="16">npx solo-cto-agent init</text>
-  <text x="40" y="90" fill="#10b981" font-family="monospace" font-size="14">✔ initialized ~/.claude/skills/solo-cto-agent</text>
-  <text x="40" y="120" fill="#10b981" font-family="monospace" font-size="14">✔ failure-catalog.json created</text>
-  <text x="40" y="150" fill="#10b981" font-family="monospace" font-size="14">✔ SKILL.md created</text>
-
-  <text x="40" y="200" fill="#93c5fd" font-family="monospace" font-size="16">solo-cto-agent status</text>
-  <text x="40" y="230" fill="#e5e7eb" font-family="monospace" font-size="14">- SKILL.md: OK</text>
-  <text x="40" y="255" fill="#e5e7eb" font-family="monospace" font-size="14">- failure-catalog.json: OK</text>
-  <text x="40" y="280" fill="#e5e7eb" font-family="monospace" font-size="14">- error patterns: 8</text>
-  <text x="40" y="305" fill="#e5e7eb" font-family="monospace" font-size="14">- last CI: unavailable (missing token or repo)</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="560" viewBox="0 0 820 560">
+  <defs>
+    <style>
+      @keyframes blink { 0%,49%{opacity:1}50%,100%{opacity:0} }
+      @keyframes fadeIn { 0%{opacity:0}100%{opacity:1} }
+      .term-bg { fill: #0d1117; }
+      .title-bar { fill: #161b22; }
+      .dot-red { fill: #ff5f56; }
+      .dot-yellow { fill: #ffbd2e; }
+      .dot-green { fill: #27c93f; }
+      .prompt { fill: #8b949e; font-family: 'Fira Code', Consolas, monospace; font-size: 13px; }
+      .cmd { fill: #c9d1d9; font-family: 'Fira Code', Consolas, monospace; font-size: 13px; font-weight: 600; }
+      .output { fill: #8b949e; font-family: 'Fira Code', Consolas, monospace; font-size: 12px; }
+      .success { fill: #3fb950; }
+      .accent { fill: #58a6ff; }
+      .warn { fill: #d29922; }
+      .highlight { fill: #f0883e; }
+      .dim { fill: #484f58; }
+      .bold { font-weight: 700; }
+      .g1 { animation: fadeIn 0.3s ease-out 0.5s both; }
+      .g2 { animation: fadeIn 0.3s ease-out 1.2s both; }
+      .g3 { animation: fadeIn 0.3s ease-out 1.6s both; }
+      .g4 { animation: fadeIn 0.3s ease-out 2.4s both; }
+      .g5 { animation: fadeIn 0.3s ease-out 2.8s both; }
+      .g6 { animation: fadeIn 0.3s ease-out 3.2s both; }
+      .g7 { animation: fadeIn 0.3s ease-out 3.6s both; }
+      .g8 { animation: fadeIn 0.3s ease-out 4.0s both; }
+      .g9 { animation: fadeIn 0.3s ease-out 4.4s both; }
+      .g10 { animation: fadeIn 0.3s ease-out 5.2s both; }
+      .g11 { animation: fadeIn 0.3s ease-out 5.6s both; }
+      .g12 { animation: fadeIn 0.3s ease-out 6.0s both; }
+      .g13 { animation: fadeIn 0.3s ease-out 6.4s both; }
+      .g14 { animation: fadeIn 0.3s ease-out 6.8s both; }
+      .g15 { animation: fadeIn 0.3s ease-out 7.2s both; }
+      .g16 { animation: fadeIn 0.3s ease-out 8.0s both; }
+      .g17 { animation: fadeIn 0.3s ease-out 8.4s both; }
+      .g18 { animation: fadeIn 0.3s ease-out 9.0s both; }
+    </style>
+  </defs>
+  <rect class="term-bg" width="820" height="560" rx="10"/>
+  <rect class="title-bar" width="820" height="36" rx="10"/>
+  <rect class="title-bar" y="26" width="820" height="10"/>
+  <circle class="dot-red" cx="20" cy="18" r="6"/>
+  <circle class="dot-yellow" cx="40" cy="18" r="6"/>
+  <circle class="dot-green" cx="60" cy="18" r="6"/>
+  <text x="410" y="22" text-anchor="middle" fill="#8b949e" font-family="sans-serif" font-size="12">solo-cto-agent demo</text>
+  <g class="g1"><text class="prompt" x="20" y="65">$</text><text class="cmd" x="36" y="65">npx solo-cto-agent init</text></g>
+  <g class="g2"><text class="output success" x="20" y="88">&#10004;</text><text class="output" x="36" y="88">Installed 6 skills to ~/.claude/skills/solo-cto-agent</text></g>
+  <g class="g3"><text class="output success" x="20" y="108">&#10004;</text><text class="output" x="36" y="108">Preset: <tspan class="accent bold">builder</tspan> (spark, review, memory, craft, build, ship)</text></g>
+  <g class="g4"><text class="prompt" x="20" y="142">$</text><text class="cmd" x="36" y="142">solo-cto-agent doctor</text></g>
+  <g class="g5"><text class="output accent" x="20" y="165">Running doctor (lint + status + CI)...</text></g>
+  <g class="g6"><text class="output success" x="20" y="185">&#10004;</text><text class="output" x="36" y="185">Package structure valid (bin, skills, docs, tiers.json)</text></g>
+  <g class="g7"><text class="output success" x="20" y="205">&#10004;</text><text class="output" x="36" y="205">6/6 skills installed, all frontmatter valid</text></g>
+  <g class="g8"><text class="output success" x="20" y="225">&#10004;</text><text class="output" x="36" y="225">894 tests passing across 48 files</text></g>
+  <g class="g9"><text class="output success" x="20" y="245">&#10004;</text><text class="output" x="36" y="245">CI: <tspan class="success bold">green</tspan>  |  npm: <tspan class="success bold">v1.1.0</tspan></text></g>
+  <g class="g10"><text class="prompt" x="20" y="279">$</text><text class="cmd" x="36" y="279">solo-cto-agent review --pr 28 --repo tribo-store</text></g>
+  <g class="g11"><text class="output accent" x="20" y="302">3-pass review: semantic / build / quality</text></g>
+  <g class="g12"><text class="output" x="20" y="322">  Pass 1/3  <tspan class="success">semantic-gate</tspan>   ████████████  <tspan class="success">PASS</tspan></text></g>
+  <g class="g13"><text class="output" x="20" y="342">  Pass 2/3  <tspan class="success">build-verify</tspan>    ████████████  <tspan class="success">PASS</tspan></text></g>
+  <g class="g14"><text class="output" x="20" y="362">  Pass 3/3  <tspan class="warn">quality-score</tspan>   ████████░░░░  <tspan class="warn">78/100</tspan></text></g>
+  <g class="g15"><text class="output" x="20" y="390">  Decision: <tspan class="success bold">APPROVE</tspan>  |  1 suggestion  |  0 blockers</text><text class="output dim" x="20" y="410">  Posted to PR #28, Telegram notified</text></g>
+  <g class="g16"><text class="prompt" x="20" y="444">$</text><text class="cmd" x="36" y="444">solo-cto-agent status --metrics</text></g>
+  <g class="g17"><text class="output" x="20" y="467">  PRs: <tspan class="accent bold">92</tspan>  Merged: <tspan class="success bold">85</tspan>  TTM: <tspan class="accent">0.38h</tspan></text><text class="output" x="20" y="487">  Decisions: <tspan class="accent bold">58</tspan>  Approve: <tspan class="success">45%</tspan>  Revise: <tspan class="warn">53%</tspan>  Hold: <tspan class="highlight">2%</tspan></text><text class="output" x="20" y="507">  Managed repos: <tspan class="accent">5</tspan>  Cross-repo PRs: <tspan class="accent bold">62</tspan></text></g>
+  <g class="g18"><text class="output success" x="20" y="535">&#10004; All systems operational</text></g>
 </svg>
