@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased — PR-G7-subcommands: telegram test/config/status/disable/verify + event filter
+## Unreleased
+
+* feat: v1.2.0 — metrics fix, Phase 2/3 cowork, terminal demo, changelog CI — PR-G7-subcommands: telegram test/config/status/disable/verify + event filter
 
 **Theme**: closing the telegram wizard loop. The wizard (PR-G7-impl)
 gets you wired up; this PR adds the day-2 surface — toggle which event
