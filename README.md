@@ -103,6 +103,22 @@ This is the difference I wanted in day-to-day use:
 | "Looks good to me" feedback | Review forces actual criticism |
 | Agent asks permission for every tiny step | Low-risk work gets done without constant back-and-forth |
 
+## Production numbers
+
+This is running on three private repos (Next.js + Supabase, Vite + React, Next.js + Prisma). Numbers from the last 30 days:
+
+| Metric | Value |
+| --- | --- |
+| PRs opened | 53 |
+| PRs merged | 48 |
+| Mean time to merge | 0.64 hours |
+| Test suite | 894 tests, 48 files, all passing |
+| CLI commands | 25 subcommands |
+| Skills | 8 (44 reference docs) |
+| npm version | 1.1.0 |
+
+What is not there yet: dual-agent cross-review metrics are still accumulating (rate shows 0 because the structured scoring pipeline was deployed recently). Decision tracking is wired but the decision queue has not produced enough data for meaningful stats. Those will fill in over the next few weeks of normal use.
+
 ## Who this is for
 
 This repo is probably useful if you:
@@ -208,23 +224,29 @@ solo-cto-agent review                    # 첫 리뷰 실행
 
 ```text
 solo-cto-agent/
-  autopilot.md
+  bin/                        # CLI (25 commands)
+    cli.js
+    self-evolve/              # 9 modules: error-collector, quality-analyzer, skill-scout, ...
   skills/
-    build/
-      SKILL.md
-    ship/
-      SKILL.md
-    craft/
-      SKILL.md
-    spark/
-      SKILL.md
-    review/
-      SKILL.md
-    memory/
-      SKILL.md
+    build/      SKILL.md + references/   # prereq scan, error loop breaker, deploy checklist
+    ship/       SKILL.md + references/   # deploy monitor, circuit breaker, recovery loop
+    craft/      SKILL.md + references/   # typography, color, spacing, anti-slop
+    spark/      SKILL.md + references/   # market scan, unit economics, risk framing
+    review/     SKILL.md + references/   # 3-perspective critique, scoring, synthesis
+    memory/     SKILL.md + references/   # session context, knowledge articles, episode log
+    orchestrate/ SKILL.md               # multi-agent routing, CI/CD dispatch
+    self-evolve/ SKILL.md               # error pattern learning, skill improvement, weekly report
+    _shared/                             # agent-spec, skill-context (shared across skills)
   templates/
-    project.md
-    context.md
+    orchestrator/             # full orchestrator repo scaffold (workflows, agents, api, ops)
+    product-repo/             # product repo scaffold (workflows, STATE.md, .env.example)
+    builder-defaults/         # routing-policy.json, agent-scores.json
+    workflows/                # solo-cto-review.yml (3-pass auto-review)
+  tests/                      # 894 tests across 48 files
+  benchmarks/                 # effectiveness reports, metrics
+  docs/                       # claude.md, tier-matrix, configuration, policies
+  examples/                   # real-world flows: build, ship, review, founder-workflow
+  completions/                # bash + zsh tab completion
 ```
 
 ## Three Axes: Tier / Agent / Mode
@@ -459,6 +481,18 @@ This is for reducing repeat explanation and preserving useful context.
 
 Not everything needs to be remembered forever. But decisions, repeated failure patterns, and project context should not disappear every session.
 
+### orchestrate
+
+This is the CTO-tier skill. It handles multi-agent routing when you have both Claude and Codex running.
+
+Decides which agent handles which task, dispatches reviews across repos, tracks agent scores over time, and runs the daily briefing loop. If you only use one agent, you do not need this.
+
+### self-evolve
+
+This runs in the background after work is done. It collects error patterns from failed builds, analyzes rework cycles to find recurring issues, and adjusts skill behavior based on what keeps going wrong.
+
+Nine modules: error-collector, quality-analyzer, rework-learner, skill-improver, skill-scout, feedback-collector, external-trends, weekly-report, and the orchestrator that ties them together. Most of it is invisible unless you check the weekly report or the error-patterns file.
+
 ## Skill slimming
 
 When skills grow past 150 lines, most of that weight is reference data the agent doesn't need on every activation. The `references/` pattern splits hot-path logic from cold-path data, cutting token costs by 58-79% per skill without losing functionality.
@@ -569,7 +603,7 @@ If something fails, re-run `setup.sh --update` and check again.
 
 ## FAQ
 
-**Q: Do I need all six skills?**
+**Q: Do I need all eight skills?**
 A: No. Start with `build` and `review`. Add the others if you find yourself wanting them. Each skill is independent.
 
 **Q: Why does the agent stop retrying after 3 attempts?**

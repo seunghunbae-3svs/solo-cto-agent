@@ -34,22 +34,38 @@
 - references/ applied to build and ship skills
 - README architecture diagram (full system)
 
-## v0.7.0 Plan
-- apply references/ to remaining skills (craft, memory, review, spark)
+## Completed (v0.7.0)
+- references/ applied to all remaining skills (craft, memory, review, spark)
+- `solo-cto-agent doctor` (lint + status + CI in one pass)
+- cowork-main Phase 1 — `session save/restore/list`, mode-aware guards, dry-run sync
+
+## Completed (v1.0.0)
 - npm publish automation (release.yml + npm token)
+- Toolkit upgrade: per-tool entry points + examples/
+- `docs/claude.md` as primary tool entry point
+- `examples/` directory with real-world flows (build, ship, review, founder-workflow)
+- validate-package tracks `examples/README.md` + `docs/claude.md`
+- wizard default editor updated to Claude Cowork
+
+## Completed (v1.1.0)
+- self-evolve module (9 components: error-collector, quality-analyzer, rework-learner, skill-improver, skill-scout, feedback-collector, external-trends, weekly-report, orchestrator)
+- Telegram wizard + subcommands (test, verify, status, disable, config)
+- notify-config with event filtering
+- 3-pass auto-review workflow (solo-cto-review.yml)
+- deep-review with Managed Agent sandbox
+- routine fire/schedules for Claude Code Routines
+- provider abstraction (Ollama, LM Studio, Groq, etc.)
+- shell completions (bash + zsh)
+- i18n (en/ko) for CLI
+- cowork-engine parser + personalization
+- 894 tests across 48 files
+- Live validation on 3 production repos
+
+## v1.2.0 Plan
 - terminal GIF demo (replace SVG)
-- ✅ `solo-cto-agent doctor` (lint + status + CI in one pass)
-- ✅ cowork-main Phase 1 — `session save/restore/list`, mode-aware guards, dry-run sync
+- cowork-main Phase 2 — orchestrator repo auto-commits agent-scores + error-patterns post CI run
+- cowork-main Phase 3 — opt-in `auto_sync: true` at session start
 - plugin marketplace listing
-
-## cowork-main Phases
-- ✅ **Phase 1** — manual pull (sync dry-run default), local-cache status, doctor, session context
-- **Phase 2** — orchestrator repo auto-commits agent-scores + error-patterns post CI run
-- **Phase 3** — opt-in `auto_sync: true` at session start (power users)
-
-## Toolkit upgrade (v1.2.0)
-- ✅ tool-agnostic core + per-tool entry-point convention (`docs/claude.md` live)
-- ✅ `examples/` directory with build / ship / review / founder-workflow scenarios (input → agent → output → pain reduced format)
-- ✅ validate-package drops removed legacy-editor files; tracks `examples/README.md` + `docs/claude.md` instead
-- ✅ wizard default editor updated to Claude Cowork
-- future: `docs/cursor.md` / `docs/windsurf.md` / `docs/copilot.md` when those surfaces land with compatible execution adapters
+- dual-agent metrics population (cross-review rate, decision tracking)
+- benchmark dashboard with historical trends
+- `docs/cursor.md` / `docs/windsurf.md` when those surfaces land with compatible execution adapters

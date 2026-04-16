@@ -87,6 +87,22 @@ solo-cto-agent review
 
 # Run dual review when both keys are set
 solo-cto-agent dual-review
+
+# Deep review with sandboxed code execution (CTO tier)
+solo-cto-agent deep-review
+
+# Save/restore session context
+solo-cto-agent session save --project myapp
+solo-cto-agent session restore --project myapp
+
+# Extract decisions into knowledge articles
+solo-cto-agent knowledge --session
+
+# Sync CI/CD data from GitHub (dry-run by default)
+solo-cto-agent sync --org myorg
+
+# Install 3-pass auto-review to your repos
+solo-cto-agent auto-setup
 ```
 
 ## Tier summary

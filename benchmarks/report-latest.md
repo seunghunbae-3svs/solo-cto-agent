@@ -29,6 +29,8 @@ Collected: 2026-04-14T08:13:50.869Z
 - Only the most recent 100 PRs are sampled.
 
 ## Data gaps
-- Rework cycle count per PR (explicit)
-- Visual regression count
-- Deployment failure rate
+- Rework cycle count per PR (explicit) — wired, not yet populated
+- Visual regression count — requires Playwright baseline images
+- Deployment failure rate — available in Vercel logs, not yet piped to metrics
+- Cross-review rate — dual-agent scoring pipeline deployed recently, accumulating
+- Decision queue metrics — wired in orchestrator, awaiting sufficient volume
