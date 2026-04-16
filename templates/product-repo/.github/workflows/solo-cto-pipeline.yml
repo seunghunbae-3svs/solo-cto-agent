@@ -16,40 +16,66 @@ jobs:
         with:
           github-token: ${{ secrets.ORCHESTRATOR_PAT }}
           script: |
-            // ANTI-LOOP GUARDS:
-            // 1. Skip bot comments (github-actions[bot], solo-cto-agent, dependabot)
-            // 2. Skip [skip-review] in commits or comments
-            // 3. Skip [rework-round] tagged comments (internal bot signaling)
-            // 4. Skip if author is the orchestrator itself
+            // ANTI-LOOP GUARDS (7 layers):
+            // 1. Skip bot actors
+            // 2. Skip [skip-review] / [rework-round] / [bot-tag] markers
+            // 3. Skip review-engine markers (<!-- review-engine / cross-review / visual-review -->)
+            // 4. Skip [consensus-report] marker
+            // 5. Check commit message for [skip-review]
+            // 6. Require rework signals for issue_comment dispatch
+            // 7. Self-dispatch prevention (orchestrator actor)
 
             const event = context.eventName;
             const action = context.payload.action;
             const actor = context.payload.sender?.login || '';
 
-            // Bot guard — skip if sender is a bot or orchestrator
+            // Layer 1: Bot guard
             if (
               actor.includes('[bot]') ||
               actor === 'github-actions[bot]' ||
               actor === 'solo-cto-agent' ||
               actor === 'dependabot[bot]'
             ) {
-              console.log(`ℹ️ Skipping bot comment from ${actor}`);
+              console.log(`ℹ️ [L1] Skipping bot actor: ${actor}`);
               return;
             }
 
-            // Comment/review body guard
+            // Get comment/review body
             const body = (
               context.payload.comment?.body ||
               context.payload.review?.body ||
               ''
-            ).toLowerCase();
+            );
+            const bodyLower = body.toLowerCase();
 
+            // Layer 2: Skip-marker guard
             if (
-              body.includes('[skip-review]') ||
-              body.includes('[rework-round]') ||
-              body.includes('[bot-tag]')
+              bodyLower.includes('[skip-review]') ||
+              bodyLower.includes('[rework-round]') ||
+              bodyLower.includes('[bot-tag]')
             ) {
-              console.log(`ℹ️ Skipping message with skip markers`);
+              console.log(`ℹ️ [L2] Skipping message with skip markers`);
+              return;
+            }
+
+            // Layer 3: Review Engine comment guard (THE KEY FIX)
+            // Review Engine comments contain HTML markers like:
+            // <!-- review-engine-lock --> <!-- cross-review --> <!-- visual-review -->
+            if (
+              body.includes('<!-- review-engine') ||
+              body.includes('## 🔍 Cross-Review') ||
+              body.includes('## 🎨 Visual UI/UX Review') ||
+              body.includes('## 📊 Visual + Performance') ||
+              body.includes('## 📋 Consensus Report') ||
+              body.includes('Review engine lock acquired')
+            ) {
+              console.log(`ℹ️ [L3] Skipping Review Engine comment`);
+              return;
+            }
+
+            // Layer 4: Consensus report guard
+            if (bodyLower.includes('[consensus-report]')) {
+              console.log(`ℹ️ [L4] Skipping consensus report`);
               return;
             }
 
@@ -59,7 +85,7 @@ jobs:
             let branch = '';
 
             if (event === 'pull_request') {
-              // PR opened/updated → check commit message first
+              // Layer 5: Check commit message for [skip-review]
               const sha = context.payload.pull_request?.head?.sha;
               try {
                 const commit = await github.rest.repos.getCommit({
@@ -68,7 +94,7 @@ jobs:
                   ref: sha
                 });
                 if ((commit.data.commit.message || '').includes('[skip-review]')) {
-                  console.log(`ℹ️ Skipping PR with [skip-review] commit message`);
+                  console.log(`ℹ️ [L5] Skipping PR with [skip-review] commit`);
                   return;
                 }
               } catch (e) {
@@ -81,7 +107,6 @@ jobs:
               console.log(`📋 PR ${prNumber} opened/updated on branch ${branch}`);
 
             } else if (event === 'pull_request_review' && action === 'submitted') {
-              // Review submitted → check if changes requested
               if (context.payload.review?.state === 'changes_requested') {
                 eventType = 'rework-request';
                 prNumber = context.payload.pull_request?.number;
@@ -96,10 +121,10 @@ jobs:
               event === 'issue_comment' &&
               context.payload.issue?.pull_request
             ) {
-              // Comment on PR → check for rework signals
-              const hasReworkSignals = /blocker|needs.?work|request.?changes|rework|please.?fix/i.test(body);
+              // Layer 6: Require rework signals for comment dispatch
+              const hasReworkSignals = /blocker|needs.?work|request.?changes|rework|please.?fix/i.test(bodyLower);
               if (!hasReworkSignals) {
-                console.log(`ℹ️ Comment has no rework signals`);
+                console.log(`ℹ️ [L6] Comment has no rework signals`);
                 return;
               }
 
@@ -122,12 +147,12 @@ jobs:
 
             // Dispatch to orchestrator
             if (!eventType || !prNumber) {
-              console.log(`⚠️ Could not determine event type or PR number, skipping dispatch`);
+              console.log(`⚠️ Could not determine event type or PR number, skipping`);
               return;
             }
 
             try {
-              const resp = await github.rest.repos.createDispatchEvent({
+              await github.rest.repos.createDispatchEvent({
                 owner: 'seunghunbae-3svs',
                 repo: 'dual-agent-review-orchestrator',
                 event_type: eventType,
@@ -140,8 +165,7 @@ jobs:
                   action: action || 'triggered'
                 }
               });
-              console.log(`✅ Dispatched to orchestrator: ${eventType} for PR ${prNumber}`);
+              console.log(`✅ Dispatched: ${eventType} for PR ${prNumber}`);
             } catch (err) {
-              console.error(`❌ Failed to dispatch to orchestrator: ${err.message}`);
-              // Do not fail the workflow; orchestrator may be temporarily unavailable
+              console.error(`❌ Dispatch failed: ${err.message}`);
             }
