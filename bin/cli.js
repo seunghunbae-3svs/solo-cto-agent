@@ -60,6 +60,7 @@ Usage:
   solo-cto-agent init [--force] [--preset maker|builder|cto] [--wizard]
   solo-cto-agent setup-pipeline --org <github-org> [--tier builder|cto] [--repos <repo1,repo2,...>]
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
+  solo-cto-agent auto-setup                 # Install solo-cto-pipeline.yml to your repos (centralized)
   solo-cto-agent upgrade --org <github-org> [--repos <repo1,repo2,...>]
   solo-cto-agent sync --org <github-org> [--apply] [--repos <repo1,repo2,...>]
   solo-cto-agent template-audit
@@ -85,6 +86,7 @@ Commands:
   init              Install skills to ~/.claude/skills/, then run doctor to verify setup
   setup-pipeline    Full pipeline setup: create orchestrator repo + install workflows to product repos
   setup-repo        Install dual-agent workflows to a single product repo
+  auto-setup        Install solo-cto-pipeline.yml (centralized thin workflow) to selected repos
   upgrade           Upgrade Builder (Lv4) → CTO (Lv5+6): add multi-agent workflows + config
   sync              Fetch CI/CD results from GitHub (dry-run by default, --apply to write)
   template-audit    Scan managed repos for missing, drifted, or customized templates
@@ -1847,6 +1849,24 @@ async function main() {
     const orchIndex = args.indexOf("--orchestrator-name");
     const orchName = orchIndex >= 0 ? args[orchIndex + 1] : null;
     setupRepoCommand(repoPath, tier, org, orchName);
+    return;
+  }
+
+  if (cmd === "auto-setup") {
+    // Spawn auto-setup.js as child process and forward stdio
+    const { spawn } = require("child_process");
+    const autoSetupPath = path.join(__dirname, "auto-setup.js");
+    const child = spawn("node", [autoSetupPath], {
+      stdio: "inherit",
+      env: process.env,
+    });
+    child.on("exit", (code) => {
+      process.exit(code || 0);
+    });
+    child.on("error", (err) => {
+      console.error("❌ Failed to run auto-setup:", err.message);
+      process.exit(1);
+    });
     return;
   }
 

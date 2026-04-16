@@ -259,6 +259,190 @@ function setCatalogItems(catalog, items) {
   else { catalog.items = items; } // default to official schema
 }
 
+// ============================================================================
+// Push Local Patterns — bidirectional sync (local → remote)
+// ============================================================================
+
+/**
+ * Find patterns that exist locally but not in remote.
+ * Create a PR on the orchestrator repo with these new patterns.
+ *
+ * @param {string} org - GitHub org/username
+ * @param {string} orchRepo - Orchestrator repo name
+ * @param {string} token - GitHub token
+ * @param {string} username - GitHub username (for PR branch naming)
+ * @returns {Promise<Object>} { success, newPatternsCount, prUrl?, error? }
+ */
+async function pushLocalPatterns(org, orchRepo, token, username) {
+  try {
+    const localPath = path.join(SKILLS_DIR, "failure-catalog.json");
+    const localCatalog = readJsonFile(localPath, { items: [] });
+
+    // Fetch remote failure-catalog
+    let remoteCatalog = { items: [] };
+    let remoteFile = null;
+    try {
+      const response = await ghApi(
+        `/repos/${org}/${orchRepo}/contents/ops/orchestrator/failure-catalog.json`,
+        token
+      );
+      if (response && response.content) {
+        const decoded = decodeBase64(response.content);
+        remoteCatalog = JSON.parse(decoded);
+        remoteFile = response;
+      }
+    } catch (e) {
+      // Remote file doesn't exist yet, that's ok
+    }
+
+    const localItems = getCatalogItems(localCatalog);
+    const remoteItems = getCatalogItems(remoteCatalog);
+
+    const localIds = new Set(localItems.map((p) => p.id));
+    const remoteIds = new Set(remoteItems.map((p) => p.id));
+
+    // Find new patterns that exist locally but not remotely
+    const newPatterns = localItems.filter((p) => !remoteIds.has(p.id));
+
+    if (newPatterns.length === 0) {
+      return { success: true, newPatternsCount: 0, prUrl: null };
+    }
+
+    // Merge remote + new local patterns
+    const mergedItems = [...remoteItems, ...newPatterns];
+    const mergedCatalog = { ...remoteCatalog };
+    setCatalogItems(mergedCatalog, mergedItems);
+
+    // Create branch for PR
+    const branchName = `sync/error-patterns-${username}-${Date.now()}`;
+    const fileContent = JSON.stringify(mergedCatalog, null, 2);
+    const encodedContent = Buffer.from(fileContent).toString("base64");
+
+    // Get current main branch reference
+    let mainSha = null;
+    try {
+      const refResp = await ghApi(
+        `/repos/${org}/${orchRepo}/git/refs/heads/main`,
+        token
+      );
+      mainSha = refResp?.object?.sha;
+    } catch (e) {
+      // Try master if main doesn't exist
+      try {
+        const refResp = await ghApi(
+          `/repos/${org}/${orchRepo}/git/refs/heads/master`,
+          token
+        );
+        mainSha = refResp?.object?.sha;
+      } catch (e2) {
+        return { success: false, error: "Could not find main or master branch", newPatternsCount: 0 };
+      }
+    }
+
+    if (!mainSha) {
+      return { success: false, error: "Could not determine base branch SHA", newPatternsCount: 0 };
+    }
+
+    // Create commit (blob + tree + commit)
+    // Get current tree
+    const treeResp = await ghApi(
+      `/repos/${org}/${orchRepo}/git/commits/${mainSha}`,
+      token
+    );
+    const baseTreeSha = treeResp?.tree?.sha;
+
+    if (!baseTreeSha) {
+      return { success: false, error: "Could not read base tree", newPatternsCount: 0 };
+    }
+
+    // Create blob for the new file content
+    const blobResp = await ghApi(
+      `/repos/${org}/${orchRepo}/git/blobs`,
+      token,
+      "POST",
+      { content: fileContent, encoding: "utf-8" }
+    );
+
+    if (!blobResp?.sha) {
+      return { success: false, error: "Failed to create blob", newPatternsCount: 0 };
+    }
+
+    // Create new tree with updated failure-catalog.json
+    const treeResp2 = await ghApi(
+      `/repos/${org}/${orchRepo}/git/trees`,
+      token,
+      "POST",
+      {
+        base_tree: baseTreeSha,
+        tree: [
+          {
+            path: "ops/orchestrator/failure-catalog.json",
+            mode: "100644",
+            type: "blob",
+            sha: blobResp.sha,
+          },
+        ],
+      }
+    );
+
+    if (!treeResp2?.sha) {
+      return { success: false, error: "Failed to create tree", newPatternsCount: 0 };
+    }
+
+    // Create commit
+    const commitResp = await ghApi(
+      `/repos/${org}/${orchRepo}/git/commits`,
+      token,
+      "POST",
+      {
+        message: `[auto-sync] Add ${newPatterns.length} new error patterns from ${username}`,
+        tree: treeResp2.sha,
+        parents: [mainSha],
+      }
+    );
+
+    if (!commitResp?.sha) {
+      return { success: false, error: "Failed to create commit", newPatternsCount: 0 };
+    }
+
+    // Create branch ref
+    await ghApi(
+      `/repos/${org}/${orchRepo}/git/refs`,
+      token,
+      "POST",
+      {
+        ref: `refs/heads/${branchName}`,
+        sha: commitResp.sha,
+      }
+    );
+
+    // Create PR
+    const prResp = await ghApi(
+      `/repos/${org}/${orchRepo}/pulls`,
+      token,
+      "POST",
+      {
+        title: `[auto-sync] Add ${newPatterns.length} new error patterns from ${username}`,
+        head: branchName,
+        base: "main",
+        body: `Automated sync: ${newPatterns.length} new failure-catalog entries discovered locally.\n\n**New patterns:**\n${newPatterns.map((p) => `- ${p.pattern} (${p.category})`).join("\n")}`,
+      }
+    );
+
+    if (!prResp?.html_url) {
+      return { success: false, error: "Failed to create PR", newPatternsCount: 0 };
+    }
+
+    return {
+      success: true,
+      newPatternsCount: newPatterns.length,
+      prUrl: prResp.html_url,
+    };
+  } catch (error) {
+    return { success: false, error: error.message, newPatternsCount: 0 };
+  }
+}
+
 async function syncErrorPatterns(org, orchRepo, token, dryRun) {
   try {
     const localPath = path.join(SKILLS_DIR, "failure-catalog.json");
@@ -333,7 +517,7 @@ function updateSyncStatus(summary, dryRun) {
 // ============================================================================
 
 function formatOutput(results, dryRun) {
-  const { agentScores, workflowRuns, prReviews, visualBaselines, errorPatterns } = results;
+  const { agentScores, workflowRuns, prReviews, visualBaselines, errorPatterns, pushResult } = results;
 
   let output = "";
 
@@ -381,6 +565,22 @@ function formatOutput(results, dryRun) {
     output += `  [5/5] Error patterns ............ ⚠️  ${errorPatterns.error}\n`;
   }
 
+  // Push result (if provided)
+  if (pushResult) {
+    if (pushResult.success) {
+      if (pushResult.newPatternsCount > 0) {
+        output += `  [6/6] Push patterns ............. ✅ ${pushResult.newPatternsCount} patterns → PR\n`;
+        if (pushResult.prUrl) {
+          output += `        ${pushResult.prUrl}\n`;
+        }
+      } else {
+        output += `  [6/6] Push patterns ............. ℹ️  No new patterns to push\n`;
+      }
+    } else {
+      output += `  [6/6] Push patterns ............. ⚠️  ${pushResult.error}\n`;
+    }
+  }
+
   output += `\n  Last sync: ${new Date().toISOString()}`;
   if (dryRun) {
     output += `  (dry-run)`;
@@ -400,8 +600,10 @@ function formatOutput(results, dryRun) {
  * @param {string|null} token - GitHub token
  * @param {string[]} repos - Product repo names
  * @param {boolean} apply - If false (default), dry-run: fetch + display only, no local file merges
+ * @param {boolean} push - If true, push local patterns to remote via PR
+ * @param {string} username - GitHub username (for PR attribution)
  */
-async function syncCommand(org, orchRepo, token, repos = [], apply = false) {
+async function syncCommand(org, orchRepo, token, repos = [], apply = false, push = false, username = "unknown") {
   ensureSkillsDir();
   const dryRun = !apply;
 
@@ -416,7 +618,7 @@ async function syncCommand(org, orchRepo, token, repos = [], apply = false) {
   console.log("───────────────────");
   console.log(`  Org:          ${org}`);
   console.log(`  Orchestrator: ${orchRepo}`);
-  console.log(`  Mode:         ${dryRun ? "dry-run (add --apply to write changes)" : "apply"}\n`);
+  console.log(`  Mode:         ${dryRun ? "dry-run (add --apply to write changes)" : "apply"}${push ? " + push" : ""}\n`);
 
   // Track if we hit rate limit — abort remaining calls if so
   let rateLimited = false;
@@ -461,6 +663,15 @@ async function syncCommand(org, orchRepo, token, repos = [], apply = false) {
     syncErrorPatterns(org, orchRepo, token, dryRun)
   );
 
+  // Optional: push local patterns to remote
+  let pushResult = { success: true, newPatternsCount: 0, prUrl: null };
+  if (push && !dryRun) {
+    console.log("  [6/6] Pushing local patterns ...");
+    pushResult = await safeCall("push patterns", () =>
+      pushLocalPatterns(org, orchRepo, token, username)
+    );
+  }
+
   // Update sync status (metadata file, always safe)
   const summary = {
     agentScores: agentScores.success ? "ok" : "failed",
@@ -468,18 +679,19 @@ async function syncCommand(org, orchRepo, token, repos = [], apply = false) {
     prReviews: prReviews.success ? "ok" : "failed",
     visualBaselines: visualBaselines.success ? "ok" : "failed",
     errorPatterns: errorPatterns.success ? "ok" : "failed",
+    push: pushResult.success ? "ok" : "failed",
   };
   updateSyncStatus(summary, dryRun);
 
   // Print formatted output
-  const output = formatOutput({ agentScores, workflowRuns, prReviews, visualBaselines, errorPatterns }, dryRun);
+  const output = formatOutput({ agentScores, workflowRuns, prReviews, visualBaselines, errorPatterns, pushResult }, dryRun);
   console.log(output);
 
   if (rateLimited) {
     console.log("  ⚠️  Some data was not fetched due to rate limit. Try again later.\n");
   }
 
-  return { success: !rateLimited, dryRun, agentScores, workflowRuns, prReviews, visualBaselines, errorPatterns };
+  return { success: !rateLimited, dryRun, agentScores, workflowRuns, prReviews, visualBaselines, errorPatterns, pushResult };
 }
 
 // ============================================================================

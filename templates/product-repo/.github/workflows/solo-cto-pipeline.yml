@@ -1,0 +1,147 @@
+name: Solo CTO Pipeline
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Route to orchestrator
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ORCHESTRATOR_PAT }}
+          script: |
+            // ANTI-LOOP GUARDS:
+            // 1. Skip bot comments (github-actions[bot], solo-cto-agent, dependabot)
+            // 2. Skip [skip-review] in commits or comments
+            // 3. Skip [rework-round] tagged comments (internal bot signaling)
+            // 4. Skip if author is the orchestrator itself
+
+            const event = context.eventName;
+            const action = context.payload.action;
+            const actor = context.payload.sender?.login || '';
+
+            // Bot guard — skip if sender is a bot or orchestrator
+            if (
+              actor.includes('[bot]') ||
+              actor === 'github-actions[bot]' ||
+              actor === 'solo-cto-agent' ||
+              actor === 'dependabot[bot]'
+            ) {
+              console.log(`ℹ️ Skipping bot comment from ${actor}`);
+              return;
+            }
+
+            // Comment/review body guard
+            const body = (
+              context.payload.comment?.body ||
+              context.payload.review?.body ||
+              ''
+            ).toLowerCase();
+
+            if (
+              body.includes('[skip-review]') ||
+              body.includes('[rework-round]') ||
+              body.includes('[bot-tag]')
+            ) {
+              console.log(`ℹ️ Skipping message with skip markers`);
+              return;
+            }
+
+            // Route based on event type
+            let eventType = '';
+            let prNumber = null;
+            let branch = '';
+
+            if (event === 'pull_request') {
+              // PR opened/updated → check commit message first
+              const sha = context.payload.pull_request?.head?.sha;
+              try {
+                const commit = await github.rest.repos.getCommit({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: sha
+                });
+                if ((commit.data.commit.message || '').includes('[skip-review]')) {
+                  console.log(`ℹ️ Skipping PR with [skip-review] commit message`);
+                  return;
+                }
+              } catch (e) {
+                console.log(`⚠️ Could not fetch commit: ${e.message}`);
+              }
+
+              eventType = 'review-request';
+              prNumber = context.payload.pull_request.number;
+              branch = context.payload.pull_request.head.ref;
+              console.log(`📋 PR ${prNumber} opened/updated on branch ${branch}`);
+
+            } else if (event === 'pull_request_review' && action === 'submitted') {
+              // Review submitted → check if changes requested
+              if (context.payload.review?.state === 'changes_requested') {
+                eventType = 'rework-request';
+                prNumber = context.payload.pull_request?.number;
+                branch = context.payload.pull_request?.head?.ref;
+                console.log(`🔧 Review requesting changes on PR ${prNumber}`);
+              } else {
+                console.log(`ℹ️ Review approved/commented, no action needed`);
+                return;
+              }
+
+            } else if (
+              event === 'issue_comment' &&
+              context.payload.issue?.pull_request
+            ) {
+              // Comment on PR → check for rework signals
+              const hasReworkSignals = /blocker|needs.?work|request.?changes|rework|please.?fix/i.test(body);
+              if (!hasReworkSignals) {
+                console.log(`ℹ️ Comment has no rework signals`);
+                return;
+              }
+
+              eventType = 'rework-request';
+              prNumber = context.payload.issue.number;
+
+              try {
+                const pr = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber
+                });
+                branch = pr.data.head.ref;
+                console.log(`🔧 Comment with rework signal on PR ${prNumber}`);
+              } catch (e) {
+                console.error(`❌ Could not fetch PR: ${e.message}`);
+                return;
+              }
+            }
+
+            // Dispatch to orchestrator
+            if (!eventType || !prNumber) {
+              console.log(`⚠️ Could not determine event type or PR number, skipping dispatch`);
+              return;
+            }
+
+            try {
+              const resp = await github.rest.repos.createDispatchEvent({
+                owner: 'seunghunbae-3svs',
+                repo: 'dual-agent-review-orchestrator',
+                event_type: eventType,
+                client_payload: {
+                  repo: `${context.repo.owner}/${context.repo.repo}`,
+                  pr: prNumber,
+                  branch: branch,
+                  title: context.payload.pull_request?.title || context.payload.issue?.title || '',
+                  event: event,
+                  action: action || 'triggered'
+                }
+              });
+              console.log(`✅ Dispatched to orchestrator: ${eventType} for PR ${prNumber}`);
+            } catch (err) {
+              console.error(`❌ Failed to dispatch to orchestrator: ${err.message}`);
+              // Do not fail the workflow; orchestrator may be temporarily unavailable
+            }
