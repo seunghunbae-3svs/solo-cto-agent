@@ -121,6 +121,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* feat: P1 — cowork-engine split, plugin install, template-audit --apply
+
 * security: add API key masking + diff secret detection (P0)
 
 * feat: add `setup --central` for centralized workflow architecture
