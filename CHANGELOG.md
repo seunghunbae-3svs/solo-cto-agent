@@ -121,6 +121,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* feat: P2 — type sync, template validation CI, migration guide
+
 * feat: P1 — cowork-engine split, plugin install, template-audit --apply
 
 * security: add API key masking + diff secret detection (P0)
