@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * rework.js — Apply suggested fixes (cowork-side rework loop).
+ * rework.js -- Apply suggested fixes (cowork-side rework loop).
  *
  * Codex-main parity target: templates/orchestrator/ops/agents/rework-agent.js
- * Difference: cowork-side runs LOCALLY — no GitHub Actions, no PR mutation.
+ * Difference: cowork-side runs LOCALLY -- no GitHub Actions, no PR mutation.
  *             Apply target is the user's working tree; safety = mandatory
  *             dry-run + git-clean check + per-file confirmation hook.
  *
@@ -12,7 +12,7 @@
  *   --review <file.json>          path to a review JSON written by uiuxSuggestFixes
  *   --apply                       actually apply patches (default = dry-run)
  *   --only <severity[,severity]>  filter: BLOCKER, SUGGESTION, NIT (default: BLOCKER,SUGGESTION)
- *   --max-fixes <N>               cap fixes applied per run (default: 5 — circuit breaker)
+ *   --max-fixes <N>               cap fixes applied per run (default: 5 -- circuit breaker)
  *   --no-clean-check              skip "git status clean" precondition (NOT recommended)
  *   --context-refresh             refresh type definitions before applying (2026 compaction defense)
  *
@@ -65,7 +65,7 @@ function loadReviewFixes(reviewFile) {
     const parsed = parseFixes(data.raw);
     return { ...parsed, source: "raw" };
   }
-  throw new Error(`Review file has neither .fixes[] nor .raw — cannot extract patches`);
+  throw new Error(`Review file has neither .fixes[] nor .raw -- cannot extract patches`);
 }
 
 // ============================================================================
@@ -125,7 +125,7 @@ function contextRefreshBeforeFixes(cwd) {
       .filter(f => f.endsWith(".ts") || f.endsWith(".tsx"));
     refreshLog.checkedItems.push(`Type definitions: ${typeFiles.length} files`);
   } else {
-    refreshLog.checkedItems.push("Type definitions: NOT FOUND (src/types/)`);
+    refreshLog.checkedItems.push("Type definitions: NOT FOUND (src/types/)");
   }
 
   // Check schema exists
@@ -188,7 +188,7 @@ async function applyFixes(options = {}) {
   // Context refresh: re-read type definitions and schema before applying fixes
   // This is CRITICAL after context compaction to ensure fixes don't break types
   if (contextRefresh) {
-    console.log("[REWORK] Refreshing context — re-reading type definitions...");
+    console.log("[REWORK] Refreshing context -- re-reading type definitions...");
     contextRefreshBeforeFixes(cwd);
   }
 
@@ -217,7 +217,7 @@ async function applyFixes(options = {}) {
 
   // Precondition: git clean (only when applying for real)
   if (apply && cleanCheck && result.cleanBefore === false) {
-    result.summary = "git working tree not clean — refusing to apply (use --no-clean-check to override)";
+    result.summary = "git working tree not clean -- refusing to apply (use --no-clean-check to override)";
     if (notifier) await notifier({ applied: [], failed: [], summary: result.summary, reviewFile }).catch(() => {});
     return result;
   }
@@ -304,7 +304,7 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`rework — apply suggested fixes from a review JSON file
+  console.log(`rework -- apply suggested fixes from a review JSON file
 
 Usage:
   node bin/rework.js --review <file.json>           dry-run (default; safe)
