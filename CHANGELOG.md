@@ -84,6 +84,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* feat: telegram-bot callback handler + remove experimental gate (#101)
+
 * fix: create local ref for base branch in solo-cto-review template
 
 * chore: anonymize personal info and internal project names
