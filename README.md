@@ -11,9 +11,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-> Stop babysitting your AI agent. `solo-cto-agent` adds circuit breakers for error loops, dual-agent code review, design quality gates, session memory, and deployment checklists — so you can focus on building instead of supervising.
+CLI that sends your git diff to **two AI models independently** and cross-checks the results. Issues flagged by both → `CONFIRMED`. Secrets auto-detected and redacted before anything leaves your machine.
 
-**For solo founders, indie hackers, and small teams using Claude Cowork + OpenAI Codex.**
+```bash
+npm i -g solo-cto-agent
+solo-cto review --staged --dual    # Claude + GPT cross-check
+```
+
+**Also available as:** [GitHub Action](action.yml) · [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=seunghunbae-3svs.solo-cto-agent)
 
 > **Languages**: English (primary) - [한국어 안내](#한국어-안내) below.
 
