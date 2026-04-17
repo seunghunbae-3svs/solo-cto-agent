@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "PostCompaction": [
+      {
+        "name": "post-compact",
+        "script": ".claude/hooks/post-compact.sh",
+        "enabled": true,
+        "stopOnError": false
+      }
+    ]
+  },
+  "contextDefense": {
+    "enabled": true,
+    "checkpoints": true,
+    "requiresBefore": ["linting", "complex-refactors", "multi-file-edits"]
+  },
+  "compactionAwareness": {
+    "autoRefreshOnStart": true,
+    "preserveTypeDefinitions": true,
+    "preserveSchemaDefinitions": true
+  }
+}

@@ -274,11 +274,11 @@ describe("runWizard (non-interactive)", () => {
     expect(logs.some((l) => /All set|완료/.test(l))).toBe(true);
   });
 
-  it("gates on SOLO_CTO_EXPERIMENTAL", async () => {
+  it("requires a token (no experimental gate)", async () => {
     delete process.env.SOLO_CTO_EXPERIMENTAL;
     const r = await runWizard({}, { log: () => {}, errLog: () => {} });
     expect(r.ok).toBe(false);
-    expect(r.reason).toBe("NOT_EXPERIMENTAL");
+    expect(r.reason).toBe("MISSING_TOKEN");
   });
 
   it("rejects bad token shape early", async () => {

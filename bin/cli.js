@@ -22,6 +22,8 @@ let pluginManager;
 try { pluginManager = require("./plugin-manager"); } catch (_) { pluginManager = null; }
 let telegramWizard;
 try { telegramWizard = require("./telegram-wizard"); } catch (_) { telegramWizard = null; }
+let telegramBot;
+try { telegramBot = require("./telegram-bot"); } catch (_) { telegramBot = null; }
 let selfEvolve;
 try { selfEvolve = require("./self-evolve"); } catch (_) { selfEvolve = null; }
 
@@ -76,7 +78,7 @@ Usage:
   solo-cto-agent doctor
   solo-cto-agent notify deploy-ready --target <env> --url <url> --commit <sha> [--body <msg>]
   solo-cto-agent notify deploy-error --target <env> --commit <sha> --body <msg>
-  solo-cto-agent telegram wizard [--lang <en|ko>]
+  solo-cto-agent telegram wizard|bot [options]
   solo-cto-agent --help
   solo-cto-agent --version | -V
   solo-cto-agent --completions <bash|zsh>      # output shell completions
@@ -98,7 +100,8 @@ Commands:
   lint              Check skill files for size and structure issues
   doctor            Complete system health check (skills, engine, API keys, notifications, catalog)
   notify            Send event-tagged notification (deploy-ready / deploy-error)
-  telegram wizard   Interactive setup for Telegram notifications (SOLO_CTO_EXPERIMENTAL=1)
+  telegram wizard   Interactive setup for Telegram notifications
+  telegram bot      Start long-polling bot for PR decision callbacks (APPROVE/HOLD/FEEDBACK)
   ci-setup          Deploy 3-pass review workflow to a GitHub repo (auto-creates .github/workflows/)
   deep-review       Managed Agent deep-review with sandboxed code execution (CTO tier, $0.08/session-hr)
   routine fire      Fire a Claude Code Routine via /fire API endpoint (CTO tier)
@@ -133,7 +136,8 @@ Examples:
   npx solo-cto-agent notify deploy-error --target preview --body "$(tail -50 build.log)"
   npx solo-cto-agent ci-setup --repo owner/repo              # deploy 3-pass review workflow
   npx solo-cto-agent ci-setup --repo owner/repo --branch master  # specify default branch
-  SOLO_CTO_EXPERIMENTAL=1 npx solo-cto-agent telegram wizard   # setup Telegram alerts
+  npx solo-cto-agent telegram wizard                          # setup Telegram alerts
+  npx solo-cto-agent telegram bot                             # start PR decision bot
 
   # Claude Code Routines (CTO tier — cloud-based, laptop can be closed)
   npx solo-cto-agent routine fire --text "Nightly review"       # fire routine manually
@@ -2389,11 +2393,17 @@ async function main() {
       status:   () => Promise.resolve(telegramWizard.telegramStatus(opts)),
       disable:  () => telegramWizard.telegramDisable(opts),
       config:   () => telegramWizard.telegramConfig(opts),
+      bot:      () => {
+        if (!telegramBot) {
+          return Promise.reject(new Error("telegram-bot module not available in this install."));
+        }
+        return telegramBot.startBot(opts);
+      },
     };
 
     if (!dispatch[sub]) {
       console.error(`❌ Unknown telegram subcommand: ${sub}`);
-      console.error(`   Use: solo-cto-agent telegram wizard|test|verify|status|disable|config`);
+      console.error(`   Use: solo-cto-agent telegram wizard|test|verify|status|disable|config|bot`);
       process.exit(1);
     }
 
