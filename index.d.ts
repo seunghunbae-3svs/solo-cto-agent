@@ -154,6 +154,104 @@ export interface ExternalKnowledgeContext {
 }
 
 // ============================================================================
+// Module: bin/safe-log.js (P0 — secret masking for CLI output)
+// ============================================================================
+
+export declare module "solo-cto-agent/bin/safe-log" {
+  /** Secret-matching regex patterns: [regex, replacement][] */
+  export const PATTERNS: Array<[RegExp, string]>;
+
+  /** Mask secrets in a string. Non-string inputs returned unchanged. */
+  export function mask(input: string): string;
+  export function mask(input: any): any;
+
+  /** Mask secrets in an array of arguments (console.log-style). */
+  export function maskArgs(args: any[]): any[];
+
+  /**
+   * Wrap global console methods (log/error/warn/info) to auto-mask secrets.
+   * Idempotent — safe to call multiple times.
+   */
+  export function wrapConsole(): void;
+}
+
+// ============================================================================
+// Module: bin/diff-guard.js (P0 — diff secret detection)
+// ============================================================================
+
+export interface DiffFinding {
+  name: string;
+  severity: "critical" | "high" | "medium";
+  line: string;
+  lineNum: number;
+}
+
+export interface DiffScanResult {
+  hasSecrets: boolean;
+  findings: DiffFinding[];
+}
+
+export declare module "solo-cto-agent/bin/diff-guard" {
+  export const SECRET_PATTERNS: Array<{
+    name: string;
+    regex: RegExp;
+    severity: "critical" | "high" | "medium";
+    redact?: string;
+  }>;
+
+  /** Scan a git diff for secrets in added lines. */
+  export function scanDiff(diff: string | null | undefined): DiffScanResult;
+
+  /** Replace detected secrets with [REDACTED-*] labels. */
+  export function redactDiff(diff: string): string;
+
+  /** Format human-readable warning for terminal output. */
+  export function formatWarning(findings: DiffFinding[] | null): string;
+}
+
+// ============================================================================
+// Module: bin/plugin-manager.js (P1 additions)
+// ============================================================================
+
+export interface PluginInstallResult {
+  ok: boolean;
+  name: string;
+  version?: string;
+  error?: string;
+}
+
+export declare module "solo-cto-agent/bin/plugin-manager" {
+  export function searchRegistry(query: string): Promise<PluginSearchResult[]>;
+  export function installFromRegistry(name: string, opts?: { agent?: string }): Promise<PluginInstallResult>;
+  export function installFromPath(localPath: string, opts?: { agent?: string }): Promise<PluginInstallResult>;
+  export function addPlugin(manifest: any, plugin: any): void;
+  export function removePlugin(manifest: any, name: string): void;
+  export function findPlugin(manifest: any, name: string): any;
+  export function listPlugins(manifest: any): any[];
+  export function validatePluginPackage(pkg: any): { valid: boolean; errors: string[] };
+}
+
+// ============================================================================
+// Module: bin/template-audit.js (P1 additions)
+// ============================================================================
+
+export interface ApplyFixResult {
+  fixed: string[];
+  skipped: string[];
+  errors: string[];
+  details: Array<{ file: string; action: string; error?: string }>;
+}
+
+export declare module "solo-cto-agent/bin/template-audit" {
+  export function applyFixes(
+    auditResults: any,
+    packageRoot: string,
+    opts?: { dryRun?: boolean; exclude?: string[] }
+  ): Promise<ApplyFixResult>;
+  export function auditManagedRepos(settings?: any): Promise<any>;
+}
+
+// ============================================================================
 // Module: bin/constants.js
 // ============================================================================
 
@@ -568,89 +666,80 @@ export declare module "solo-cto-agent/bin/notify" {
 // ============================================================================
 
 export declare module "solo-cto-agent/bin/cowork-engine" {
-  /**
-   * Execute local code review.
-   * @param opts - Review options
-   * @returns Promise<ReviewResult>
-   */
+  /** Runtime configuration object. */
+  export const CONFIG: Record<string, any>;
+
+  /** Execute local code review. */
   export function localReview(opts: any): Promise<ReviewResult>;
 
-  /**
-   * Capture knowledge from review session.
-   * @param knowledge - Knowledge object
-   */
+  /** Capture knowledge from review session. */
   export function knowledgeCapture(knowledge: any): Promise<void>;
 
-  /**
-   * Run dual-mode review (solo + managed agent).
-   * @param opts - Review options
-   * @returns Promise<ReviewResult>
-   */
+  /** Run dual-mode review (solo + managed agent). */
   export function dualReview(opts: any): Promise<ReviewResult>;
 
-  /**
-   * Detect review mode from environment/args.
-   * @returns Mode: "solo" | "dual" | "managed"
-   */
+  /** Self cross-review (Claude ↔ OpenAI consistency check). */
+  export function selfCrossReview(opts: any): Promise<ReviewResult>;
+
+  /** Auto-sync: watch for changes and trigger reviews. */
+  export function autoSync(opts?: any): Promise<void>;
+
+  /** Detect review mode from environment/args. */
   export function detectMode(): string;
 
-  /**
-   * Save session state to disk.
-   * @param sessionData - Session object
-   */
+  /** Detect default git branch (main/master). */
+  export function detectDefaultBranch(): string;
+
+  /** Get git diff for review. */
+  export function getDiff(opts: any): string;
+
+  /** Estimate token cost for a diff. */
+  export function estimateCost(diff: string, tier?: string): { inputTokens: number; outputTokens: number; estimatedCostUsd: number };
+
+  /** Resolve model name for a given tier. */
+  export function resolveModelForTier(tier: string): string;
+
+  /** Read .skill context files for prompt enrichment. */
+  export function readSkillContext(dir?: string): string;
+
+  /** Read failure catalog for known-error matching. */
+  export function readFailureCatalog(path?: string): any[];
+
+  /** Save session state to disk. */
   export function sessionSave(sessionData: any): Promise<void>;
 
-  /**
-   * Restore previous session.
-   * @param sessionId - Session ID
-   * @returns Restored session object
-   */
+  /** Restore previous session. */
   export function sessionRestore(sessionId: string): Promise<any>;
 
-  /**
-   * List available sessions.
-   * @returns Array of session records
-   */
+  /** List available sessions. */
   export function sessionList(): Promise<any[]>;
 
-  /**
-   * Record user feedback on review.
-   * @param feedbackData - Feedback object
-   */
+  /** Create context checkpoint for long sessions. */
+  export function contextCheckpoint(data: any): Promise<void>;
+
+  /** Restore context from checkpoint. */
+  export function contextRestore(checkpointId?: string): Promise<any>;
+
+  /** Refresh context for rework cycles. */
+  export function reworkContextRefresh(opts?: any): Promise<any>;
+
+  /** Record user feedback on review. */
   export function recordFeedback(feedbackData: any): Promise<void>;
 
-  /**
-   * Set log channel (stdout, file, webhook).
-   * @param channel - Channel name
-   */
+  /** Set log channel (stdout, file, webhook). */
   export function setLogChannel(channel: string): void;
 
-  /**
-   * Fire a scheduled routine.
-   * @param routineId - Routine ID
-   */
+  /** Get current log channel. */
+  export function getLogChannel(): string;
+
+  /** Fire a scheduled routine. */
   export function fireRoutine(routineId: string): Promise<void>;
 
-  /**
-   * Build scheduled routine definitions.
-   * @param config - Routine configuration
-   * @returns Array of routine schedules
-   */
+  /** Build scheduled routine definitions. */
   export function buildRoutineSchedules(config: any): any[];
 
-  /**
-   * Run managed-agent review (requires external service).
-   * @param opts - Review options
-   * @returns Promise<ReviewResult>
-   */
+  /** Run managed-agent review (requires external service). */
   export function managedAgentReview(opts: any): Promise<ReviewResult>;
-
-  /**
-   * Get git diff for review.
-   * @param opts - Diff options
-   * @returns Diff string
-   */
-  export function getDiff(opts: any): string;
 }
 
 // ============================================================================
@@ -720,6 +809,17 @@ export function localReview(opts: any): Promise<ReviewResult>;
 export function dualReview(opts: any): Promise<ReviewResult>;
 export function detectMode(): string;
 
+// P0: Secret masking & diff guard
+export function mask(input: string): string;
+export function wrapConsole(): void;
+export function scanDiff(diff: string | null | undefined): DiffScanResult;
+export function redactDiff(diff: string): string;
+
+// P1: Plugin install & template fix
+export function installFromRegistry(name: string, opts?: any): Promise<PluginInstallResult>;
+export function installFromPath(localPath: string, opts?: any): Promise<PluginInstallResult>;
+export function applyFixes(auditResults: any, packageRoot: string, opts?: any): Promise<ApplyFixResult>;
+
 // Re-export shared types
 export type {
   ReviewIssue,
@@ -736,4 +836,8 @@ export type {
   BenchmarkDiffResult,
   PluginSearchResult,
   HistoryEntry,
+  DiffFinding,
+  DiffScanResult,
+  PluginInstallResult,
+  ApplyFixResult,
 };

@@ -1,0 +1,95 @@
+name: template-validate
+
+on:
+  pull_request:
+    paths:
+      - 'templates/**'
+  push:
+    branches: [main]
+    paths:
+      - 'templates/**'
+
+jobs:
+  validate-placeholders:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check template placeholders are documented
+        run: |
+          set -euo pipefail
+          echo "🔍 Scanning templates for placeholders..."
+
+          # Extract all unique {{PLACEHOLDER}} patterns from templates
+          FOUND=$(grep -roh '{{\([A-Z_]*[A-Z]\)}}' templates/ | sort -u)
+
+          if [ -z "$FOUND" ]; then
+            echo "✅ No placeholders found in templates."
+            exit 0
+          fi
+
+          echo "📋 Found placeholders:"
+          echo "$FOUND"
+          echo ""
+
+          # Known valid placeholders (from central-setup.js and template-audit.js)
+          KNOWN_PLACEHOLDERS=(
+            "{{MANAGED_REPOS}}"
+            "{{SETUP_TIMESTAMP}}"
+            "{{GITHUB_OWNER}}"
+            "{{ORCHESTRATOR_REPO}}"
+            "{{PROJECT_NAME}}"
+            "{{COMBINED_REPOS}}"
+            "{{PRODUCT_REPO_1}}"
+            "{{PRODUCT_REPO_2}}"
+            "{{PRODUCT_REPO_3}}"
+            "{{PRODUCT_REPO_4}}"
+            "{{PRODUCT_REPO_5}}"
+          )
+
+          UNKNOWN=""
+          while IFS= read -r placeholder; do
+            MATCH=0
+            for known in "${KNOWN_PLACEHOLDERS[@]}"; do
+              if [ "$placeholder" = "$known" ]; then
+                MATCH=1
+                break
+              fi
+            done
+            if [ "$MATCH" -eq 0 ]; then
+              UNKNOWN="$UNKNOWN\n  $placeholder"
+            fi
+          done <<< "$FOUND"
+
+          if [ -n "$UNKNOWN" ]; then
+            echo "❌ Unknown placeholders detected (add to KNOWN_PLACEHOLDERS or fix template):"
+            echo -e "$UNKNOWN"
+            exit 1
+          fi
+
+          echo "✅ All placeholders are known and documented."
+
+      - name: Check no raw secrets in templates
+        run: |
+          set -euo pipefail
+          echo "🔒 Scanning templates for hardcoded secrets..."
+
+          # Patterns that should never appear in templates
+          VIOLATIONS=""
+          if grep -rn 'sk-ant-api' templates/ 2>/dev/null; then
+            VIOLATIONS="$VIOLATIONS\n  Anthropic API key pattern found"
+          fi
+          if grep -rn 'ghp_[A-Za-z0-9]\{36\}' templates/ 2>/dev/null; then
+            VIOLATIONS="$VIOLATIONS\n  GitHub PAT pattern found"
+          fi
+          if grep -rn 'sk_live_' templates/ 2>/dev/null; then
+            VIOLATIONS="$VIOLATIONS\n  Stripe live key pattern found"
+          fi
+
+          if [ -n "$VIOLATIONS" ]; then
+            echo "❌ Secret patterns detected in templates:"
+            echo -e "$VIOLATIONS"
+            exit 1
+          fi
+
+          echo "✅ No hardcoded secrets in templates."
