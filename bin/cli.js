@@ -1097,6 +1097,113 @@ function benchmarkCommand(args) {
       return;
     }
 
+    // Feature 2: Handle --diff mode
+    if (args.includes("--diff")) {
+      const historyDir = path.join(ROOT, "benchmarks", "history");
+      if (!fs.existsSync(historyDir)) {
+        console.error("❌ No history directory found. Run benchmark collection first.");
+        process.exit(1);
+      }
+      const files = fs.readdirSync(historyDir).filter(f => f.endsWith('.json')).sort().reverse();
+      if (files.length < 2) {
+        console.error("❌ Need at least 2 snapshots for diff. Collect metrics again tomorrow.");
+        process.exit(1);
+      }
+      const previousPath = path.join(historyDir, files[1]);
+      const previous = JSON.parse(fs.readFileSync(previousPath, "utf8"));
+
+      const deltaFormat = (curr, prev, label, isPercent = false) => {
+        if (curr == null || prev == null) return "n/a";
+        const delta = curr - prev;
+        const symbol = delta > 0 ? "↑" : delta < 0 ? "↓" : "→";
+        const format = isPercent ? ((delta * 100).toFixed(1) + "%") : delta.toFixed(2);
+        return `${symbol} ${format}`;
+      };
+
+      if (args.includes("--json")) {
+        const diff = {
+          latest_date: files[0],
+          previous_date: files[1],
+          pr_count_delta: metrics.pr_count - previous.pr_count,
+          merged_count_delta: metrics.merged_count - previous.merged_count,
+          mean_time_to_merge_delta: (metrics.mean_time_to_merge_hours || 0) - (previous.mean_time_to_merge_hours || 0),
+          cross_review_rate_delta: (metrics.cross_review_rate || 0) - (previous.cross_review_rate || 0),
+          rework_cycle_avg_delta: (metrics.rework_cycle_avg || 0) - (previous.rework_cycle_avg || 0),
+        };
+        console.log(JSON.stringify(diff, null, 2));
+        return;
+      }
+
+      console.log("");
+      console.log("solo-cto-agent benchmark --diff");
+      console.log("─".repeat(50));
+      console.log(`  Comparing: ${files[1]} → ${files[0]}`);
+      console.log("");
+      console.log("Changes:");
+      console.log(`  PR Count:           ${deltaFormat(metrics.pr_count, previous.pr_count, 'PRs')}`);
+      console.log(`  Merged Count:       ${deltaFormat(metrics.merged_count, previous.merged_count, 'merged')}`);
+      console.log(`  Time to Merge:      ${deltaFormat(metrics.mean_time_to_merge_hours, previous.mean_time_to_merge_hours, 'h')} h`);
+      console.log(`  Cross-Review Rate:  ${deltaFormat(metrics.cross_review_rate, previous.cross_review_rate, 'rate', true)}`);
+      console.log(`  Avg Rework Cycles:  ${deltaFormat(metrics.rework_cycle_avg, previous.rework_cycle_avg, 'cycles')}`);
+      console.log("");
+      return;
+    }
+
+    // Feature 2: Handle --trend mode
+    if (args.includes("--trend")) {
+      const historyDir = path.join(ROOT, "benchmarks", "history");
+      if (!fs.existsSync(historyDir)) {
+        console.error("❌ No history directory found. Run benchmark collection first.");
+        process.exit(1);
+      }
+      const files = fs.readdirSync(historyDir).filter(f => f.endsWith('.json')).sort().reverse().slice(0, 7);
+      if (files.length === 0) {
+        console.error("❌ No snapshots found. Collect metrics first.");
+        process.exit(1);
+      }
+
+      const snapshots = files.map(f => JSON.parse(fs.readFileSync(path.join(historyDir, f), "utf8")));
+
+      const sparkline = (values) => {
+        if (!values.length) return "n/a";
+        const min = Math.min(...values.filter(v => v != null));
+        const max = Math.max(...values.filter(v => v != null));
+        const range = max - min || 1;
+        const chars = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+        return values.map(v => {
+          if (v == null) return "?";
+          return chars[Math.floor(((v - min) / range) * (chars.length - 1))];
+        }).join("");
+      };
+
+      if (args.includes("--json")) {
+        const trends = {
+          snapshot_count: snapshots.length,
+          dates: files.reverse(),
+          pr_count_trend: snapshots.reverse().map(s => s.pr_count),
+          merged_count_trend: snapshots.map(s => s.merged_count),
+          time_to_merge_trend: snapshots.map(s => s.mean_time_to_merge_hours),
+          cross_review_trend: snapshots.map(s => s.cross_review_rate),
+          rework_avg_trend: snapshots.map(s => s.rework_cycle_avg),
+        };
+        console.log(JSON.stringify(trends, null, 2));
+        return;
+      }
+
+      snapshots.reverse(); // oldest first for display
+
+      console.log("");
+      console.log("solo-cto-agent benchmark --trend (last 7 days)");
+      console.log("─".repeat(50));
+      console.log(`  PR Count:          ${sparkline(snapshots.map(s => s.pr_count))}`);
+      console.log(`  Merged Count:      ${sparkline(snapshots.map(s => s.merged_count))}`);
+      console.log(`  Time to Merge (h): ${sparkline(snapshots.map(s => s.mean_time_to_merge_hours))}`);
+      console.log(`  Cross-Review %:    ${sparkline(snapshots.map(s => (s.cross_review_rate || 0) * 100))}`);
+      console.log(`  Rework Cycles:     ${sparkline(snapshots.map(s => s.rework_cycle_avg))}`);
+      console.log("");
+      return;
+    }
+
     if (args.includes("--json")) {
       // Output raw JSON
       console.log(JSON.stringify(metrics, null, 2));
@@ -1134,6 +1241,24 @@ function benchmarkCommand(args) {
     console.log(`  Cross-Repo PRs:    ${metrics.cross_repo_pr_count}`);
     console.log(`  Cross-Repo Merged: ${metrics.cross_repo_merged_count}`);
     console.log(`  Repos:             ${metrics.managed_repos.join(", ")}`);
+
+    // Feature 4: Per-repo breakdown if managed_repos data exists
+    if (metrics.managed_repos && Array.isArray(metrics.managed_repos) && metrics.managed_repos.length > 0) {
+      console.log("");
+      console.log("Per-Repo Status:");
+      const mergeRate = (merged, total) => total === 0 ? "n/a" : ((merged / total) * 100).toFixed(1) + "%";
+
+      // Note: Per-repo metrics would be populated by collect-metrics.js in a full implementation
+      // For now, we show the placeholder structure
+      if (metrics.managed_repo_metrics && Array.isArray(metrics.managed_repo_metrics)) {
+        for (const rm of metrics.managed_repo_metrics) {
+          const rate = mergeRate(rm.merged_count || 0, rm.pr_count || 0);
+          const icon = rate === "n/a" || parseFloat(rate) < 50 ? "⚠️" : "✅";
+          console.log(`  ${icon} ${rm.name}: ${rm.pr_count || 0} PRs, ${rate} merged`);
+        }
+      }
+    }
+
     console.log("");
     console.log(`💡 Tip: Use 'solo-cto-agent benchmark --html' to open the dashboard`);
   } catch (e) {

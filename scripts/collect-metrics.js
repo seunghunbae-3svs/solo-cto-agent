@@ -313,6 +313,14 @@ async function main() {
   fs.mkdirSync(path.dirname(OUTPUT_JSON), { recursive: true });
   fs.writeFileSync(OUTPUT_JSON, JSON.stringify(metrics, null, 2));
 
+  // Feature 1: Archive metrics to history
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const historyDir = path.join('benchmarks', 'history');
+  fs.mkdirSync(historyDir, { recursive: true });
+  const historyFile = path.join(historyDir, `${today}.json`);
+  fs.writeFileSync(historyFile, JSON.stringify(metrics, null, 2));
+  console.log(`Wrote ${historyFile}`);
+
   const mergeMs = metrics.mean_time_to_merge_hours == null ? null : metrics.mean_time_to_merge_hours * 60 * 60 * 1000;
   const reviewMs = metrics.mean_time_to_first_review_hours == null ? null : metrics.mean_time_to_first_review_hours * 60 * 60 * 1000;
   const decisionMs = metrics.decision_mean_latency_hours == null ? null : metrics.decision_mean_latency_hours * 60 * 60 * 1000;
