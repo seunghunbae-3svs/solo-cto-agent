@@ -282,12 +282,82 @@ async function handleCallback(callbackQuery, botToken, deps = {}) {
 }
 
 // --------------------------------------------------------------------------
+// Dashboard: cross-repo PR status via GitHub API
+// --------------------------------------------------------------------------
+
+const DASHBOARD_REPOS = [
+  "seunghunbae-3svs/eventbadge",
+  "seunghunbae-3svs/golf-now",
+  "seunghunbae-3svs/tribo-store",
+];
+
+async function _handleDashboard(chat, botToken, deps, detailed) {
+  const post = deps.httpPostJson || httpPostJson;
+  const get = deps.httpGetJson || httpGetJson;
+  const githubToken = process.env.GITHUB_TOKEN || process.env.ORCHESTRATOR_PAT;
+
+  if (!githubToken) {
+    await post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      chat_id: chat.id,
+      text: "GITHUB_TOKEN not set -- cannot fetch PR data.",
+    });
+    return { ok: false, error: "no github token" };
+  }
+
+  const lines = ["<b>Cross-Repo Dashboard</b>", ""];
+  let totalOpen = 0;
+
+  for (const repo of DASHBOARD_REPOS) {
+    const short = repo.split("/")[1];
+    try {
+      const res = await _githubApi({
+        method: "GET",
+        endpoint: `/repos/${repo}/pulls?state=open&per_page=20`,
+        token: githubToken,
+      });
+      const prs = (res && res.json) ? (Array.isArray(res.json) ? res.json : []) : [];
+      totalOpen += prs.length;
+
+      if (prs.length === 0) {
+        lines.push(`<b>${short}</b>: no open PRs`);
+      } else {
+        lines.push(`<b>${short}</b> (${prs.length} open)`);
+        for (const pr of prs.slice(0, detailed ? 10 : 3)) {
+          const branch = pr.head ? pr.head.ref : "";
+          let icon = "";
+          if (branch.includes("codex")) icon = "G ";
+          if (branch.includes("claude")) icon = "C ";
+          lines.push(`  ${icon}#${pr.number} ${(pr.title || "").slice(0, 40)}`);
+        }
+        if (!detailed && prs.length > 3) {
+          lines.push(`  ... +${prs.length - 3} more`);
+        }
+      }
+      lines.push("");
+    } catch (e) {
+      lines.push(`<b>${short}</b>: error (${e.message.slice(0, 50)})`);
+      lines.push("");
+    }
+  }
+
+  lines.push(`Total open PRs: ${totalOpen}`);
+
+  await post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    chat_id: chat.id,
+    text: lines.join("\n"),
+    parse_mode: "HTML",
+  });
+
+  return { ok: true, command: detailed ? "dashboard" : "prs" };
+}
+
+// --------------------------------------------------------------------------
 // Handle text messages
 // --------------------------------------------------------------------------
 
 /**
  * Process a single text message.
- * Routes basic commands like /status, /help.
+ * Routes basic commands like /status, /help, /prs, /dashboard.
  */
 async function handleMessage(message, botToken, deps = {}) {
   const { chat, text } = message;
@@ -311,7 +381,17 @@ async function handleMessage(message, botToken, deps = {}) {
       return { ok: false, error: e.message };
     }
   } else if (trimmed === "/help") {
-    const helpMsg = `<b>solo-cto-agent Telegram Bot</b>\n\nCommands:\n/status - Show bot status\n/help - Show this message\n\nUse inline buttons to approve, hold, or feedback on PRs.`;
+    const helpMsg = [
+      "<b>solo-cto-agent Telegram Bot</b>",
+      "",
+      "Commands:",
+      "/status - Bot status",
+      "/prs - Open PRs across all repos",
+      "/dashboard - Full cross-repo dashboard",
+      "/help - Show this message",
+      "",
+      "Use inline buttons to approve, hold, or feedback on PRs.",
+    ].join("\n");
     try {
       await (deps.httpPostJson || httpPostJson)(
         `https://api.telegram.org/bot${botToken}/sendMessage`,
@@ -322,8 +402,26 @@ async function handleMessage(message, botToken, deps = {}) {
       console.error(`[telegram-bot] Failed to send help: ${e.message}`);
       return { ok: false, error: e.message };
     }
+  } else if (trimmed === "/prs" || trimmed === "/dashboard") {
+    // Cross-repo PR dashboard via GitHub API
+    return _handleDashboard(chat, botToken, deps, trimmed === "/dashboard");
   } else {
-    // Unknown command or plain text — acknowledge
+    // Natural language routing: check for PR-related keywords
+    const prMatch = text.match(/(?:approve|merge|hold|close)\s+(?:#?)(\d+)/i);
+    if (prMatch) {
+      console.log(`[telegram-bot] Natural language PR command: ${text.slice(0, 80)}`);
+      // Try to extract repo context from recent messages or default
+      await (deps.httpPostJson || httpPostJson)(
+        `https://api.telegram.org/bot${botToken}/sendMessage`,
+        {
+          chat_id: chat.id,
+          text: `Use inline buttons on PR notifications, or specify repo:\n<code>approve eventbadge #${prMatch[1]}</code>`,
+          parse_mode: "HTML",
+        }
+      );
+      return { ok: true, command: "natural-hint" };
+    }
+    // Unknown command or plain text -- acknowledge
     console.log(`[telegram-bot] Received message: ${text.slice(0, 50)}`);
     return { ok: true, command: "text" };
   }
