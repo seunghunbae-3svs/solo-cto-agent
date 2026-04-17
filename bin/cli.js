@@ -63,6 +63,7 @@ Usage:
   solo-cto-agent setup-pipeline --org <github-org> [--tier builder|cto] [--repos <repo1,repo2,...>]
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent auto-setup                 # Install solo-cto-pipeline.yml to your repos (centralized)
+  solo-cto-agent setup --central --org <owner> [--orchestrator <repo>] [--repos <r1,r2,...>] [--dry-run]
   solo-cto-agent upgrade --org <github-org> [--repos <repo1,repo2,...>]
   solo-cto-agent sync --org <github-org> [--apply] [--repos <repo1,repo2,...>]
   solo-cto-agent template-audit
@@ -90,6 +91,7 @@ Commands:
   setup-pipeline    Full pipeline setup: create orchestrator repo + install workflows to product repos
   setup-repo        Install dual-agent workflows to a single product repo
   auto-setup        Install solo-cto-pipeline.yml (centralized thin workflow) to selected repos
+  setup --central   Centralize cross-repo workflows (digest, bot-runner) to orchestrator repo
   upgrade           Upgrade Builder (Lv4) → CTO (Lv5+6): add multi-agent workflows + config
   sync              Fetch CI/CD results from GitHub (dry-run by default, --apply to write)
   template-audit    Scan managed repos for missing, drifted, or customized templates
@@ -2072,6 +2074,22 @@ async function main() {
       console.error("❌ Failed to run auto-setup:", err.message);
       process.exit(1);
     });
+    return;
+  }
+
+  // setup --central: centralize cross-repo workflows
+  if (cmd === "setup" && args.includes("--central")) {
+    const { centralSetup } = require("./central-setup.js");
+    const orgIndex = args.indexOf("--org");
+    const org = orgIndex >= 0 ? args[orgIndex + 1] : (process.env.GITHUB_ORG || "");
+    const orchIndex = args.indexOf("--orchestrator");
+    const orch = orchIndex >= 0 ? args[orchIndex + 1] : "dual-agent-review-orchestrator";
+    const reposIndex = args.indexOf("--repos");
+    const repos = reposIndex >= 0 ? args[reposIndex + 1].split(",").map(r => r.trim()) : [];
+    const dryRun = args.includes("--dry-run");
+    centralSetup({ org, orchestrator: orch, repos, token: process.env.GITHUB_TOKEN || "", dryRun })
+      .then(() => process.exit(0))
+      .catch((err) => { console.error("❌", err.message); process.exit(1); });
     return;
   }
 

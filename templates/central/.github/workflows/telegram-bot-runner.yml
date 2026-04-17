@@ -1,0 +1,56 @@
+name: Telegram Bot Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      poll_duration:
+        description: 'How many seconds to poll (max 300)'
+        required: false
+        default: '120'
+  schedule:
+    - cron: '*/15 * * * *'
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install solo-cto-agent
+        run: npm install -g solo-cto-agent
+
+      - name: Run Telegram bot (short-lived poll)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_TOKEN: ${{ secrets.ORCHESTRATOR_PAT }}
+        run: |
+          DURATION=${{ github.event.inputs.poll_duration || '120' }}
+          DURATION_MS=$((DURATION * 1000))
+          echo "Starting Telegram bot poll for ${DURATION}s..."
+
+          BOT_PATH="$(npm root -g)/solo-cto-agent/bin/telegram-bot.js"
+          if [ ! -f "$BOT_PATH" ]; then
+            echo "ERROR: telegram-bot.js not found at $BOT_PATH"
+            exit 1
+          fi
+
+          node -e "
+            const { startBot, stopBot } = require('$BOT_PATH');
+            const duration = ${DURATION_MS};
+            console.log('Bot starting, will poll for ' + (duration/1000) + 's');
+            startBot({
+              token: process.env.TELEGRAM_BOT_TOKEN,
+              githubToken: process.env.GITHUB_TOKEN,
+            });
+            setTimeout(() => {
+              console.log('Poll duration reached, stopping...');
+              stopBot();
+              process.exit(0);
+            }, duration);
+          "

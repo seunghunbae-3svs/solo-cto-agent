@@ -1,0 +1,114 @@
+name: Telegram Cross-Repo Digest
+
+on:
+  schedule:
+    # Every 30 minutes during KST working hours (09:00-01:00 KST = 00:00-16:00 UTC)
+    - cron: '*/30 0-16 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Report mode'
+        required: false
+        default: 'summary'
+        type: choice
+        options:
+          - summary
+          - detailed
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.ORCHESTRATOR_PAT }}
+      # Central config: managed repos (edit this list)
+      MANAGED_REPOS: "{{MANAGED_REPOS}}"
+    steps:
+      - name: Gather cross-repo status
+        id: gather
+        run: |
+          REPOS="$MANAGED_REPOS"
+          NOW_KST=$(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M KST')
+          TOTAL_OPEN=0
+          TOTAL_MERGED=0
+          TOTAL_ISSUES=0
+          SECTIONS=""
+
+          for REPO in $REPOS; do
+            REPO_SHORT="${REPO##*/}"
+            OPEN_PRS=$(gh pr list --repo "$REPO" --state open --json number,title,headRefName --limit 20 2>/dev/null || echo "[]")
+            OPEN_PR_COUNT=$(echo "$OPEN_PRS" | jq 'length')
+            MERGED_PRS=$(gh pr list --repo "$REPO" --state merged --json number,title,mergedAt --limit 10 2>/dev/null || echo "[]")
+            RECENT_MERGED=$(echo "$MERGED_PRS" | jq '[.[] | select(.mergedAt > (now - 7200 | todate))]' 2>/dev/null || echo "[]")
+            MERGED_COUNT=$(echo "$RECENT_MERGED" | jq 'length')
+            ISSUES=$(gh issue list --repo "$REPO" --state open --json number,title --limit 20 2>/dev/null || echo "[]")
+            ISSUE_COUNT=$(echo "$ISSUES" | jq 'length')
+
+            TOTAL_OPEN=$((TOTAL_OPEN + OPEN_PR_COUNT))
+            TOTAL_MERGED=$((TOTAL_MERGED + MERGED_COUNT))
+            TOTAL_ISSUES=$((TOTAL_ISSUES + ISSUE_COUNT))
+
+            if [ "$OPEN_PR_COUNT" -gt 0 ] || [ "$MERGED_COUNT" -gt 0 ]; then
+              SECTION="
+          📦 *$REPO_SHORT*"
+              if [ "$OPEN_PR_COUNT" -gt 0 ]; then
+                SECTION="$SECTION
+            🔄 PR ${OPEN_PR_COUNT}건"
+                while IFS= read -r pr; do
+                  NUM=$(echo "$pr" | jq -r '.number')
+                  TITLE=$(echo "$pr" | jq -r '.title' | head -c 40)
+                  BRANCH=$(echo "$pr" | jq -r '.headRefName')
+                  AGENT=""
+                  if echo "$BRANCH" | grep -q "codex"; then AGENT="🟢"; fi
+                  if echo "$BRANCH" | grep -q "claude"; then AGENT="🟣"; fi
+                  SECTION="$SECTION
+              ${AGENT}#$NUM $TITLE"
+                done < <(echo "$OPEN_PRS" | jq -c '.[]')
+              fi
+              if [ "$MERGED_COUNT" -gt 0 ]; then
+                SECTION="$SECTION
+            ✅ 완료 ${MERGED_COUNT}건"
+                while IFS= read -r pr; do
+                  NUM=$(echo "$pr" | jq -r '.number')
+                  TITLE=$(echo "$pr" | jq -r '.title' | head -c 40)
+                  SECTION="$SECTION
+              #$NUM $TITLE"
+                done < <(echo "$RECENT_MERGED" | jq -c '.[]')
+              fi
+              SECTIONS="$SECTIONS$SECTION"
+            fi
+          done
+
+          MSG="📊 *Cross-Repo Digest*
+          ━━━━━━━━━━━━━━━━━
+          🕐 $NOW_KST
+          PR: ${TOTAL_OPEN} open | ${TOTAL_MERGED} merged (2h)
+          Issues: ${TOTAL_ISSUES} open"
+
+          if [ -n "$SECTIONS" ]; then
+            MSG="$MSG
+          $SECTIONS"
+          fi
+
+          MSG="$MSG
+          ━━━━━━━━━━━━━━━━━"
+
+          if [ "$TOTAL_OPEN" -eq 0 ] && [ "$TOTAL_MERGED" -eq 0 ] && [ "$TOTAL_ISSUES" -eq 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "$MSG" > /tmp/digest_msg.txt
+
+      - name: Send digest to Telegram
+        if: steps.gather.outputs.skip != 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          MSG=$(cat /tmp/digest_msg.txt)
+          jq -n --arg chat "$TELEGRAM_CHAT_ID" --arg text "$MSG" \
+            '{chat_id: $chat, text: $text, parse_mode: "Markdown"}' | \
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d @- || true
