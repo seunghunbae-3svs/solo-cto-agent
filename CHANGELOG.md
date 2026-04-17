@@ -84,6 +84,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* chore: anonymize personal info and internal project names
+
 * release: v1.2.0 — public release polish — Toolkit upgrade: per-tool entry points + examples/
 
 **Theme**: repositioning from "skill pack" to "toolkit" by splitting the
