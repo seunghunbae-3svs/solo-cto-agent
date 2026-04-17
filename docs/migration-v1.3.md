@@ -109,6 +109,34 @@ tests/type-sync.test.mjs                     # P2
 docs/migration-v1.3.md                       # P2
 ```
 
+### P3: GitHub Actions Marketplace
+
+New `action.yml` at repo root enables usage as a GitHub Action:
+
+```yaml
+# .github/workflows/review.yml
+- uses: seunghunbae-3svs/solo-cto-agent@v1.3.0
+  with:
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+    mode: review          # or dual-review, deep-review
+    tier: builder         # or maker, cto
+    redact: "true"
+    fail_on: "false"      # set true to block PRs on REQUEST_CHANGES
+```
+
+### P3: VS Code Extension
+
+New `vscode-extension/` directory with full extension scaffold:
+- 7 commands: Review File, Review Staged, Review Branch, Dual-Agent, Deep Review, Template Audit, Set Tier
+- Diagnostics integration (issues appear in VS Code Problems panel)
+- Auto-review on save (opt-in)
+- Right-click context menu for file review
+
+Build & publish:
+```bash
+cd vscode-extension && npx vsce package && npx vsce publish
+```
+
 ## Upgrade Steps
 
 1. `git pull origin main`

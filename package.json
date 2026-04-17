@@ -39,7 +39,9 @@
     "config.schema.json",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "index.d.ts",
+    "action.yml"
   ],
   "keywords": [
     "claude",

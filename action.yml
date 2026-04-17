@@ -1,0 +1,101 @@
+name: "Solo CTO Agent — AI Code Review"
+description: "CTO-level AI code review with dual-agent cross-check (Claude + OpenAI), secret detection, and circuit breakers."
+author: "seunghunbae-3svs"
+
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  anthropic_api_key:
+    description: "Anthropic API key for Claude reviews"
+    required: true
+  openai_api_key:
+    description: "OpenAI API key for dual-agent cross-review (optional — enables Tier 2+)"
+    required: false
+  tier:
+    description: "Agent tier: maker | builder | cto"
+    required: false
+    default: "builder"
+  mode:
+    description: "Review mode: review | dual-review | deep-review"
+    required: false
+    default: "review"
+  target_branch:
+    description: "Base branch for diff comparison"
+    required: false
+    default: "main"
+  redact:
+    description: "Redact secrets from diff before sending to AI (true/false)"
+    required: false
+    default: "true"
+  fail_on:
+    description: "Fail the check if verdict is REQUEST_CHANGES or BLOCKER found (true/false)"
+    required: false
+    default: "false"
+  extra_args:
+    description: "Additional CLI arguments passed to solo-cto-agent"
+    required: false
+    default: ""
+
+outputs:
+  verdict:
+    description: "Review verdict: APPROVE | REQUEST_CHANGES | COMMENT | UNKNOWN"
+  issues_count:
+    description: "Number of issues found"
+  summary:
+    description: "One-line review summary"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+
+    - name: Install solo-cto-agent
+      shell: bash
+      run: npm install -g solo-cto-agent@latest
+
+    - name: Run review
+      id: review
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        OPENAI_API_KEY: ${{ inputs.openai_api_key }}
+        SOLO_CTO_TIER: ${{ inputs.tier }}
+      run: |
+        REVIEW_CMD="${{ inputs.mode }}"
+        ARGS="--branch --target ${{ inputs.target_branch }} --json"
+
+        if [ "${{ inputs.redact }}" = "true" ]; then
+          ARGS="$ARGS --redact"
+        fi
+
+        if [ -n "${{ inputs.extra_args }}" ]; then
+          ARGS="$ARGS ${{ inputs.extra_args }}"
+        fi
+
+        # Run review and capture output
+        OUTPUT=$(solo-cto-agent $REVIEW_CMD $ARGS 2>&1) || true
+        echo "$OUTPUT"
+
+        # Parse JSON output for verdict and issues count
+        VERDICT=$(echo "$OUTPUT" | grep -o '"verdict":"[^"]*"' | head -1 | cut -d'"' -f4)
+        ISSUES=$(echo "$OUTPUT" | grep -o '"issues":\[[^]]*\]' | head -1 | grep -o '"severity"' | wc -l)
+        SUMMARY=$(echo "$OUTPUT" | grep -o '"summary":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+        echo "verdict=${VERDICT:-UNKNOWN}" >> $GITHUB_OUTPUT
+        echo "issues_count=${ISSUES:-0}" >> $GITHUB_OUTPUT
+        echo "summary=${SUMMARY:-No summary}" >> $GITHUB_OUTPUT
+
+    - name: Check fail condition
+      if: inputs.fail_on == 'true'
+      shell: bash
+      run: |
+        VERDICT="${{ steps.review.outputs.verdict }}"
+        if [ "$VERDICT" = "REQUEST_CHANGES" ]; then
+          echo "::error::Review verdict is REQUEST_CHANGES — failing check."
+          exit 1
+        fi

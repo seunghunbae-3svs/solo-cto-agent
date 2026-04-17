@@ -1,0 +1,107 @@
+{
+  "name": "solo-cto-agent",
+  "displayName": "Solo CTO Agent",
+  "description": "CTO-level AI code review with dual-agent cross-check, secret detection, and circuit breakers — right in VS Code.",
+  "version": "1.3.0",
+  "publisher": "seunghunbae-3svs",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "code-review",
+    "claude",
+    "openai",
+    "dual-agent",
+    "cto",
+    "solo-founder"
+  ],
+  "activationEvents": [],
+  "main": "./extension.js",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/seunghunbae-3svs/solo-cto-agent"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "soloCtoAgent.reviewFile",
+        "title": "Solo CTO: Review Current File"
+      },
+      {
+        "command": "soloCtoAgent.reviewStaged",
+        "title": "Solo CTO: Review Staged Changes"
+      },
+      {
+        "command": "soloCtoAgent.reviewBranch",
+        "title": "Solo CTO: Review Branch Diff"
+      },
+      {
+        "command": "soloCtoAgent.dualReview",
+        "title": "Solo CTO: Dual-Agent Review"
+      },
+      {
+        "command": "soloCtoAgent.deepReview",
+        "title": "Solo CTO: Deep Review (CTO Tier)"
+      },
+      {
+        "command": "soloCtoAgent.templateAudit",
+        "title": "Solo CTO: Template Audit"
+      },
+      {
+        "command": "soloCtoAgent.setTier",
+        "title": "Solo CTO: Set Agent Tier"
+      }
+    ],
+    "configuration": {
+      "title": "Solo CTO Agent",
+      "properties": {
+        "soloCtoAgent.tier": {
+          "type": "string",
+          "default": "builder",
+          "enum": ["maker", "builder", "cto"],
+          "description": "Agent tier level"
+        },
+        "soloCtoAgent.redact": {
+          "type": "boolean",
+          "default": true,
+          "description": "Redact secrets from diffs before sending to AI"
+        },
+        "soloCtoAgent.targetBranch": {
+          "type": "string",
+          "default": "main",
+          "description": "Base branch for branch diff comparisons"
+        },
+        "soloCtoAgent.autoReviewOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically run review when saving files"
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "soloCtoAgent.reviewFile",
+          "group": "solo-cto@1"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "soloCtoAgent.reviewStaged",
+          "group": "solo-cto@1"
+        }
+      ]
+    }
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.20.0"
+  }
+}
