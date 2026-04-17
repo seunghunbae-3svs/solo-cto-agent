@@ -65,7 +65,11 @@
         "soloCtoAgent.tier": {
           "type": "string",
           "default": "builder",
-          "enum": ["maker", "builder", "cto"],
+          "enum": [
+            "maker",
+            "builder",
+            "cto"
+          ],
           "description": "Agent tier level"
         },
         "soloCtoAgent.redact": {
@@ -102,6 +106,7 @@
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.9.0",
     "esbuild": "^0.20.0"
   }
 }
