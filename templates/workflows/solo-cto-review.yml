@@ -40,7 +40,7 @@ jobs:
 
       - name: Fetch base branch
         run: |
-          git fetch origin ${{ github.base_ref }} --depth=50 2>/dev/null || true
+          git fetch origin ${{ github.base_ref }}:${{ github.base_ref }} --depth=50 2>/dev/null || true
           DIFF_LINES=$(git diff origin/${{ github.base_ref }}...HEAD -- . ':!package-lock.json' ':!*.lock' | wc -l)
           echo "diff_lines=$DIFF_LINES" >> $GITHUB_ENV
           if [ "$DIFF_LINES" -lt 3 ]; then
