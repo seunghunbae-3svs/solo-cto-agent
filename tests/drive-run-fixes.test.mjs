@@ -11,13 +11,15 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execSync } from "node:child_process";
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const engine = await import(path.join(__dirname, "..", "bin", "cowork-engine.js"));
+const require = createRequire(import.meta.url);
+const engine = require(path.join(__dirname, "..", "bin", "cowork-engine.js"));
 
 // ---------------------------------------------------------------------------
 // Helpers — build throwaway git repos with varying default branches

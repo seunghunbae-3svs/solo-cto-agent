@@ -20,6 +20,17 @@ import path from "path";
 const require = createRequire(import.meta.url);
 const C = require("../bin/constants.js");
 
+/** Read combined engine source (facade + engine/review.js after P1 refactor) */
+function readEngineSource() {
+  const facadePath = path.join(process.cwd(), "bin", "cowork-engine.js");
+  const reviewPath = path.join(process.cwd(), "bin", "engine", "review.js");
+  let src = fs.readFileSync(facadePath, "utf8");
+  if (fs.existsSync(reviewPath)) {
+    src += "\n" + fs.readFileSync(reviewPath, "utf8");
+  }
+  return src;
+}
+
 // ============================================================================
 // Test Group 1: Constants Integration
 // ============================================================================
@@ -72,8 +83,14 @@ describe("bin/cowork-engine.js retry logic source verification", () => {
   let engineSource;
 
   beforeEach(() => {
-    const enginePath = path.join(process.cwd(), "bin", "cowork-engine.js");
-    engineSource = fs.readFileSync(enginePath, "utf8");
+    // After P1 refactor, retry logic lives in engine/review.js
+    // Read both facade and review module for comprehensive source checks
+    const facadePath = path.join(process.cwd(), "bin", "cowork-engine.js");
+    const reviewPath = path.join(process.cwd(), "bin", "engine", "review.js");
+    engineSource = fs.readFileSync(facadePath, "utf8");
+    if (fs.existsSync(reviewPath)) {
+      engineSource += "\n" + fs.readFileSync(reviewPath, "utf8");
+    }
   });
 
   test("callAnthropic function exists in source", () => {
@@ -177,8 +194,8 @@ describe("callAnthropic maxRetries clamping", () => {
   let engineSource;
 
   beforeEach(() => {
-    const enginePath = path.join(process.cwd(), "bin", "cowork-engine.js");
-    engineSource = fs.readFileSync(enginePath, "utf8");
+    // enginePath handled by readEngineSource()
+    engineSource = readEngineSource();
   });
 
   test("maxRetries is clamped with Math.max(1, Math.min(6, ...))", () => {
@@ -238,10 +255,7 @@ describe("Retry backoff algorithm correctness", () => {
   });
 
   test("callAnthropic with maxRetries=3 performs up to 3 attempts", () => {
-    const engineSource = fs.readFileSync(
-      path.join(process.cwd(), "bin", "cowork-engine.js"),
-      "utf8"
-    );
+    const engineSource = readEngineSource();
     // Verify loop uses maxRetries as upper bound
     expect(engineSource).toMatch(
       /for \(let attempt = 0; attempt < maxRetries; attempt\+\+\)/
@@ -249,10 +263,7 @@ describe("Retry backoff algorithm correctness", () => {
   });
 
   test("callOpenAI hardcoded to 3 retries", () => {
-    const engineSource = fs.readFileSync(
-      path.join(process.cwd(), "bin", "cowork-engine.js"),
-      "utf8"
-    );
+    const engineSource = readEngineSource();
     // OpenAI function should have hardcoded loop limit
     expect(engineSource).toMatch(
       /(?:.*callOpenAI[\s\S]*?)for \(let attempt = 0; attempt < 3; attempt\+\+\)/
@@ -268,8 +279,8 @@ describe("Rate limit detection patterns", () => {
   let engineSource;
 
   beforeEach(() => {
-    const enginePath = path.join(process.cwd(), "bin", "cowork-engine.js");
-    engineSource = fs.readFileSync(enginePath, "utf8");
+    // enginePath handled by readEngineSource()
+    engineSource = readEngineSource();
   });
 
   test("Pattern: rate_limit string in error body", () => {
@@ -307,8 +318,8 @@ describe("Error propagation after retry exhaustion", () => {
   let engineSource;
 
   beforeEach(() => {
-    const enginePath = path.join(process.cwd(), "bin", "cowork-engine.js");
-    engineSource = fs.readFileSync(enginePath, "utf8");
+    // enginePath handled by readEngineSource()
+    engineSource = readEngineSource();
   });
 
   test("callAnthropic maintains lastErr through loop", () => {
@@ -350,8 +361,8 @@ describe("Constants and retry logic integration", () => {
   let engineSource;
 
   beforeEach(() => {
-    const enginePath = path.join(process.cwd(), "bin", "cowork-engine.js");
-    engineSource = fs.readFileSync(enginePath, "utf8");
+    // enginePath handled by readEngineSource()
+    engineSource = readEngineSource();
   });
 
   test("Both callAnthropic and callOpenAI reference C.RETRY_DELAYS", () => {
@@ -405,28 +416,19 @@ describe("Boundary conditions and edge cases", () => {
 
   test("Attempt indexing is 0-based (attempt 0 to maxRetries-1)", () => {
     // Verify the loop bounds match: for (let attempt = 0; attempt < maxRetries; attempt++)
-    const engineSource = fs.readFileSync(
-      path.join(process.cwd(), "bin", "cowork-engine.js"),
-      "utf8"
-    );
+    const engineSource = readEngineSource();
     expect(engineSource).toMatch(
       /for \(let attempt = 0; attempt < maxRetries; attempt\+\+\)/
     );
   });
 
   test("Final attempt check uses attempt === maxRetries - 1", () => {
-    const engineSource = fs.readFileSync(
-      path.join(process.cwd(), "bin", "cowork-engine.js"),
-      "utf8"
-    );
+    const engineSource = readEngineSource();
     expect(engineSource).toMatch(/if \(attempt === maxRetries - 1\)/);
   });
 
   test("callOpenAI final attempt check uses attempt === 2", () => {
-    const engineSource = fs.readFileSync(
-      path.join(process.cwd(), "bin", "cowork-engine.js"),
-      "utf8"
-    );
+    const engineSource = readEngineSource();
     expect(engineSource).toMatch(
       /(?:.*callOpenAI[\s\S]*?)if \(attempt === 2\)/
     );
@@ -441,8 +443,8 @@ describe("callAnthropic Anthropic-specific behavior", () => {
   let engineSource;
 
   beforeEach(() => {
-    const enginePath = path.join(process.cwd(), "bin", "cowork-engine.js");
-    engineSource = fs.readFileSync(enginePath, "utf8");
+    // enginePath handled by readEngineSource()
+    engineSource = readEngineSource();
   });
 
   test("Detects 529 status (Anthropic-specific overload)", () => {
@@ -472,8 +474,8 @@ describe("callOpenAI OpenAI-specific behavior", () => {
   let engineSource;
 
   beforeEach(() => {
-    const enginePath = path.join(process.cwd(), "bin", "cowork-engine.js");
-    engineSource = fs.readFileSync(enginePath, "utf8");
+    // enginePath handled by readEngineSource()
+    engineSource = readEngineSource();
   });
 
   test("Detects 429 status (rate limit)", () => {
@@ -483,10 +485,10 @@ describe("callOpenAI OpenAI-specific behavior", () => {
   });
 
   test("Does NOT detect 529 (OpenAI-specific)", () => {
-    // This is just verifying the source structure — OpenAI doesn't use 529
-    expect(engineSource).not.toMatch(
-      /(?:.*callOpenAI[\s\S]*?)statusCode === 529/
-    );
+    // Extract callOpenAI function body only to avoid false match from callAnthropic
+    const match = engineSource.match(/async function callOpenAI[\s\S]*?^}/m);
+    const callOpenAIBody = match ? match[0] : "";
+    expect(callOpenAIBody).not.toMatch(/statusCode === 529/);
   });
 
   test("Calls _openaiOnce in retry loop", () => {
@@ -514,8 +516,8 @@ describe("Retry logging and diagnostics", () => {
   let engineSource;
 
   beforeEach(() => {
-    const enginePath = path.join(process.cwd(), "bin", "cowork-engine.js");
-    engineSource = fs.readFileSync(enginePath, "utf8");
+    // enginePath handled by readEngineSource()
+    engineSource = readEngineSource();
   });
 
   test("callAnthropic logs retry wait times", () => {
@@ -543,46 +545,31 @@ describe("Retry logging and diagnostics", () => {
 
 describe("Cross-function consistency (Anthropic vs OpenAI)", () => {
   test("Both use C.RETRY_DELAYS.rateLimit", () => {
-    const engineSource = fs.readFileSync(
-      path.join(process.cwd(), "bin", "cowork-engine.js"),
-      "utf8"
-    );
+    const engineSource = readEngineSource();
     const rateLimitCount = (engineSource.match(/C\.RETRY_DELAYS\.rateLimit/g) || []).length;
     expect(rateLimitCount).toBeGreaterThanOrEqual(2); // At least 2 functions use it
   });
 
   test("Both use C.RETRY_DELAYS.generic", () => {
-    const engineSource = fs.readFileSync(
-      path.join(process.cwd(), "bin", "cowork-engine.js"),
-      "utf8"
-    );
+    const engineSource = readEngineSource();
     const genericCount = (engineSource.match(/C\.RETRY_DELAYS\.generic/g) || []).length;
     expect(genericCount).toBeGreaterThanOrEqual(2); // At least 2 functions use it
   });
 
   test("Both detect rate_limit string", () => {
-    const engineSource = fs.readFileSync(
-      path.join(process.cwd(), "bin", "cowork-engine.js"),
-      "utf8"
-    );
+    const engineSource = readEngineSource();
     const patternCount = (engineSource.match(/includes\("rate_limit"\)/g) || []).length;
     expect(patternCount).toBeGreaterThanOrEqual(2); // Both functions
   });
 
   test("Both use linear backoff: (attempt + 1) * delayBase", () => {
-    const engineSource = fs.readFileSync(
-      path.join(process.cwd(), "bin", "cowork-engine.js"),
-      "utf8"
-    );
+    const engineSource = readEngineSource();
     const backoffCount = (engineSource.match(/\(attempt \+ 1\) \* C\.RETRY_DELAYS/g) || []).length;
     expect(backoffCount).toBeGreaterThanOrEqual(2); // Both functions apply it
   });
 
   test("Both throw lastErr after exhausting retries", () => {
-    const engineSource = fs.readFileSync(
-      path.join(process.cwd(), "bin", "cowork-engine.js"),
-      "utf8"
-    );
+    const engineSource = readEngineSource();
     // Count throw lastErr patterns
     const throwCount = (engineSource.match(/throw lastErr/g) || []).length;
     expect(throwCount).toBeGreaterThanOrEqual(2); // Both functions have it
