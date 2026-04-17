@@ -4,7 +4,7 @@
 
 # solo-cto-agent
 
-**Your AI coding agent already writes code. This makes it think like a CTO.**
+**Dual-agent code review, secret detection, and circuit breakers for solo founders.**
 
 [![npm](https://img.shields.io/npm/v/solo-cto-agent)](https://www.npmjs.com/package/solo-cto-agent)
 [![Test](https://img.shields.io/badge/tests-996%20passing-brightgreen)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/test.yml)
@@ -94,9 +94,9 @@ The point is simple:
 
 * less repetitive setup work
 * less context loss between sessions
-* less AI slop in code and design
-* more useful criticism before you commit to bad ideas
-* more initiative from the agent on low-risk work
+* two models cross-checking each other's review (not one model's opinion)
+* actual criticism before you commit to bad ideas
+* secrets caught before they leave your machine
 
 ## What changes in practice
 
@@ -120,12 +120,12 @@ This is running on three private repos (Next.js + Supabase, Vite + React, Next.j
 | PRs opened | 53 |
 | PRs merged | 48 |
 | Mean time to merge | 0.64 hours |
-| Test suite | 894 tests, 48 files, all passing |
+| Test suite | 996 tests, 57 files, all passing |
 | CLI commands | 25 subcommands |
 | Skills | 8 (44 reference docs) |
-| npm version | 1.2.0 |
+| npm version | 1.3.2 |
 
-What is not there yet: dual-agent cross-review metrics are still accumulating (rate shows 0 because the structured scoring pipeline was deployed recently). Decision tracking is wired but the decision queue has not produced enough data for meaningful stats. Those will fill in over the next few weeks of normal use.
+Dual-agent cross-review and Managed Agents deep review are live and tested against real diffs. Decision tracking is wired but the decision queue has not produced enough data for meaningful stats yet.
 
 ## Who this is for
 
@@ -250,7 +250,7 @@ solo-cto-agent/
     product-repo/             # product repo scaffold (workflows, STATE.md, .env.example)
     builder-defaults/         # routing-policy.json, agent-scores.json
     workflows/                # solo-cto-review.yml (3-pass auto-review)
-  tests/                      # 894 tests across 48 files
+  tests/                      # 996 tests across 57 files
   benchmarks/                 # effectiveness reports, metrics
   docs/                       # claude.md, tier-matrix, configuration, policies
   examples/                   # real-world flows: build, ship, review, founder-workflow

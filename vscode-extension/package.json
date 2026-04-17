@@ -2,7 +2,7 @@
   "name": "solo-cto-agent",
   "displayName": "Solo CTO Agent",
   "description": "CTO-level AI code review with dual-agent cross-check, secret detection, and circuit breakers — right in VS Code.",
-  "version": "1.3.0",
+  "version": "1.3.2",
   "publisher": "seunghunbae-3svs",
   "license": "MIT",
   "engines": {
