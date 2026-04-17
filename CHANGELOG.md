@@ -121,6 +121,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* fix: resolve 2 hanging tests + add vitest timeout config
+
 * feat: P3 — GitHub Actions marketplace, VS Code extension, npm release prep
 
 * feat: P2 — type sync, template validation CI, migration guide
