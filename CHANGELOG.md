@@ -82,7 +82,9 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ---
 
-## Unreleased — Toolkit upgrade: per-tool entry points + examples/
+## Unreleased
+
+* release: v1.2.0 — public release polish — Toolkit upgrade: per-tool entry points + examples/
 
 **Theme**: repositioning from "skill pack" to "toolkit" by splitting the
 docs surface along tool boundaries and filling `examples/` with real
