@@ -16,11 +16,13 @@ const {
   logError,
   logWarn,
   logInfo,
-  readTier,
   readSkillContext,
   readFailureCatalog,
   estimateCost,
 } = core;
+
+const personalization = require("../personalization");
+const { readTier } = personalization;
 
 // ============================================================================
 // CLAUDE CODE ROUTINES
