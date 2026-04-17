@@ -797,6 +797,23 @@ async function localReview(options = {}) {
 
   logInfo(`Diff: ${diff.split("\n").length} lines`);
 
+  // P0 Security: scan diff for secrets before sending to AI API
+  const diffGuard = require("./diff-guard");
+  const secretScan = diffGuard.scanDiff(diff);
+  if (secretScan.hasSecrets) {
+    const warning = diffGuard.formatWarning(secretScan.findings);
+    logWarn(warning);
+    if (options.redact) {
+      diff = diffGuard.redactDiff(diff);
+      logInfo("Secrets auto-redacted from diff");
+    } else if (!options.force) {
+      logError("Aborting: diff contains secrets. Use --redact to auto-redact or --force to send anyway.");
+      return null;
+    }
+  } else if (secretScan.findings.length > 0) {
+    logWarn(`${secretScan.findings.length} potential secret(s) detected (non-critical). Review with caution.`);
+  }
+
   // Multi-chunk review — split large diffs by file boundary (diff --git),
   // group files into chunks that fit within maxChunkBytes, review each chunk
   // independently, then merge results. Falls back to truncation if a single
@@ -2344,10 +2361,24 @@ async function managedAgentReview(options = {}) {
   }
 
   const model = options.model || CONFIG.managedAgents.model;
-  const diff = options.diff;
+  let diff = options.diff;
   if (!diff) {
     logError("No diff provided for managed agent review.");
     return null;
+  }
+
+  // P0 Security: scan diff for secrets
+  const diffGuardMA = require("./diff-guard");
+  const secretScanMA = diffGuardMA.scanDiff(diff);
+  if (secretScanMA.hasSecrets) {
+    logWarn(diffGuardMA.formatWarning(secretScanMA.findings));
+    if (options.redact) {
+      diff = diffGuardMA.redactDiff(diff);
+      logInfo("Secrets auto-redacted from diff");
+    } else if (!options.force) {
+      logError("Aborting deep-review: diff contains secrets. Use --redact or --force.");
+      return null;
+    }
   }
 
   const skillContext = readSkillContext();

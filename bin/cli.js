@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
+
+// P0 Security: mask secrets in all console output before anything else
+require("./safe-log").wrapConsole();
+
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -2158,7 +2162,7 @@ async function main() {
       }
       await dualReview({ diffSource, target });
     } else {
-      await localReview({ diffSource, target, dryRun, outputFormat });
+      await localReview({ diffSource, target, dryRun, outputFormat, redact: args.includes("--redact"), force: args.includes("--force") });
     }
     return;
   }
@@ -2553,7 +2557,7 @@ async function main() {
       return;
     }
 
-    managedAgentReview({ diff, dryRun, force: forceFlag }).then((result) => {
+    managedAgentReview({ diff, dryRun, force: forceFlag, redact: args.includes("--redact") }).then((result) => {
       if (result) {
         if (args.includes("--json")) {
           console.log(JSON.stringify(result, null, 2));

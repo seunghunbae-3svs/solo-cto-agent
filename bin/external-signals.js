@@ -328,7 +328,7 @@ async function fetchGroundTruth(opts = {}) {
   if (env.SUPABASE_ACCESS_TOKEN) {
     const proj = resolveSupabaseProject({ env });
     if (proj) {
-      result.supabase = { ok: false, error: "supabase log fetch not implemented yet (PR-E1.5)", resolved: proj };
+      result.supabase = { ok: false, error: "supabase log fetch planned (PR-E1.5) — project resolved, awaiting Supabase Management API integration", resolved: proj };
     } else {
       result.supabase = { ok: false, error: "project not identified (set SUPABASE_PROJECT_REF)" };
     }
