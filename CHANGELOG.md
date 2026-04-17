@@ -121,6 +121,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* chore: vscode extension packaging verified (icon, license, gitignore)
+
 * fix: routine.js readTier import from personalization (not core)
 
 * fix: resolve 2 hanging tests + add vitest timeout config
