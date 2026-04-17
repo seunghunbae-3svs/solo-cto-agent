@@ -66,9 +66,30 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Publish VS Code Extension
+        working-directory: vscode-extension
+        run: |
+          npm install -g @vscode/vsce
+          # Sync version from root package.json
+          ROOT_VERSION=$(node -p "require('../package.json').version")
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json','utf8'));
+            pkg.version = '${ROOT_VERSION}';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          # Copy LICENSE if missing
+          [ -f LICENSE ] || cp ../LICENSE .
+          # Package and publish
+          vsce package --no-dependencies
+          vsce publish --no-dependencies
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.value }}
           name: ${{ steps.tag.outputs.value }}
           generate_release_notes: true
+          files: vscode-extension/*.vsix
