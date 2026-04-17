@@ -1,11 +1,15 @@
 # solo-cto-agent
 
+**Your AI coding agent already writes code. This makes it think like a CTO.**
+
 [![npm](https://img.shields.io/npm/v/solo-cto-agent)](https://www.npmjs.com/package/solo-cto-agent)
-[![Package Validate](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/package-validate.yml/badge.svg)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/package-validate.yml)
-[![Test](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/test.yml/badge.svg)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/test.yml)
-[![Changelog](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/changelog.yml/badge.svg)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/changelog.yml)
-[![License](https://img.shields.io/github/license/seunghunbae-3svs/solo-cto-agent)](LICENSE)
-[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-pink?style=flat&logo=github)](https://github.com/sponsors/seunghunbae-3svs)
+[![Test](https://img.shields.io/badge/tests-894%20passing-brightgreen)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+> Stop babysitting your AI agent. `solo-cto-agent` adds circuit breakers for error loops, dual-agent code review, design quality gates, session memory, and deployment checklists — so you can focus on building instead of supervising.
+
+**For solo founders, indie hackers, and small teams using Claude Cowork + OpenAI Codex.**
 
 > **Languages**: English (primary) - [한국어 안내](#한국어-안내) below.
 
@@ -115,7 +119,7 @@ This is running on three private repos (Next.js + Supabase, Vite + React, Next.j
 | Test suite | 894 tests, 48 files, all passing |
 | CLI commands | 25 subcommands |
 | Skills | 8 (44 reference docs) |
-| npm version | 1.1.0 |
+| npm version | 1.2.0 |
 
 What is not there yet: dual-agent cross-review metrics are still accumulating (rate shows 0 because the structured scoring pipeline was deployed recently). Decision tracking is wired but the decision queue has not produced enough data for meaningful stats. Those will fill in over the next few weeks of normal use.
 

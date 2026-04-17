@@ -1,7 +1,20 @@
 # Changelog
 
-## Unreleased
+## v1.2.0 (2026-04-17)
 
+**Theme**: Public release polish + cowork-main Phase 2/3 + dual-agent metrics.
+
+### Highlights
+* Terminal demo SVG with animated CLI walkthrough
+* cowork-main Phase 2 — orchestrator auto-commits agent-scores + error-patterns post CI
+* cowork-main Phase 3 — `session sync` fetches orchestrator data at session start
+* Dual-agent metrics population (cross-review rate, decision tracking, rework cycles)
+* `collect-metrics.js` fixes: orchestrator repo name, array-aware parsing, rework + cross-repo metrics
+* `changelog.yml` CI fix (PAT token, null-safe condition, skip-ci loop prevention)
+* npm keywords expanded for better discoverability
+* README hero section rewritten for public audience
+
+### Previous (detailed)
 * feat: v1.2.0 — metrics fix, Phase 2/3 cowork, terminal demo, changelog CI — PR-G7-subcommands: telegram test/config/status/disable/verify + event filter
 
 **Theme**: closing the telegram wizard loop. The wizard (PR-G7-impl)

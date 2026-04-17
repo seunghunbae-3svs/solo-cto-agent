@@ -1,8 +1,8 @@
 {
   "name": "solo-cto-agent",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": false,
-  "description": "Dual-agent CI/CD orchestrator with CTO-grade operating rules. Claude + Codex automated cross-review pipeline.",
+  "description": "CTO-level AI agent toolkit for solo founders. Dual-agent review, circuit breakers, design quality gates, and session memory for Claude Cowork + OpenAI Codex.",
   "author": "seunghunbae-3svs",
   "license": "MIT",
   "engines": {
@@ -43,13 +43,22 @@
   ],
   "keywords": [
     "claude",
+    "claude-code",
+    "claude-cowork",
     "codex",
+    "openai-codex",
     "dual-agent",
+    "ai-agent",
+    "ai-coding",
     "ci-cd",
-    "orchestrator",
     "code-review",
+    "solo-founder",
+    "indie-hacker",
+    "developer-tools",
+    "cto",
     "automation",
-    "cto"
+    "circuit-breaker",
+    "session-memory"
   ],
   "devDependencies": {
     "@eslint/js": "^10.0.1",
