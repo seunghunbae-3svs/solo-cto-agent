@@ -356,6 +356,22 @@ async function startBot(opts = {}) {
   console.log(`   Token: ${token.slice(0, 10)}...`);
   console.log(`   Chat ID: ${chatId}`);
 
+  // Delete any existing webhook (long-polling and webhooks are mutually exclusive)
+  try {
+    const delRes = await httpPostJson(
+      `https://api.telegram.org/bot${token}/deleteWebhook`,
+      { drop_pending_updates: false }
+    );
+    if (delRes.json && delRes.json.ok) {
+      console.log("   Webhook cleared (switching to long-poll mode)");
+    } else {
+      console.log(`   deleteWebhook response: ${delRes.body}`);
+    }
+  } catch (e) {
+    console.error(`   Warning: deleteWebhook failed: ${e.message}`);
+    // Continue anyway -- might still work if no webhook was set
+  }
+
   // Graceful shutdown on SIGINT/SIGTERM
   process.on("SIGINT", () => {
     console.log("\n⏹️ Shutting down...");
