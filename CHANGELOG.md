@@ -121,6 +121,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* fix: routine.js readTier import from personalization (not core)
+
 * fix: resolve 2 hanging tests + add vitest timeout config
 
 * feat: P3 — GitHub Actions marketplace, VS Code extension, npm release prep
