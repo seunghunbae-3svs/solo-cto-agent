@@ -121,6 +121,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* security: add API key masking + diff secret detection (P0)
+
 * feat: add `setup --central` for centralized workflow architecture
 
 * feat(tier3): plugin registry search, setup.sh enhancement, v1.3.0 (#100)
