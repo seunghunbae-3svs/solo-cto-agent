@@ -52,7 +52,7 @@ function checkTierGate({ tier, agent, force }) {
   if (tier === "cto" && agent === "cowork+codex") return { allowed: true, reason: "cto + dual agent — auto allowed" };
   if (tier === "cto" && agent === "cowork") return {
     allowed: false,
-    reason: "cto + cowork-only — auto needs --force (Bae policy 2026-04-14: dual-agent only by default)",
+    reason: "cto + cowork-only — auto needs --force (default policy 2026-04-14: dual-agent only by default)",
   };
   return {
     allowed: false,
@@ -427,7 +427,7 @@ Usage:
   node bin/watch.js --root ./src --debounce-ms 3000
   node bin/watch.js --dry-run                print decision and exit
 
-Tier gate (Bae policy 2026-04-14):
+Tier gate (default policy 2026-04-14):
   - maker / builder       → --auto refused
   - cto + cowork-only     → --auto refused unless --force
   - cto + cowork+codex    → --auto allowed

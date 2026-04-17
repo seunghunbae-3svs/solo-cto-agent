@@ -7,11 +7,11 @@ const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const SETTINGS_PATH = 'ops/orchestrator/telegram-settings.json';
 
 const PROJECTS = [
-  { key: 'tribo', repo: '{{PRODUCT_REPO_1}}' },
+  { key: 'sample-store', repo: '{{PRODUCT_REPO_1}}' },
   { key: 'golf', repo: '{{PRODUCT_REPO_2}}' },
-  { key: 'palate', repo: '{{PRODUCT_REPO_3}}' },
+  { key: 'sample-app', repo: '{{PRODUCT_REPO_3}}' },
   { key: '{{PRODUCT_REPO_4}}', repo: '{{PRODUCT_REPO_4}}' },
-  { key: '3stripe', repo: '{{PRODUCT_REPO_5}}' },
+  { key: 'sample-event', repo: '{{PRODUCT_REPO_5}}' },
   { key: 'orchestrator', repo: '{{ORCHESTRATOR_REPO}}' },
 ];
 
@@ -245,8 +245,8 @@ async function buildBriefing(locale, perProjectLimit = 2) {
     `\n오케스트레이터 이슈: ${issues.length} open`
   );
   msg += L(locale,
-    `\nCommand: "project 1 status" or /review tribo`,
-    `\n명령: “프로젝트 1 현황” 또는 /review tribo`
+    `\nCommand: “project 1 status” or /review sample-store`,
+    `\n명령: “프로젝트 1 현황” 또는 /review sample-store`
   );
   return msg;
 }

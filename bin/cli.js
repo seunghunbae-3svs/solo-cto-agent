@@ -125,8 +125,8 @@ Examples:
   npx solo-cto-agent review --staged --json | jq .verdict  # pipe-safe JSON
   npx solo-cto-agent dual-review                           # Claude + OpenAI cross-review
   npx solo-cto-agent knowledge                             # extract decisions from recent commits
-  npx solo-cto-agent knowledge --project tribo             # tag with project name
-  npx solo-cto-agent session save --project tribo          # save session context
+  npx solo-cto-agent knowledge --project sample-store      # tag with project name
+  npx solo-cto-agent session save --project sample-store   # save session context
   npx solo-cto-agent session restore                       # load most recent session
   npx solo-cto-agent session list --limit 5                # show 5 recent sessions
   npx solo-cto-agent notify deploy-ready --target production --url https://myapp.com --commit abc1234

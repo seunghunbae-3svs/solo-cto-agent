@@ -7,16 +7,16 @@ const ORCH_REPO = "{{ORCHESTRATOR_REPO}}";
 
 const CHECKS = [
   {
-    id: "tribo-login",
+    id: "sample-store-login",
     repo: "{{PRODUCT_REPO_1}}",
-    url: "https://{{PRODUCT_REPO_1}}.vercel.app/admin/login",
-    expect: ["Tribo Admin", "Sign in"],
+    url: "https://sample-store.vercel.app/admin/login",
+    expect: ["Admin", "Sign in"],
     title: "로그인 박스/화면 이상",
   },
   {
-    id: "tribo-seller",
+    id: "sample-store-seller",
     repo: "{{PRODUCT_REPO_1}}",
-    url: "https://{{PRODUCT_REPO_1}}.vercel.app/s/beauty-by-kim",
+    url: "https://sample-store.vercel.app/s/seller-page",
     expect: ["Products", "Track Order"],
     title: "셀러 페이지 접근 불가",
   },
@@ -28,7 +28,7 @@ const CHECKS = [
     title: "홈 화면 접근 불가",
   },
   {
-    id: "palate-home",
+    id: "sample-app-home",
     repo: "{{PRODUCT_REPO_3}}",
     url: "https://{{PRODUCT_REPO_3}}.vercel.app",
     expect: [],
@@ -42,7 +42,7 @@ const CHECKS = [
     title: "홈 화면 접근 불가",
   },
   {
-    id: "3stripe-home",
+    id: "sample-event-home",
     repo: "{{PRODUCT_REPO_5}}",
     url: "https://{{PRODUCT_REPO_5}}.vercel.app",
     expect: [],

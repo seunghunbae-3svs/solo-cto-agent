@@ -1,5 +1,5 @@
 // PR-F1 — regression tests for the 5 bugs surfaced by the first real drive-run
-// against an external repo (tribo-store, master default branch).
+// against an external repo (sample-store, master default branch).
 //
 // B1 + B2: review --branch must auto-detect the repo's default branch, and
 //          --target <base> must override when supplied.

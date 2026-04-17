@@ -6,10 +6,10 @@ const ORCH_REPO = '{{ORCHESTRATOR_REPO}}';
 
 const PROJECTS = {
   {{PRODUCT_REPO_4}}: '{{PRODUCT_REPO_4}}',
-  '3stripe': '{{PRODUCT_REPO_5}}',
+  'sample-event': '{{PRODUCT_REPO_5}}',
   golf: '{{PRODUCT_REPO_2}}',
-  tribo: '{{PRODUCT_REPO_1}}',
-  palate: '{{PRODUCT_REPO_3}}',
+  'sample-store': '{{PRODUCT_REPO_1}}',
+  'sample-app': '{{PRODUCT_REPO_3}}',
 };
 
 async function gh(endpoint) {

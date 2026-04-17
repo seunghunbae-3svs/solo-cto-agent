@@ -3,7 +3,7 @@
  * error-collector.js — Appends structured error entries to error-patterns.md
  *
  * Usage:
- *   node error-collector.js --project-dir /path/to/Bae_Projects \
+ *   node error-collector.js --project-dir /path/to/user-projects \
  *     --skill "bae-dev-orchestrator" \
  *     --category build \
  *     --symptom "ReferenceError: COLORS is not defined" \
@@ -91,7 +91,7 @@ function findSimilar(entries, skill, symptom) {
 /**
  * Collect (append or increment) an error pattern.
  *
- * @param {string} projectDir - Path to Bae_Projects/
+ * @param {string} projectDir - Path to user-projects/
  * @param {Object} error - Error details
  * @param {string} error.skill - Skill name that caused the error
  * @param {string} error.category - One of CATEGORIES

@@ -62,13 +62,13 @@ function parseTargetRepo() {
   const map = {
     {{PRODUCT_REPO_4}}: '{{PRODUCT_REPO_4}}',
     '{{PRODUCT_REPO_5}}': '{{PRODUCT_REPO_5}}',
-    '3stripe': '{{PRODUCT_REPO_5}}',
+    'sample-event': '{{PRODUCT_REPO_5}}',
     '{{PRODUCT_REPO_2}}': '{{PRODUCT_REPO_2}}',
     golf: '{{PRODUCT_REPO_2}}',
     '{{PRODUCT_REPO_1}}': '{{PRODUCT_REPO_1}}',
-    tribo: '{{PRODUCT_REPO_1}}',
+    'sample-store': '{{PRODUCT_REPO_1}}',
     '{{PRODUCT_REPO_3}}': '{{PRODUCT_REPO_3}}',
-    palate: '{{PRODUCT_REPO_3}}',
+    'sample-app': '{{PRODUCT_REPO_3}}',
   };
   return map[key] || null;
 }

@@ -9,15 +9,15 @@ const DECISION_LOG_PATH = 'ops/orchestrator/decision-log.json';
 const TELEGRAM_SETTINGS_PATH = 'ops/orchestrator/telegram-settings.json';
 
 const PROJECTS = {
-  {{PRODUCT_REPO_4}}: { repo: '{{PRODUCT_REPO_4}}', aliases: ['이벤트배지', '이벤트뱃지', '{{PRODUCT_REPO_4}}', 'badge', 'eb'] },
-  '3stripe': { repo: '{{PRODUCT_REPO_5}}', aliases: ['3stripe', '3스트라이프', '방송', 'broadcast', '3s'] },
-  golf: { repo: '{{PRODUCT_REPO_2}}', aliases: ['골프', '골프나우', 'golf', 'gn'] },
-  tribo: { repo: '{{PRODUCT_REPO_1}}', aliases: ['트리보', '트리보스토어', '셀러', 'tribo', 'ts'] },
-  palate: { repo: '{{PRODUCT_REPO_3}}', aliases: ['팔레트', '팔레트파일럿', '맛집', 'pp'] },
-  orchestrator: { repo: '{{ORCHESTRATOR_REPO}}', aliases: ['오케스트레이터', 'orchestrator', 'dao'] },
+  {{PRODUCT_REPO_4}}: { repo: '{{PRODUCT_REPO_4}}', aliases: ['프로젝트B', 'sample-events', '{{PRODUCT_REPO_4}}', 'events', 'pb'] },
+  'sample-event': { repo: '{{PRODUCT_REPO_5}}', aliases: ['sample-event', '프로젝트E', 'project-e', 'se'] },
+  golf: { repo: '{{PRODUCT_REPO_2}}', aliases: ['프로젝트C', 'sample-golf', 'golf', 'gc'] },
+  'sample-store': { repo: '{{PRODUCT_REPO_1}}', aliases: ['프로젝트A', 'sample-store', 'seller', 'ss'] },
+  'sample-app': { repo: '{{PRODUCT_REPO_3}}', aliases: ['프로젝트D', 'sample-app', 'app', 'sa'] },
+  orchestrator: { repo: '{{ORCHESTRATOR_REPO}}', aliases: ['orchestrator', 'orchestrator', 'orch'] },
 };
 
-const PROJECT_ORDER = ['tribo', 'golf', 'palate', '{{PRODUCT_REPO_4}}', '3stripe', 'orchestrator'];
+const PROJECT_ORDER = ['sample-store', 'golf', 'sample-app', '{{PRODUCT_REPO_4}}', 'sample-event', 'orchestrator'];
 const ISSUE_KEYWORDS = [
   '안됨', '안돼', '오류', '에러', '버그', '문제', '로딩', '깨짐', '불가',
   '요청', '추가', '개선', '수정', '필요', '누락', '반영', '없음', '느림',
@@ -424,8 +424,8 @@ function formatSettings(settings) {
 
 function buildWelcomeMessage(locale) {
   return L(locale,
-    `👋 Welcome to BDA\n\nQuick setup:\n/setup report=6h format=compact approval=buttons\n\nKey commands:\n/status  | /pending | /setup\n"project 1 status"\n"PR17 detail"\n"tribo approve"\n\nDecision keywords:\napprove / revise / hold / detail\n\nTip: approvals auto-merge when possible.\nHelp: /help`,
-    `👋 BDA 설치 완료\n\n빠른 설정:\n/setup report=6h format=compact approval=buttons\n\n주요 명령:\n/현황  | /pending | /setup\n"프로젝트 1 현황"\n"PR17 확인"\n"트리보 승인"\n\n결정 키워드:\n승인 / 수정 / 보류 / 확인\n\n팁: 승인 시 자동 머지됩니다.\n도움말: /help`
+    `👋 Welcome to BDA\n\nQuick setup:\n/setup report=6h format=compact approval=buttons\n\nKey commands:\n/status  | /pending | /setup\n"project 1 status"\n"PR17 detail"\n"myproject approve"\n\nDecision keywords:\napprove / revise / hold / detail\n\nTip: approvals auto-merge when possible.\nHelp: /help`,
+    `👋 BDA 설치 완료\n\n빠른 설정:\n/setup report=6h format=compact approval=buttons\n\n주요 명령:\n/현황  | /pending | /setup\n"프로젝트 1 현황"\n"PR17 확인"\n"sample-store 승인"\n\n결정 키워드:\n승인 / 수정 / 보류 / 확인\n\n팁: 승인 시 자동 머지됩니다.\n도움말: /help`
   );
 }
 
@@ -670,8 +670,8 @@ async function buildStatusSummary(locale, includeDate = false) {
     `\n🧩 오케스트레이터 이슈: ${issues.length} open`
   );
   msg += L(locale,
-    `\nCommand: "project 1 status" or /review tribo`,
-    `\n명령: “프로젝트 1 현황” 또는 /review tribo`
+    `\nCommand: “project 1 status” or /review myproject`,
+    `\n명령: “프로젝트 1 현황” 또는 /review myproject`
   );
   msg += L(locale,
     `\nDecision queue: /pending`,
@@ -996,7 +996,7 @@ async function tryAutoMerge(repo, prNumber, prTitle = '') {
 async function cmdIssue(chatId, projectKey, title, locale) {
   const safeTitle = (title || '').trim();
   if (!safeTitle) {
-    return reply(chatId, L(locale, 'Please include an issue description. Example: “Tribo seller page not loading”', '이슈 내용을 함께 보내주세요. 예: “트리보 셀러 페이지 로딩 안됨”'));
+    return reply(chatId, L(locale, 'Please include an issue description. Example: “Sample Store seller page not loading”', '이슈 내용을 함께 보내주세요. 예: “Sample Store 셀러 페이지 로딩 안됨”'));
   }
 
   const issue = await gh(`/repos/${GITHUB_OWNER}/${ORCH_REPO}/issues`, 'POST', {
@@ -1009,8 +1009,8 @@ async function cmdIssue(chatId, projectKey, title, locale) {
 
 async function cmdHelp(chatId, locale) {
   return reply(chatId, L(locale,
-    `🧭 <b>BDA Commands</b>\n\n"status" or /status\n"decision queue" or /pending\n"project 1 status"\n"tribo review"\n"tribo approve" (auto-merge)\n"tribo merge"\n"PR17 approve"\n"PR17 detail" or "PR17 blocker check"\n"{{PRODUCT_REPO_4}} PR1 rework"\n"{{PRODUCT_REPO_4}} PR1 compare" (report)\n"tribo seller page not loading" -> create issue\n\nSetup: /setup report=6h format=compact approval=buttons\n\nAliases: tribo, golf, palate, {{PRODUCT_REPO_4}}, 3stripe\n\nLanguage: /lang en | /lang ko`,
-    `🧭 <b>BDA 명령어</b>\n\n"현황" 또는 /현황\n"결정 대기" 또는 /pending\n"프로젝트 1 현황"\n"트리보 리뷰"\n"트리보 승인" (승인 시 자동 머지)\n"트리보 merge"\n"PR17 승인"\n"PR17 확인" 또는 "PR17 blocker 확인"\n"{{PRODUCT_REPO_4}} PR1 재작업"\n"{{PRODUCT_REPO_4}} PR1 비교" (비교 리포트)\n"트리보 셀러 페이지 로딩 안됨" → 이슈 자동 생성\n\n설정: /setup report=6h format=compact approval=buttons\n\n프로젝트 별칭: 트리보, 골프, 팔레트, 이벤트배지, 3스트라이프\n\n언어: /lang en | /lang ko`
+    `🧭 <b>BDA Commands</b>\n\n"status" or /status\n"decision queue" or /pending\n"project 1 status"\n"sample-store review"\n"sample-store approve" (auto-merge)\n"sample-store merge"\n"PR17 approve"\n"PR17 detail" or "PR17 blocker check"\n"{{PRODUCT_REPO_4}} PR1 rework"\n"{{PRODUCT_REPO_4}} PR1 compare" (report)\n"sample-store seller page not loading" -> create issue\n\nSetup: /setup report=6h format=compact approval=buttons\n\nAliases: sample-store, golf, sample-app, {{PRODUCT_REPO_4}}, sample-event\n\nLanguage: /lang en | /lang ko`,
+    `🧭 <b>BDA 명령어</b>\n\n"현황" 또는 /현황\n"결정 대기" 또는 /pending\n"프로젝트 1 현황"\n"sample-store 리뷰"\n"sample-store 승인" (승인 시 자동 머지)\n"sample-store merge"\n"PR17 승인"\n"PR17 확인" 또는 "PR17 blocker 확인"\n"{{PRODUCT_REPO_4}} PR1 재작업"\n"{{PRODUCT_REPO_4}} PR1 비교" (비교 리포트)\n"sample-store 셀러 페이지 로딩 안됨" → 이슈 자동 생성\n\n설정: /setup report=6h format=compact approval=buttons\n\n프로젝트 별칭: sample-store, golf, sample-app, sample-events, sample-event\n\n언어: /lang en | /lang ko`
   ));
 }
 
@@ -1317,8 +1317,8 @@ module.exports = async (req, res) => {
       }
     } else {
       await reply(chatId, L(locale,
-        `🧩 I didn't understand that.\n\nTry "status", "project 1 status", or "tribo approve".\nUse /help for all commands.`,
-        `🧩 인식하지 못한 메시지입니다.\n\n"현황", "프로젝트 1 현황", "트리보 승인"처럼 보내주세요.\n/help 로 전체 명령어 확인`
+        `🧩 I didn't understand that.\n\nTry "status", "project 1 status", or "sample-store approve".\nUse /help for all commands.`,
+        `🧩 인식하지 못한 메시지입니다.\n\n"현황", "프로젝트 1 현황", "sample-store 승인"처럼 보내주세요.\n/help 로 전체 명령어 확인`
       ));
     }
   } catch (err) {

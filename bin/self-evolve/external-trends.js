@@ -2,7 +2,7 @@
 /**
  * external-trends.js — L3 External trends collector
  *
- * Scans 3 sources for updates relevant to Bae's stack:
+ * Scans 3 sources for updates relevant to the configured stack:
  *   1. npm outdated — Check for dependency updates in active projects
  *   2. GitHub trending — Scan trending repos for relevant tools/libraries
  *   3. Anthropic changelog — Check for API/SDK updates
@@ -19,7 +19,7 @@ const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
-// Bae's stack keywords for relevance filtering
+// Stack keywords for relevance filtering
 const STACK_KEYWORDS = [
   "next.js", "nextjs", "react", "prisma", "supabase", "vercel",
   "tailwind", "tailwindcss", "shadcn", "typescript", "node",
@@ -82,7 +82,7 @@ function parseGitHubTrending(rawData, stackKeywords = STACK_KEYWORDS) {
       const description = (item.description || "").toLowerCase();
       const language = (item.language || "").toLowerCase();
 
-      // Check relevance to Bae's stack
+      // Check relevance to the configured stack
       const relevantKeywords = stackKeywords.filter(kw =>
         description.includes(kw.toLowerCase()) ||
         name.toLowerCase().includes(kw.toLowerCase()) ||
@@ -164,7 +164,7 @@ function parseAnthropicChangelog(rawData) {
 /**
  * Generate a comprehensive trends report.
  *
- * @param {string} projectDir - Path to Bae_Projects/
+ * @param {string} projectDir - Path to user-projects/
  * @param {Object} data
  * @param {Object[]} data.npmOutdated - From checkNpmOutdated()
  * @param {Object[]} data.trending - From parseGitHubTrending()
@@ -206,7 +206,7 @@ function generateTrendsReport(projectDir, data = {}) {
   lines.push("");
 
   // GitHub trending
-  lines.push("### 2. GitHub 트렌딩 (Bae 스택 관련)");
+  lines.push("### 2. GitHub 트렌딩 (사용자 스택 관련)");
   if (trending.length === 0) {
     lines.push("- 관련 트렌딩 레포 없음");
   } else {

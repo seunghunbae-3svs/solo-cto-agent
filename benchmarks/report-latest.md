@@ -30,7 +30,7 @@ Collected: 2026-04-16T19:20:17.511Z
 - CTO comparison reports: 0
 
 ## Cross-repo aggregate (5 managed repos)
-- Managed repos: tribo-store, 3stripe-event, golf-now, Palate-pilot, eventbadge
+- Managed repos: repo-a, repo-b, repo-c, repo-d, repo-e
 - Total PRs (all repos): 62
 - Total merged (all repos): 24
 

@@ -110,7 +110,7 @@ Please review in Korean:
 5. 배포 가능 여부 한 줄 판단`);
 
   await gh(`/repos/${PR_REPO}/issues/${PR_NUMBER}/comments`, 'POST', {
-    body: `## Claude Cross-Review (Automated + Skill-based)\n\n${review}\n\n---\nApplied criteria: bae-ship-zero, tribo-dev-guide, coding-rules`,
+    body: `## Claude Cross-Review (Automated + Skill-based)\n\n${review}\n\n---\nApplied criteria: bae-ship-zero, sample-store-dev-guide, coding-rules`,
   });
 
   const hasBlocker = review.includes('BLOCKER') || review.includes('blocker');

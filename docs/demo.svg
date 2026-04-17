@@ -53,7 +53,7 @@
   <g class="g7"><text class="output success" x="20" y="205">&#10004;</text><text class="output" x="36" y="205">6/6 skills installed, all frontmatter valid</text></g>
   <g class="g8"><text class="output success" x="20" y="225">&#10004;</text><text class="output" x="36" y="225">894 tests passing across 48 files</text></g>
   <g class="g9"><text class="output success" x="20" y="245">&#10004;</text><text class="output" x="36" y="245">CI: <tspan class="success bold">green</tspan>  |  npm: <tspan class="success bold">v1.1.0</tspan></text></g>
-  <g class="g10"><text class="prompt" x="20" y="279">$</text><text class="cmd" x="36" y="279">solo-cto-agent review --pr 28 --repo tribo-store</text></g>
+  <g class="g10"><text class="prompt" x="20" y="279">$</text><text class="cmd" x="36" y="279">solo-cto-agent review --pr 28 --repo sample-store</text></g>
   <g class="g11"><text class="output accent" x="20" y="302">3-pass review: semantic / build / quality</text></g>
   <g class="g12"><text class="output" x="20" y="322">  Pass 1/3  <tspan class="success">semantic-gate</tspan>   ████████████  <tspan class="success">PASS</tspan></text></g>
   <g class="g13"><text class="output" x="20" y="342">  Pass 2/3  <tspan class="success">build-verify</tspan>    ████████████  <tspan class="success">PASS</tspan></text></g>

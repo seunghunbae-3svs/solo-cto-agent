@@ -99,10 +99,10 @@ function parseTargetRepo() {
   if (!match) return null;
   const key = match[1].toLowerCase();
   const map = {
-    {{PRODUCT_REPO_4}}: '{{PRODUCT_REPO_4}}', '{{PRODUCT_REPO_5}}': '{{PRODUCT_REPO_5}}', '3stripe': '{{PRODUCT_REPO_5}}',
+    {{PRODUCT_REPO_4}}: '{{PRODUCT_REPO_4}}', '{{PRODUCT_REPO_5}}': '{{PRODUCT_REPO_5}}', 'sample-event': '{{PRODUCT_REPO_5}}',
     '{{PRODUCT_REPO_2}}': '{{PRODUCT_REPO_2}}', golf: '{{PRODUCT_REPO_2}}',
-    '{{PRODUCT_REPO_1}}': '{{PRODUCT_REPO_1}}', tribo: '{{PRODUCT_REPO_1}}',
-    '{{PRODUCT_REPO_3}}': '{{PRODUCT_REPO_3}}', palate: '{{PRODUCT_REPO_3}}',
+    '{{PRODUCT_REPO_1}}': '{{PRODUCT_REPO_1}}', 'sample-store': '{{PRODUCT_REPO_1}}',
+    '{{PRODUCT_REPO_3}}': '{{PRODUCT_REPO_3}}', 'sample-app': '{{PRODUCT_REPO_3}}',
   };
   return map[key] || null;
 }
@@ -252,7 +252,7 @@ OUTPUT FORMAT (strict JSON, no markdown wrapping):
   const pr = await createPR(repoName, branchName, changes, prTitle, result.pr_body);
 
   await gh(`/repos/${OWNER}/${repoName}/issues/${pr.number}/comments`, 'POST', {
-    body: `## ?윢 Claude Self-Review (Automated + Skill-based)\n\n**遺꾩꽍**: ${result.analysis}\n**蹂寃??뚯씪**: ${changedCount}媛?n**?꾪뿕??*: ${result.risk_level}\n**?좊ː??*: ${result.confidence}/100\n\n**?곸슜 ?ㅽ궗**: bae-ship-zero, tribo-dev-guide, coding-rules\n\n?먮룞 ?앹꽦 PR ??援먯감 由щ럭媛 ?먮룞 ?몃━嫄곕맗?덈떎.`,
+    body: `## ?윢 Claude Self-Review (Automated + Skill-based)\n\n**遺꾩꽍**: ${result.analysis}\n**蹂寃??뚯씪**: ${changedCount}媛?n**?꾪뿕??*: ${result.risk_level}\n**?좊ː??*: ${result.confidence}/100\n\n**?곸슜 ?ㅽ궗**: bae-ship-zero, sample-store-dev-guide, coding-rules\n\n?먮룞 ?앹꽦 PR ??援먯감 由щ럭媛 ?먮룞 ?몃━嫄곕맗?덈떎.`,
   });
 
   // ?? Visual Telegram report ??
@@ -275,7 +275,7 @@ ${result.analysis}
 
 ?뱤 ?꾪뿕?? ${result.risk_level} | ?좊ː?? ${result.confidence}/100
 ?뵇 Preview: ${previewLine}
-?뤇 ?곸슜 ?ㅽ궗: ship-zero, tribo-dev-guide
+?뤇 ?곸슜 ?ㅽ궗: ship-zero, sample-store-dev-guide
 
 ?곣봺???ㅼ쓬 ?④퀎 ?곣봺??
 援먯감 由щ럭 ?먮룞 吏꾪뻾 以?

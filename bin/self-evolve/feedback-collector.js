@@ -63,7 +63,7 @@ function readFeedbackLog(projectDir) {
 /**
  * Record a feedback score.
  *
- * @param {string} projectDir - Path to Bae_Projects/
+ * @param {string} projectDir - Path to user-projects/
  * @param {Object} feedback
  * @param {string} feedback.skill - Skill used
  * @param {number} feedback.score - 1-5 satisfaction score

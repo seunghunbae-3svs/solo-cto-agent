@@ -6,7 +6,7 @@
  *   - GitHub skill repo scanning (anthropics/skills, community repos)
  *   - Plugin registry search (search_plugins / search_mcp_registry)
  *   - Duplicate detection against installed skills
- *   - Compatibility filtering (Bae stack: Next.js, Prisma, Supabase, Vercel, Tailwind)
+ *   - Compatibility filtering (configured stack: Next.js, Prisma, Supabase, Vercel, Tailwind)
  *   - Pre-test framework (simulated test prompts)
  *   - .skill packaging for one-click install
  *
@@ -22,7 +22,7 @@
 const fs = require("fs");
 const path = require("path");
 
-// Bae's tech stack for compatibility filtering
+// Tech stack for compatibility filtering
 const BAE_STACK = [
   "next.js", "nextjs", "react", "prisma", "supabase", "vercel",
   "tailwind", "tailwindcss", "shadcn", "typescript", "node",
@@ -110,7 +110,7 @@ function findConflict(name, description, installed) {
 }
 
 /**
- * Check if a skill is compatible with Bae's stack.
+ * Check if a skill is compatible with the configured stack.
  *
  * @param {Object} skill - Skill metadata
  * @param {string} skill.description - Skill description
@@ -132,7 +132,7 @@ function checkCompatibility(skill) {
  * Scan for new skills from all sources.
  * This generates a list of candidates — does NOT install anything.
  *
- * @param {string} projectDir - Path to Bae_Projects/
+ * @param {string} projectDir - Path to user-projects/
  * @param {string} skillsDir - Path to .claude/skills/
  * @param {Object} [options]
  * @param {boolean} [options.verbose=false]
@@ -175,7 +175,7 @@ async function scanForSkills(projectDir, skillsDir, options = {}) {
 }
 
 /**
- * Evaluate a discovered skill against installed skills and Bae's stack.
+ * Evaluate a discovered skill against installed skills and the configured stack.
  *
  * @param {Object} newSkill - { name, description, tags, source }
  * @param {string} skillsDir
@@ -189,7 +189,7 @@ function evaluateSkill(newSkill, skillsDir) {
   if (!compatibility.compatible) {
     return {
       action: "skip",
-      reason: "Incompatible with Bae stack",
+      reason: "Incompatible with configured stack",
       conflict: null,
       compatibility,
     };
@@ -220,7 +220,7 @@ function evaluateSkill(newSkill, skillsDir) {
 
   return {
     action: isSystemSkill ? "auto-install" : "recommend",
-    reason: isSystemSkill ? "System improvement skill — auto-install candidate" : "New capability — recommend to Bae",
+    reason: isSystemSkill ? "System improvement skill — auto-install candidate" : "New capability — recommend to user",
     conflict: null,
     compatibility,
   };

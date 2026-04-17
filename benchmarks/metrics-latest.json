@@ -24,11 +24,11 @@
   "rework_cycle_avg": 0.15,
   "prs_with_rework_rate": 0.09,
   "managed_repos": [
-    "tribo-store",
-    "3stripe-event",
-    "golf-now",
-    "Palate-pilot",
-    "eventbadge"
+    "repo-a",
+    "repo-b",
+    "repo-c",
+    "repo-d",
+    "repo-e"
   ],
   "managed_repo_count": 5,
   "cross_repo_pr_count": 62,

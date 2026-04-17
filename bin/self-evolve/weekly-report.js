@@ -12,7 +12,7 @@
  *   - memory/episodes/*.md (session episodes)
  *
  * Usage:
- *   node weekly-report.js --project-dir /path/to/Bae_Projects [--weeks 1] [--output markdown|json]
+ *   node weekly-report.js --project-dir /path/to/user-projects [--weeks 1] [--output markdown|json]
  *
  * Module API:
  *   const { generateWeeklyReport } = require('./weekly-report');
@@ -24,7 +24,7 @@ const path = require("path");
 /**
  * Generate a comprehensive weekly report.
  *
- * @param {string} projectDir - Path to Bae_Projects/
+ * @param {string} projectDir - Path to user-projects/
  * @param {Object} [options]
  * @param {number} [options.weeks=1] - Number of weeks back to cover
  * @param {string} [options.output="markdown"] - Output format
@@ -60,7 +60,7 @@ function generateWeeklyReport(projectDir, options = {}) {
         // Extract project tags from log content
         try {
           const content = fs.readFileSync(path.join(logsDir, file), "utf8");
-          const projects = content.match(/\[(?:Tribo|PISTA|3Stripe|OhMyWork|AwakeTune|Grief|solo-cto-agent)\]/gi) || [];
+          const projects = content.match(/\[(?:ProjectA|ProjectB|ProjectC|ProjectD|ProjectE|ProjectF|solo-cto-agent)\]/gi) || [];
           for (const p of projects) {
             const name = p.replace(/[\[\]]/g, "");
             if (!data.sessions.projects.includes(name)) data.sessions.projects.push(name);

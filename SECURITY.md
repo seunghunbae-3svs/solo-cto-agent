@@ -2,7 +2,7 @@
 
 ## Reporting
 
-If you find a security issue, email seunghunbae@gmail.com directly.
+If you find a security issue, please use [GitHub Security Advisories](https://github.com/seunghunbae-3svs/solo-cto-agent/security/advisories/new) to report it privately.
 
 Do not open a public issue. I will respond within 48 hours.
 

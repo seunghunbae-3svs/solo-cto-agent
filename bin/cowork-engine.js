@@ -834,8 +834,8 @@ async function localReview(options = {}) {
       logInfo(`T2 external knowledge: scanned ${pc.scanned}/${pc.total} deps · major=${pc.summary.major} minor=${pc.summary.minor} deprecated=${pc.summary.deprecated}`);
     }
     // PR-F2 — honest diagnostics: env flag on but scan produced nothing.
-    // This is the exact false-confidence case surfaced by the palate-pilot /
-    // 3stripe-event drive-runs (COWORK_EXTERNAL_KNOWLEDGE=1, no package.json
+    // This is the exact false-confidence case surfaced by sample projects
+    // with external knowledge enabled (COWORK_EXTERNAL_KNOWLEDGE=1, no package.json
     // at repo root → silent no-op → "1/3 active" reading was a lie).
     if (process.env.COWORK_EXTERNAL_KNOWLEDGE === "1" && !(externalKnowledge && externalKnowledge.hasData)) {
       logWarn("T2 enabled (COWORK_EXTERNAL_KNOWLEDGE=1) but no package.json was scanned — signal not applied.");
@@ -2130,7 +2130,7 @@ ${COLORS.bold}Options:${COLORS.reset}
     --file <path>    Extract from file
     --manual         Extract from manual input
     --input <text>   Input text or file path
-    --project <tag>  Project tag (e.g., tribo, pista)
+    --project <tag>  Project tag (e.g., sample-store, project-b)
 
   session sync:
     --repo <owner/repo>  Override orchestrator repo (default: auto-detect)

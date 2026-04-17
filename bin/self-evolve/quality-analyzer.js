@@ -3,7 +3,7 @@
  * quality-analyzer.js — Post-task quality check + quality-log.md writer
  *
  * Usage:
- *   node quality-analyzer.js --project-dir /path/to/Bae_Projects \
+ *   node quality-analyzer.js --project-dir /path/to/user-projects \
  *     --type code --skill bae-dev-orchestrator \
  *     --checks "build:pass,typescript:pass,imports:pass,console-log:warn" \
  *     [--notes "Minor TODO left in utils.ts"]
@@ -98,7 +98,7 @@ function readQualityLog(projectDir) {
 /**
  * Run quality analysis and append to quality-log.md.
  *
- * @param {string} projectDir - Path to Bae_Projects/
+ * @param {string} projectDir - Path to user-projects/
  * @param {Object} task - Task details
  * @param {string} task.type - One of WORK_TYPES
  * @param {string} task.skill - Skill used
@@ -143,7 +143,7 @@ function analyzeQuality(projectDir, task) {
 - **스킬 사용**: ${skill}
 - **점수**: ${overallScore}${feedbackScore !== null ? ` (유저 피드백: ${feedbackScore}/5)` : ""}
 - **이슈**: ${issues.length > 0 ? issues.join("; ") : "clean"}
-- **조치**: ${overallScore === "fail" ? "Bae 보고" : overallScore === "warn" ? "자동 모니터링" : "없음"}
+- **조치**: ${overallScore === "fail" ? "사용자 보고" : overallScore === "warn" ? "자동 모니터링" : "없음"}
 ${checkLines ? `- **상세**:\n${checkLines}` : ""}${notes ? `\n- **노트**: ${notes}` : ""}
 `;
 

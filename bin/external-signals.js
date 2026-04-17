@@ -92,7 +92,7 @@ function assessExternalSignals(opts = {}) {
   // that don't have fetch results (e.g. dry-run BEFORE fetches run) still get
   // a best-effort answer.
   //
-  // Dogfood discovery (PR-F2): the drive-run on palate-pilot + 3stripe-event
+  // Dogfood discovery (PR-F2): the drive-run on sample projects
   // showed that COWORK_EXTERNAL_KNOWLEDGE=1 in a repo with no (or nested)
   // package.json silently produced no T2 context, yet `activeCount` still
   // read "1/3". That's a false-confidence bug — the user thinks they closed
@@ -161,7 +161,7 @@ function formatPartialSignalHint(signals) {
   if (!signals.t3GroundTruth) missing.push("T3 ground truth");
   if (missing.length === 0) return "";
   // PR-F2 — surface false-confidence cases: env flag set but tier didn't
-  // actually contribute. This is the palate-pilot / 3stripe-event bug.
+  // actually contribute. This is a documented issue in sample projects.
   const stale = [];
   if (signals.t2EnvSet && !signals.t2ExternalKnowledge) stale.push("T2 (env set, no data)");
   if (signals.t3EnvSet && !signals.t3GroundTruth) stale.push("T3 (env set, no data)");

@@ -7,15 +7,15 @@ Tier: Maker / Builder / CTO - Agent: Cowork - Mode: Semi-auto
 You have been thinking about a feature addition for two days. You type it into Cowork before writing any spec:
 
 ```text
-Tribo: add a $29/mo seller subscription for premium exposure on the marketplace feed.
+Project A: add a $29/mo seller subscription for premium exposure on the marketplace feed.
 ```
 
 ## Agent behavior
 
 1. **`review` skill (idea-critique sub-mode)** loads portfolio context:
-   - `businesses.md` -> Tribo = K-beauty group-buying, SEA focus, partner feed exposure.
+   - `businesses.md` -> Project A = marketplace group-buying, SEA focus, partner feed exposure.
    - `decision-patterns.md` -> core rule: protect existing partner contracts before new monetization.
-   - Current `states/tribo.md` -> Phase 3, 14 sellers live, partner contract active.
+   - Current `states/sample-store.md` -> Phase 3, 14 sellers live, partner contract active.
 2. Agent applies the **3-axis decision filter** (from `skills/_shared/agent-spec.md`):
 
    | Axis | Check |
@@ -33,7 +33,7 @@ Tribo: add a $29/mo seller subscription for premium exposure on the marketplace 
       conflicts with that clause and would require renegotiation.
 
    2. [PROBABLE] Regulation risk. A recurring seller charge in PH/ID can cross
-      EMI thresholds once volume grows. That is a new regulated surface for Tribo.
+      EMI thresholds once volume grows. That is a new regulated surface for Project A.
 
    3. [UNKNOWN] Unit economics. At $29/mo and 100 sellers, gross is $2.9k/mo.
       That may not cover support + fraud risk if conversion is low.

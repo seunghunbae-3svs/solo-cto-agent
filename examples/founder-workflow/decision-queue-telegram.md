@@ -42,11 +42,11 @@ Telegram message (trimmed):
 ```
 Decision queue
 
-- tribo-store PR #42 (codex, 3h) BLOCKER
+- sample-store PR #42 (codex, 3h) BLOCKER
   "Fix seller auth redirect"
-  https://preview-tribo-42.vercel.app
+  https://preview-sample-42.vercel.app
 
-- eventbadge PR #7 (claude, 18h) PENDING
+- sample-events PR #7 (claude, 18h) PENDING
   "Refine login layout"
   Preview pending
 
@@ -57,7 +57,7 @@ Decision queue
 After you tap **Approve**:
 
 ```
-tribo-store PR #42 approval recorded
+sample-store PR #42 approval recorded
 Auto-merge skipped: CI pending
 https://github.com/.../pull/42
 ```

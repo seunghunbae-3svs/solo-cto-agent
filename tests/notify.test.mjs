@@ -54,14 +54,14 @@ describe("notify: severity icon + format", () => {
       severity: "warn",
       title: "Build failed",
       body: "TypeScript error in src/x.ts",
-      meta: { project: "tribo", commit: "abc123" },
+      meta: { project: "sample-store", commit: "abc123" },
     };
     const out = notify._formatPlain(env);
     expect(out).toContain("⚠️");
     expect(out).toContain("WARN");
     expect(out).toContain("Build failed");
     expect(out).toContain("TypeScript error");
-    expect(out).toContain("project: tribo");
+    expect(out).toContain("project: sample-store");
     expect(out).toContain("commit: abc123");
   });
 });

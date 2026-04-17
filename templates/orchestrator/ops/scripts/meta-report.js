@@ -8,11 +8,11 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 const PROJECTS = [
-  { key: 'tribo', repo: '{{PRODUCT_REPO_1}}' },
+  { key: 'sample-store', repo: '{{PRODUCT_REPO_1}}' },
   { key: 'golf', repo: '{{PRODUCT_REPO_2}}' },
-  { key: 'palate', repo: '{{PRODUCT_REPO_3}}' },
+  { key: 'sample-app', repo: '{{PRODUCT_REPO_3}}' },
   { key: '{{PRODUCT_REPO_4}}', repo: '{{PRODUCT_REPO_4}}' },
-  { key: '3stripe', repo: '{{PRODUCT_REPO_5}}' },
+  { key: 'sample-event', repo: '{{PRODUCT_REPO_5}}' },
   { key: 'orchestrator', repo: '{{ORCHESTRATOR_REPO}}' },
 ];
 

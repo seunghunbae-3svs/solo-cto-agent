@@ -1,6 +1,6 @@
 // PR-F2 — tests for outcome-aware assessExternalSignals.
 //
-// Drive-run discovery on palate-pilot + 3stripe-event revealed:
+// Drive-run discovery on sample projects revealed:
 // COWORK_EXTERNAL_KNOWLEDGE=1 was set, but the repo had no (or nested)
 // package.json at root, so the T2 fetch silently produced zero data —
 // and yet the summary reported "1/3 active signals". That's a

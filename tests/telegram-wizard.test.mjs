@@ -69,7 +69,7 @@ describe("captureChatId", () => {
       status: 200,
       json: { ok: true, result: [{
         update_id: 42,
-        message: { chat: { id: 987, type: "private", username: "seunghunbae" }, text: "hi" },
+        message: { chat: { id: 987, type: "private", username: "testuser" }, text: "hi" },
       }] },
     });
     const out = await captureChatId("t", { fetchImpl, timeoutMs: 5000, pollMs: 1 });

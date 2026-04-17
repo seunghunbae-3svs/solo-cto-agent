@@ -12,18 +12,18 @@
 
 | Target repo | Stack | Default branch | Root layout |
 |---|---|---|---|
-| Tribo Store | Next.js 14 + Prisma + Supabase | `master` | `package.json` at root |
-| palate-pilot | Next.js 15 monorepo | `main` | `package.json` under `apps/web/` |
-| 3stripe-event | Next.js + Firebase | `main` | `package.json` at root |
-| golf-now | Next.js 14 + Supabase | `main` | `package.json` at root |
+| Target-A | Next.js 14 + Prisma + Supabase | `master` | `package.json` at root |
+| target-b | Next.js 15 monorepo | `main` | `package.json` under `apps/web/` |
+| target-c | Next.js + Firebase | `main` | `package.json` at root |
+| target-d | Next.js 14 + Supabase | `main` | `package.json` at root |
 
 ---
 
-## Drive-Run #1 — Tribo (master-default repo)
+## Drive-Run #1 — Target-A (master-default repo)
 
 **Invocation**
 ```bash
-cd tribo-store
+cd target-a
 solo-cto-agent review --staged --markdown
 ```
 
@@ -31,7 +31,7 @@ solo-cto-agent review --staged --markdown
 
 | Bug ID | Surface | Who caught it |
 |---|---|---|
-| B1 | `git diff main...HEAD` — hardcoded `main` base branch, fatal on Tribo's `master` | External drive-run only. 236 internal tests missed. |
+| B1 | `git diff main...HEAD` — hardcoded `main` base branch, fatal on Target-A's `master` | External drive-run only. 236 internal tests missed. |
 | B2 | No `--target <base>` override — can't diff against `develop` or any other base | External drive-run only. |
 | B3 | `--dry-run` suppressed the self-loop warning (SELF-LOOP notice gated on API call path) | External drive-run only. |
 | B4 | README documented flags (`--diff`, `--output`, `--file review.md`) that did not exist | External drive-run only. |
@@ -40,14 +40,14 @@ solo-cto-agent review --staged --markdown
 **Internal loop bugs found**: 0 (all 236 tests were green).
 **External loop bugs found**: 5.
 
-### T2 live signal on Tribo
+### T2 live signal on Target-A
 - Dependencies scanned: **20 of 37**
 - Major version behind: **2**
 - Minor version behind: **2**
 - Deprecated: **1**
 - Fetch latency: ~1.3s
 
-### Self-cross-review on Tribo
+### Self-cross-review on Target-A
 - Primary pass: 3 SUGGESTION, 2 NIT, `verdict: COMMENT`
 - Devil's advocate pass: found `thum.io` external image service exposed in new code — upgraded to BLOCKER
 - Cross verdict: `PARTIAL`, final verdict upgraded to `REQUEST_CHANGES`
@@ -55,11 +55,11 @@ solo-cto-agent review --staged --markdown
 
 ---
 
-## Drive-Run #2 — palate-pilot (nested package.json)
+## Drive-Run #2 — target-b (nested package.json)
 
 **Invocation**
 ```bash
-cd palate-pilot
+cd target-b
 COWORK_EXTERNAL_KNOWLEDGE=1 solo-cto-agent review --staged --markdown
 ```
 
@@ -74,11 +74,11 @@ The env flag was set. The review output reported `Active external signals: 1/3`.
 
 ---
 
-## Drive-Run #3 — 3stripe-event
+## Drive-Run #3 — target-c
 
 **Invocation**
 ```bash
-cd 3stripe-event
+cd target-c
 COWORK_EXTERNAL_KNOWLEDGE=1 solo-cto-agent review --staged --markdown
 ```
 
@@ -86,15 +86,15 @@ Confirmed F2-A independently. No additional bugs surfaced beyond F2-A class.
 
 ---
 
-## Drive-Run #4 — golf-now (clean-case control)
+## Drive-Run #4 — target-d (clean-case control)
 
 **Invocation**
 ```bash
-cd golf-now
+cd target-d
 COWORK_EXTERNAL_KNOWLEDGE=1 solo-cto-agent review --staged --markdown
 ```
 
-### T2 live signal on golf-now
+### T2 live signal on target-d
 - Dependencies scanned: **6 of 6**
 - Major version behind: **1**
 - Minor version behind: **1**

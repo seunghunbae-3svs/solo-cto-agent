@@ -49,11 +49,11 @@ function readChangelog(projectDir) {
 /**
  * Log a skill change to skill-changelog.md.
  *
- * @param {string} projectDir - Path to Bae_Projects/
+ * @param {string} projectDir - Path to user-projects/
  * @param {Object} change
  * @param {string} change.skill - Modified skill name
  * @param {string} change.description - One-line summary
- * @param {string} change.reason - Reference (E-N / Q-N / Bae feedback / L2 auto)
+ * @param {string} change.reason - Reference (E-N / Q-N / user feedback / L2 auto)
  * @param {string} [change.rollback] - How to revert
  *
  * @returns {number} Change ID
@@ -78,7 +78,7 @@ function logChange(projectDir, change) {
 /**
  * Check all improvement triggers across error-patterns and quality-log.
  *
- * @param {string} projectDir - Path to Bae_Projects/
+ * @param {string} projectDir - Path to user-projects/
  * @returns {Object[]} Array of pending improvements
  */
 function checkTriggers(projectDir) {

@@ -1,6 +1,6 @@
 {
   "{{PRODUCT_REPO_1}}": {
-    "name": "Tribo Store",
+    "name": "Sample Store",
     "theme": "K-beauty premium",
     "primaryColor": "pink/coral tones",
     "framework": "Next.js + Tailwind",
@@ -46,7 +46,7 @@
     "viewports": [375, 768, 1440]
   },
   "{{PRODUCT_REPO_4}}": {
-    "name": "EventBadge",
+    "name": "Sample Events",
     "theme": "professional, event management",
     "primaryColor": "blue/purple tones",
     "framework": "Vite + React",
@@ -69,7 +69,7 @@
     "viewports": [375, 768, 1440]
   },
   "{{PRODUCT_REPO_3}}": {
-    "name": "Palate Pilot",
+    "name": "Sample App",
     "theme": "food/restaurant",
     "primaryColor": "warm orange/red tones",
     "framework": "Next.js + Tailwind",
@@ -92,7 +92,7 @@
     "viewports": [375, 768, 1440]
   },
   "{{PRODUCT_REPO_5}}": {
-    "name": "3Stripe Event",
+    "name": "Sample Event",
     "theme": "government/official",
     "primaryColor": "navy/formal tones",
     "framework": "Next.js + Tailwind",

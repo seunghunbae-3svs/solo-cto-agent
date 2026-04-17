@@ -39,7 +39,7 @@ function loadModule(name) {
  * Run post-task checks (silent unless issues found).
  * Called after every significant task completion.
  *
- * @param {string} projectDir - Path to Bae_Projects/
+ * @param {string} projectDir - Path to user-projects/
  * @param {Object} taskInfo
  * @param {string} taskInfo.type - "code"|"design"|"document"|"analysis"
  * @param {string} taskInfo.skill - Skill used
