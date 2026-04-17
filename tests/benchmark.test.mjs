@@ -289,4 +289,214 @@ describe("cli benchmark", () => {
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("1.23h");
   });
+
+  // Feature 2: --diff tests
+  describe("--diff mode", () => {
+    beforeEach(() => {
+      const historyDir = path.join(BENCHMARKS_DIR, "history");
+      if (fs.existsSync(historyDir)) {
+        const files = fs.readdirSync(historyDir);
+        for (const file of files) {
+          fs.unlinkSync(path.join(historyDir, file));
+        }
+        fs.rmdirSync(historyDir);
+      }
+    });
+
+    afterEach(() => {
+      const historyDir = path.join(BENCHMARKS_DIR, "history");
+      if (fs.existsSync(historyDir)) {
+        const files = fs.readdirSync(historyDir);
+        for (const file of files) {
+          fs.unlinkSync(path.join(historyDir, file));
+        }
+        fs.rmdirSync(historyDir);
+      }
+    });
+
+    it("shows delta between latest and previous snapshot", () => {
+      const historyDir = path.join(BENCHMARKS_DIR, "history");
+      fs.mkdirSync(historyDir, { recursive: true });
+
+      const previousMetrics = createSampleMetrics();
+      previousMetrics.pr_count = 40;
+      previousMetrics.merged_count = 35;
+
+      const currentMetrics = createSampleMetrics();
+      currentMetrics.pr_count = 50;
+      currentMetrics.merged_count = 45;
+
+      fs.writeFileSync(
+        path.join(historyDir, "2026-04-16.json"),
+        JSON.stringify(previousMetrics, null, 2),
+        "utf8"
+      );
+      fs.writeFileSync(
+        path.join(historyDir, "2026-04-17.json"),
+        JSON.stringify(currentMetrics, null, 2),
+        "utf8"
+      );
+
+      fs.writeFileSync(METRICS_FILE, JSON.stringify(currentMetrics, null, 2), "utf8");
+
+      const r = run(["benchmark", "--diff"]);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain("--diff");
+      expect(r.stdout).toContain("Changes:");
+    });
+
+    it("outputs diff in JSON format with --json flag", () => {
+      const historyDir = path.join(BENCHMARKS_DIR, "history");
+      fs.mkdirSync(historyDir, { recursive: true });
+
+      const previousMetrics = createSampleMetrics();
+      previousMetrics.pr_count = 40;
+
+      const currentMetrics = createSampleMetrics();
+      currentMetrics.pr_count = 50;
+
+      fs.writeFileSync(
+        path.join(historyDir, "2026-04-16.json"),
+        JSON.stringify(previousMetrics, null, 2),
+        "utf8"
+      );
+      fs.writeFileSync(
+        path.join(historyDir, "2026-04-17.json"),
+        JSON.stringify(currentMetrics, null, 2),
+        "utf8"
+      );
+
+      fs.writeFileSync(METRICS_FILE, JSON.stringify(currentMetrics, null, 2), "utf8");
+
+      const r = run(["benchmark", "--diff", "--json"]);
+      expect(r.status).toBe(0);
+      const output = JSON.parse(r.stdout);
+      expect(output.pr_count_delta).toBe(10);
+      expect(output).toHaveProperty("latest_date");
+      expect(output).toHaveProperty("previous_date");
+    });
+
+    it("fails if less than 2 snapshots exist", () => {
+      const historyDir = path.join(BENCHMARKS_DIR, "history");
+      fs.mkdirSync(historyDir, { recursive: true });
+
+      const metrics = createSampleMetrics();
+      fs.writeFileSync(
+        path.join(historyDir, "2026-04-17.json"),
+        JSON.stringify(metrics, null, 2),
+        "utf8"
+      );
+      fs.writeFileSync(METRICS_FILE, JSON.stringify(metrics, null, 2), "utf8");
+
+      const r = run(["benchmark", "--diff"]);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain("at least 2");
+    });
+  });
+
+  // Feature 2: --trend tests
+  describe("--trend mode", () => {
+    beforeEach(() => {
+      const historyDir = path.join(BENCHMARKS_DIR, "history");
+      if (fs.existsSync(historyDir)) {
+        const files = fs.readdirSync(historyDir);
+        for (const file of files) {
+          fs.unlinkSync(path.join(historyDir, file));
+        }
+        fs.rmdirSync(historyDir);
+      }
+    });
+
+    afterEach(() => {
+      const historyDir = path.join(BENCHMARKS_DIR, "history");
+      if (fs.existsSync(historyDir)) {
+        const files = fs.readdirSync(historyDir);
+        for (const file of files) {
+          fs.unlinkSync(path.join(historyDir, file));
+        }
+        fs.rmdirSync(historyDir);
+      }
+    });
+
+    it("displays sparkline for last 7 days", () => {
+      const historyDir = path.join(BENCHMARKS_DIR, "history");
+      fs.mkdirSync(historyDir, { recursive: true });
+
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(2026, 3, 11 + i).toISOString().split("T")[0];
+        const metrics = createSampleMetrics();
+        metrics.pr_count = 40 + i * 5;
+        fs.writeFileSync(
+          path.join(historyDir, `${date}.json`),
+          JSON.stringify(metrics, null, 2),
+          "utf8"
+        );
+      }
+
+      const metrics = createSampleMetrics();
+      fs.writeFileSync(METRICS_FILE, JSON.stringify(metrics, null, 2), "utf8");
+
+      const r = run(["benchmark", "--trend"]);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain("--trend");
+      expect(r.stdout).toContain("PR Count:");
+    });
+
+    it("outputs trend data in JSON format", () => {
+      const historyDir = path.join(BENCHMARKS_DIR, "history");
+      fs.mkdirSync(historyDir, { recursive: true });
+
+      for (let i = 0; i < 3; i++) {
+        const date = new Date(2026, 3, 15 + i).toISOString().split("T")[0];
+        const metrics = createSampleMetrics();
+        metrics.pr_count = 30 + i * 10;
+        fs.writeFileSync(
+          path.join(historyDir, `${date}.json`),
+          JSON.stringify(metrics, null, 2),
+          "utf8"
+        );
+      }
+
+      const metrics = createSampleMetrics();
+      fs.writeFileSync(METRICS_FILE, JSON.stringify(metrics, null, 2), "utf8");
+
+      const r = run(["benchmark", "--trend", "--json"]);
+      expect(r.status).toBe(0);
+      const output = JSON.parse(r.stdout);
+      expect(output).toHaveProperty("pr_count_trend");
+      expect(Array.isArray(output.pr_count_trend)).toBe(true);
+    });
+
+    it("shows up to 7 recent snapshots", () => {
+      const historyDir = path.join(BENCHMARKS_DIR, "history");
+      fs.mkdirSync(historyDir, { recursive: true });
+
+      for (let i = 0; i < 10; i++) {
+        const date = new Date(2026, 3, 8 + i).toISOString().split("T")[0];
+        const metrics = createSampleMetrics();
+        fs.writeFileSync(
+          path.join(historyDir, `${date}.json`),
+          JSON.stringify(metrics, null, 2),
+          "utf8"
+        );
+      }
+
+      const metrics = createSampleMetrics();
+      fs.writeFileSync(METRICS_FILE, JSON.stringify(metrics, null, 2), "utf8");
+
+      const r = run(["benchmark", "--trend", "--json"]);
+      expect(r.status).toBe(0);
+      const output = JSON.parse(r.stdout);
+      expect(output.snapshot_count).toBeLessThanOrEqual(7);
+    });
+
+    it("fails if no history directory exists", () => {
+      const metrics = createSampleMetrics();
+      fs.writeFileSync(METRICS_FILE, JSON.stringify(metrics, null, 2), "utf8");
+
+      const r = run(["benchmark", "--trend"]);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain("No history directory");
+    });
+  });
 });
