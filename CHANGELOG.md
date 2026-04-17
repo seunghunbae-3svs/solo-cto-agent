@@ -121,6 +121,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* feat(tier3): plugin registry search, setup.sh enhancement, v1.3.0 (#100)
+
 * feat: Tier 2 — metrics history, benchmark diff/trend, enhanced validation (#99)
 
 * feat: Tier 1 — benchmark CLI, docs, expanded error catalog (#98)
