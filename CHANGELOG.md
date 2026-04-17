@@ -121,6 +121,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* docs: sharpen README intro — feature-first, install in 2 lines
+
 * chore: v1.3.2 — clean up README slop, sync versions, update metrics
 
 * ci: add VS Code extension auto-publish to release workflow
