@@ -84,6 +84,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* fix: align HTTP timeout with Telegram long-poll timeout (#103)
+
 * fix: delete webhook before getUpdates polling (#102)
 
 * feat: telegram-bot callback handler + remove experimental gate (#101)
