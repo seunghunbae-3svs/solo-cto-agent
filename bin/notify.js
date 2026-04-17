@@ -258,6 +258,20 @@ async function notifyReviewResult(reviewData) {
     ? "review.dual-disagree"
     : (blockers > 0 ? "review.blocker" : null);
 
+  // Cross-check display: show icon reflecting verdict nature, not just agreement
+  let crossCheckDisplay = "(off)";
+  if (reviewData.crossCheck) {
+    const cv = reviewData.crossCheck.crossVerdict;
+    if (cv === "DISAGREE") {
+      crossCheckDisplay = "⚠️ DISAGREE";
+    } else if (cv === "APPROVE") {
+      crossCheckDisplay = "✅ AGREE (APPROVE)";
+    } else {
+      // Both agree but verdict is negative (REQUEST_CHANGES, COMMENT, etc.)
+      crossCheckDisplay = `❌ AGREE (${cv})`;
+    }
+  }
+
   return notify({
     severity,
     title: `Review ${verdict} — ${blockers} blocker / ${suggestions} suggestion`,
@@ -268,7 +282,7 @@ async function notifyReviewResult(reviewData) {
       agent: reviewData.agent,
       diffSource: reviewData.diffSource,
       cost: reviewData.cost,
-      crossCheck: reviewData.crossCheck ? reviewData.crossCheck.crossVerdict : "(off)",
+      crossCheck: crossCheckDisplay,
     },
   });
 }

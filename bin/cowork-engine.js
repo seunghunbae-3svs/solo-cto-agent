@@ -1635,7 +1635,11 @@ ${diff}
   );
   log(
     `${COLORS.bold}│${COLORS.reset} Agreement: ${
-      comparison.verdictMatch ? COLORS.green + "YES" : COLORS.red + "NO"
+      comparison.verdictMatch
+        ? (finalVerdict === "APPROVE"
+            ? COLORS.green + "YES ✅"
+            : COLORS.red + "YES ❌ (both negative)")
+        : COLORS.red + "NO ⚠️"
     }${COLORS.reset}`
   );
   log(
@@ -1691,7 +1695,10 @@ ${diff}
       ...((claudeReview && claudeReview.issues) || []),
       ...((codexReview && codexReview.issues) || []),
     ];
-    const agreementLabel = crossVerdict === "DISAGREE" ? "NO" : "YES";
+    const isNegativeAgreement = crossVerdict !== "DISAGREE" && finalVerdict !== "APPROVE";
+    const agreementLabel = crossVerdict === "DISAGREE"
+      ? "NO ⚠️"
+      : (isNegativeAgreement ? "YES ❌" : "YES ✅");
     await notifyMod
       .notifyReviewResult({
         verdict: finalVerdict,

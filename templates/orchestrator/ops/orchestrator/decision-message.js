@@ -316,10 +316,12 @@ function buildDecisionMessage(locale, { repo, prNumber, prTitle, phase, previewU
   const blockerText = blockers || L(locale, 'No critical issues flagged', '특별한 문제 표시 없음');
   const codexLine = codexAssessment || L(locale, '(summary pending)', '(요약 준비 중)');
   const claudeLine = claudeAssessment || L(locale, '(summary pending)', '(요약 준비 중)');
-  const header = blockers
+  const isNegativeConsensus = consensus === 'REVISE' || consensus === 'HOLD';
+  const header = (blockers || isNegativeConsensus)
     ? L(locale, '🔴 Decision needed', '🔴 결정 필요')
     : L(locale, '✅ Decision check', '✅ 결정 확인');
-  const consensusLine = consensus || L(locale, 'pending', 'pending');
+  const consensusIcon = consensus === 'APPROVE' ? '✅' : (consensus === 'REVISE' ? '❌' : (consensus === 'HOLD' ? '⚠️' : ''));
+  const consensusLine = consensus ? `${consensusIcon} ${consensus}` : L(locale, 'pending', 'pending');
   const actionLine = blockers || !previewUrl
     ? L(locale, 'Action: choose revise or hold', '해야 할 일: 수정 또는 보류 중 선택해주세요')
     : L(locale, 'Action: choose approve or hold', '해야 할 일: 승인 또는 보류 중 선택해주세요');
@@ -355,7 +357,8 @@ function buildNotifyMessage(locale, { repo, prNumber, prTitle, phase, previewUrl
   const blockerText = blockers || L(locale, 'No critical issues flagged', '특별한 문제 표시 없음');
   const codexLine = codexAssessment || L(locale, '(summary pending)', '(요약 준비 중)');
   const claudeLine = claudeAssessment || L(locale, '(summary pending)', '(요약 준비 중)');
-  const consensusLine = consensus || L(locale, 'pending', 'pending');
+  const consensusIcon = consensus === 'APPROVE' ? '✅' : (consensus === 'REVISE' ? '❌' : (consensus === 'HOLD' ? '⚠️' : ''));
+  const consensusLine = consensus ? `${consensusIcon} ${consensus}` : L(locale, 'pending', 'pending');
   const choiceBlock = (options && options.length >= 2)
     ? `\n${L(locale, 'Available options', '선택 가능한 결과물')}\n${options.map(o => `- ${o.label}: PR #${o.number} ${o.url}`).join('\n')}`
     : '';

@@ -112,7 +112,8 @@ Write in Korean.`
 
   const actionLine = hasBlocker ? '결정 필요: 수정 또는 보류' : '결정 가능: 승인 또는 보류';
   const reasonLine = hasBlocker ? '막는 문제(블로커)가 발견되었습니다.' : '막는 문제는 표시되지 않았습니다.';
-  await telegram(`${hasBlocker ? '⛔' : '✅'} 교차 리뷰 완료\n\n${PR_REPO} PR #${PR_NUMBER}\n리뷰어: ${reviewer}\n요약: ${reasonLine}\n${actionLine}\n\n${pr.html_url}`);
+  const verdictIcon = hasBlocker ? '⛔' : (verdict === 'REQUEST_CHANGES' ? '❌' : '✅');
+  await telegram(`${verdictIcon} 교차 리뷰 완료\n\n${PR_REPO} PR #${PR_NUMBER}\n리뷰어: ${reviewer}\nVerdict: ${verdict}\n요약: ${reasonLine}\n${actionLine}\n\n${pr.html_url}`);
 }
 
 main().catch(async (err) => {
