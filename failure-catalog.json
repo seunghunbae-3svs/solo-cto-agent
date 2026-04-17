@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-04-13",
+  "updated_at": "2026-04-17",
   "items": [
     {
       "id": "ERR-001",
@@ -106,6 +106,76 @@
       "pattern": "Conflicting peer dependency",
       "description": "npm install fails due to incompatible package version requirements.",
       "fix": "Check which packages conflict, pin compatible versions, or use --legacy-peer-deps as last resort."
+    },
+    {
+      "id": "ERR-016",
+      "category": "build",
+      "pattern": "@import is not allowed",
+      "description": "Tailwind v4 @import rules not properly configured in CSS entrypoint.",
+      "fix": "Ensure @import 'tailwindcss' is at the top of your main CSS file before other imports."
+    },
+    {
+      "id": "ERR-017",
+      "category": "build",
+      "pattern": "conflicting metadata",
+      "description": "Next.js App Router metadata export conflict in layout and page files.",
+      "fix": "Define metadata only in layout.tsx, or use generateMetadata() in pages. Do not export metadata from both."
+    },
+    {
+      "id": "ERR-018",
+      "category": "runtime",
+      "pattern": "Migration pending",
+      "description": "Prisma schema mismatch due to unapplied migrations or schema changes.",
+      "fix": "Run 'npx prisma migrate deploy' or 'npx prisma db push' to sync schema with database."
+    },
+    {
+      "id": "ERR-019",
+      "category": "runtime",
+      "pattern": "new row violates row-level security policy",
+      "description": "Supabase RLS policy denying INSERT/UPDATE/DELETE operation for authenticated user.",
+      "fix": "Check RLS policies on the table and verify user role/claim matches the policy condition."
+    },
+    {
+      "id": "ERR-020",
+      "category": "deploy",
+      "pattern": "FUNCTION_INVOCATION_TIMEOUT",
+      "description": "Vercel serverless function exceeded 10-second free tier timeout limit.",
+      "fix": "Optimize function (move heavy work to background jobs, cache results) or upgrade to Pro plan for longer timeout."
+    },
+    {
+      "id": "ERR-021",
+      "category": "build",
+      "pattern": "ERR_MODULE_NOT_FOUND|ERR_REQUIRE_ESM",
+      "description": "ESM/CJS module interop error when mixing import/require or using .mjs/.cjs incorrectly.",
+      "fix": "Ensure all imports/requires are consistent: use 'import' for ESM files, require for CJS. Check package.json 'type' field."
+    },
+    {
+      "id": "ERR-022",
+      "category": "build",
+      "pattern": "'use client' is not defined|'use server' is not allowed here",
+      "description": "React Server Component directive missing or placed in wrong location.",
+      "fix": "Add 'use client' at the top of client components or 'use server' at the top of server functions."
+    },
+    {
+      "id": "ERR-023",
+      "category": "runtime",
+      "pattern": "CONFLICT.*merge conflict|both modified",
+      "description": "Git merge conflict in lock files (package-lock.json, yarn.lock, etc.) during deployment.",
+      "fix": "Resolve merge conflict in lock file, remove conflicting markers, re-run 'npm install' or 'yarn install'."
+    },
+    {
+      "id": "ERR-024",
+      "category": "build",
+      "pattern": "Environment variable.*not found|undefined env var",
+      "description": "Build-time environment variable missing when running build script.",
+      "fix": "Define environment variable in .env.local (dev) or CI/CD secrets (prod), then run build again."
+    },
+    {
+      "id": "ERR-025",
+      "category": "build",
+      "pattern": "Object is possibly 'null'|Cannot be null",
+      "description": "TypeScript strict null check failure due to missing null guard or type assertion.",
+      "fix": "Add null check, use optional chaining (?.), non-null assertion (!), or Type narrowing (if checks)."
     }
   ]
 }
