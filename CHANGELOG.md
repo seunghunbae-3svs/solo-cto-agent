@@ -121,6 +121,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* docs: add hero banner to README, update test badge to 996
+
 * fix: rewrite managedAgentReview to match real Managed Agents API
 
 * chore: vscode extension packaging verified (icon, license, gitignore)
