@@ -71,6 +71,7 @@ Usage:
   solo-cto-agent routine schedules [--json]
   solo-cto-agent knowledge [--session|--file <path>|--manual] [--project <tag>]
   solo-cto-agent session save|restore|list [--project <tag>] [--session <file>] [--limit <n>]
+  solo-cto-agent benchmark [--json|--html]
   solo-cto-agent status
   solo-cto-agent lint [path]
   solo-cto-agent doctor
@@ -94,6 +95,7 @@ Commands:
   dual-review       Explicit dual-agent cross-review (Claude + OpenAI)
   knowledge         Extract session decisions into knowledge articles via Claude API
   session           Save/restore/list session context (cowork-main mode)
+  benchmark         Display metrics dashboard (--json for raw data, --html to open web dashboard)
   status            Check skill health, error catalog, sync status (local only, no network)
   lint              Check skill files for size and structure issues
   doctor            Complete system health check (skills, engine, API keys, notifications, catalog)
@@ -129,6 +131,9 @@ Examples:
   npx solo-cto-agent session save --project sample-store   # save session context
   npx solo-cto-agent session restore                       # load most recent session
   npx solo-cto-agent session list --limit 5                # show 5 recent sessions
+  npx solo-cto-agent benchmark                             # display metrics in terminal
+  npx solo-cto-agent benchmark --json                      # output JSON metrics
+  npx solo-cto-agent benchmark --html                      # open web dashboard
   npx solo-cto-agent notify deploy-ready --target production --url https://myapp.com --commit abc1234
   npx solo-cto-agent notify deploy-error --target preview --body "$(tail -50 build.log)"
   npx solo-cto-agent ci-setup --repo owner/repo              # deploy 3-pass review workflow
@@ -1062,6 +1067,77 @@ function countFiles(dir) {
 
 // status is now pure-local — no network calls. Use `sync` to fetch remote data.
 
+function benchmarkCommand(args) {
+  const metricsPath = path.join(ROOT, "benchmarks", "metrics-latest.json");
+
+  if (!fs.existsSync(metricsPath)) {
+    console.error("❌ No benchmark metrics found. Run: npm run benchmark:collect");
+    process.exit(1);
+  }
+
+  try {
+    const metrics = JSON.parse(fs.readFileSync(metricsPath, "utf8"));
+
+    if (args.includes("--html")) {
+      // Open HTML dashboard
+      const dashboardPath = path.join(ROOT, "benchmarks", "dashboard.html");
+      if (!fs.existsSync(dashboardPath)) {
+        console.error("❌ dashboard.html not found");
+        process.exit(1);
+      }
+      const { execSync } = require("child_process");
+      const platform = process.platform;
+      const cmd = platform === "darwin" ? "open" : platform === "win32" ? "start" : "xdg-open";
+      execSync(`${cmd} "${dashboardPath}"`);
+      console.log(`📊 Dashboard opened: ${dashboardPath}`);
+      return;
+    }
+
+    if (args.includes("--json")) {
+      // Output raw JSON
+      console.log(JSON.stringify(metrics, null, 2));
+      return;
+    }
+
+    // Default: terminal display
+    console.log("");
+    console.log("solo-cto-agent benchmark — metrics for last 30 days");
+    console.log("─".repeat(50));
+    console.log(`  Repo:              ${metrics.repo}`);
+    console.log(`  Window:            ${metrics.window_days} days`);
+    console.log(`  Collected:         ${new Date(metrics.collected_at).toLocaleString()}`);
+    console.log("");
+    console.log("PR Metrics:");
+    console.log(`  Total PRs:         ${metrics.pr_count}`);
+    console.log(`  Merged:            ${metrics.merged_count} (${((metrics.merged_count / metrics.pr_count) * 100).toFixed(1)}%)`);
+    console.log(`  Mean Time to Merge: ${metrics.mean_time_to_merge_hours.toFixed(2)}h`);
+    console.log(`  Cross-Review Rate: ${(metrics.cross_review_rate * 100).toFixed(1)}%`);
+    console.log("");
+    console.log("Review Decisions:");
+    console.log(`  Total:             ${metrics.decision_count}`);
+    console.log(`  Approve Rate:      ${(metrics.decision_approve_rate * 100).toFixed(1)}%`);
+    console.log(`  Revise Rate:       ${(metrics.decision_revise_rate * 100).toFixed(1)}%`);
+    console.log(`  Hold Rate:         ${(metrics.decision_hold_rate * 100).toFixed(1)}%`);
+    console.log(`  Mean Latency:      ${metrics.decision_mean_latency_hours.toFixed(2)}h`);
+    console.log("");
+    console.log("Rework Metrics:");
+    console.log(`  Total Cycles:      ${metrics.rework_cycle_total}`);
+    console.log(`  Average:           ${metrics.rework_cycle_avg.toFixed(2)}`);
+    console.log(`  Rework Rate:       ${(metrics.prs_with_rework_rate * 100).toFixed(1)}%`);
+    console.log("");
+    console.log("Managed Repos:");
+    console.log(`  Count:             ${metrics.managed_repo_count}`);
+    console.log(`  Cross-Repo PRs:    ${metrics.cross_repo_pr_count}`);
+    console.log(`  Cross-Repo Merged: ${metrics.cross_repo_merged_count}`);
+    console.log(`  Repos:             ${metrics.managed_repos.join(", ")}`);
+    console.log("");
+    console.log(`💡 Tip: Use 'solo-cto-agent benchmark --html' to open the dashboard`);
+  } catch (e) {
+    console.error(`❌ Error reading metrics: ${e.message}`);
+    process.exit(1);
+  }
+}
+
 function statusCommand() {
   const targetDir = localSkillDir();
   const skillPath = path.join(targetDir, "SKILL.md");
@@ -1984,6 +2060,11 @@ async function main() {
 
   if (cmd === "doctor") {
     doctorCommand({ quick: args.includes("--quick") });
+    return;
+  }
+
+  if (cmd === "benchmark") {
+    benchmarkCommand(args);
     return;
   }
 
