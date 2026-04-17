@@ -84,6 +84,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* feat: Tier 1 — benchmark CLI, docs, expanded error catalog (#98)
+
 * feat: /prs, /dashboard commands + natural language (T3) (#104)
 
 * fix: align HTTP timeout with Telegram long-poll timeout (#103)
