@@ -369,6 +369,137 @@ function formatPluginListText(plugins) {
 }
 
 // ---------------------------------------------------------------------------
+// Install from npm registry or local path
+// ---------------------------------------------------------------------------
+
+/**
+ * Install a plugin from the npm registry.
+ * 1. Search the registry for the plugin
+ * 2. Fetch and parse the package.json from npm
+ * 3. Validate with validatePluginPackage
+ * 4. Call addPlugin to register in manifest
+ *
+ * Returns { ok, plugin, message, error }
+ */
+async function installFromRegistry(name, opts = {}) {
+  if (!name || typeof name !== "string") {
+    return { ok: false, error: "plugin name is required" };
+  }
+
+  try {
+    // Search for exact plugin name first
+    const searchResult = await searchRegistry(name);
+    if (!searchResult.ok) {
+      return { ok: false, error: `search failed: ${searchResult.error}` };
+    }
+
+    // Find exact match (case-insensitive)
+    const match = searchResult.results.find(
+      (r) => r.name && r.name.toLowerCase() === name.toLowerCase()
+    );
+    if (!match) {
+      return {
+        ok: false,
+        error: `plugin not found in registry: ${name}. Try "solo-cto-agent plugin search ${name}"`,
+      };
+    }
+
+    // Fetch full package.json from npm
+    const npmUrl = `https://registry.npmjs.org/${encodeURIComponent(match.name)}/${encodeURIComponent(match.version)}`;
+    const pkgResponse = await fetch(npmUrl, {
+      headers: { "User-Agent": "solo-cto-agent/1.3.0" },
+      timeout: 10000,
+    });
+
+    if (!pkgResponse.ok) {
+      return {
+        ok: false,
+        error: `failed to fetch package from npm: ${pkgResponse.status}`,
+      };
+    }
+
+    const pkg = await pkgResponse.json();
+
+    // Validate before adding
+    const v = validatePluginPackage(pkg);
+    if (!v.ok) {
+      return {
+        ok: false,
+        error: `plugin validation failed: ${v.errors.join("; ")}`,
+      };
+    }
+
+    // Register in manifest
+    const source = `npm:${match.name}@${match.version}`;
+    const addResult = addPlugin({ pkg, source }, opts);
+    if (!addResult.ok) {
+      return {
+        ok: false,
+        error: `failed to add plugin: ${addResult.errors.join("; ")}`,
+      };
+    }
+
+    return {
+      ok: true,
+      plugin: addResult.plugin,
+      replaced: addResult.replaced,
+      message: `${addResult.replaced ? "Updated" : "Installed"} ${addResult.plugin.name}@${addResult.plugin.version} from npm`,
+    };
+  } catch (e) {
+    return { ok: false, error: `install error: ${e.message}` };
+  }
+}
+
+/**
+ * Install a plugin from a local path.
+ * 1. Read package.json from the path
+ * 2. Validate with validatePluginPackage
+ * 3. Call addPlugin to register in manifest
+ *
+ * Returns { ok, plugin, message, error }
+ */
+function installFromPath(localPath, opts = {}) {
+  if (!localPath || typeof localPath !== "string") {
+    return { ok: false, error: "local path is required" };
+  }
+
+  // Resolve to absolute path
+  const abs = path.resolve(localPath);
+
+  // Read package.json
+  const read = readPackageJsonFromPath(abs);
+  if (!read.ok) {
+    return { ok: false, error: read.error };
+  }
+
+  // Validate
+  const v = validatePluginPackage(read.pkg);
+  if (!v.ok) {
+    return {
+      ok: false,
+      error: `plugin validation failed: ${v.errors.join("; ")}`,
+    };
+  }
+
+  // Register in manifest
+  const source = `path:${abs}`;
+  const addResult = addPlugin({ pkg: read.pkg, source }, opts);
+  if (!addResult.ok) {
+    return {
+      ok: false,
+      error: `failed to add plugin: ${addResult.errors.join("; ")}`,
+    };
+  }
+
+  return {
+    ok: true,
+    plugin: addResult.plugin,
+    replaced: addResult.replaced,
+    message: `${addResult.replaced ? "Updated" : "Installed"} ${addResult.plugin.name}@${addResult.plugin.version} from ${source}`,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
@@ -393,4 +524,6 @@ module.exports = {
   searchRegistry,
   formatSearchResults,
   formatPluginListText,
+  installFromRegistry,
+  installFromPath,
 };

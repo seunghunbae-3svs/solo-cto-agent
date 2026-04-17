@@ -129,17 +129,15 @@ describe("provider base URL configuration", () => {
   });
 
   test("env ANTHROPIC_API_BASE takes precedence over config file", () => {
-    // This is verified by the CONFIG construction:
+    // After P1 refactor, CONFIG construction lives in bin/engine/core.js
     // anthropicBase: process.env.ANTHROPIC_API_BASE || config || default
-    // The precedence order is baked into the object literal
     const src = fs.readFileSync(
-      path.join(process.cwd(), "bin", "cowork-engine.js"), "utf8"
+      path.join(process.cwd(), "bin", "engine", "core.js"), "utf8"
     );
     // Verify env var is checked first in the source
     expect(src).toMatch(/process\.env\.ANTHROPIC_API_BASE/);
     expect(src).toMatch(/process\.env\.OPENAI_API_BASE/);
     // Verify config is checked second (after env var, before default).
-    // Default may be a literal string or a C.API_HOSTS.anthropic constant reference.
     const anthropicLine = src.match(/anthropicBase:\s*process\.env\.ANTHROPIC_API_BASE[\s\S]*?(C\.API_HOSTS\.anthropic|"api\.anthropic\.com")/);
     expect(anthropicLine).toBeTruthy();
   });
@@ -206,12 +204,18 @@ describe("diff chunking", () => {
   });
 
   test("diff chunking code exists in localReview", () => {
-    const src = fs.readFileSync(
+    // After P1 refactor, chunking orchestration is in cowork-engine.js
+    // and chunk splitting/merging logic is in engine/review.js
+    const facadeSrc = fs.readFileSync(
       path.join(process.cwd(), "bin", "cowork-engine.js"), "utf8"
     );
-    expect(src).toMatch(/maxChunkBytes/);
-    expect(src).toMatch(/Diff is large/);
-    expect(src).toMatch(/truncated/);
+    const reviewSrc = fs.readFileSync(
+      path.join(process.cwd(), "bin", "engine", "review.js"), "utf8"
+    );
+    const combined = facadeSrc + reviewSrc;
+    expect(combined).toMatch(/maxChunkBytes/);
+    expect(combined).toMatch(/Diff is large/);
+    expect(combined).toMatch(/truncated/);
   });
 });
 
@@ -220,8 +224,9 @@ describe("diff chunking", () => {
 // ===========================================================================
 describe("config validation", () => {
   test("_loadUserConfig is called before CONFIG is created", () => {
+    // After P1 refactor, config logic lives in bin/engine/core.js
     const src = fs.readFileSync(
-      path.join(process.cwd(), "bin", "cowork-engine.js"), "utf8"
+      path.join(process.cwd(), "bin", "engine", "core.js"), "utf8"
     );
     const loadIdx = src.indexOf("const _userConfig = _loadUserConfig()");
     const configIdx = src.indexOf("const CONFIG = {");
@@ -231,8 +236,9 @@ describe("config validation", () => {
   });
 
   test("config file path can be overridden via SOLO_CTO_CONFIG", () => {
+    // After P1 refactor, config logic lives in bin/engine/core.js
     const src = fs.readFileSync(
-      path.join(process.cwd(), "bin", "cowork-engine.js"), "utf8"
+      path.join(process.cwd(), "bin", "engine", "core.js"), "utf8"
     );
     expect(src).toMatch(/process\.env\.SOLO_CTO_CONFIG/);
   });

@@ -375,6 +375,7 @@ function auditRepoEntry(entry, packageRoot) {
         status: file.optional ? "OPTIONAL_MISSING" : "MISSING",
         optional: !!file.optional,
         category: file.category || "template",
+        templatePath: file.templatePath,
       });
       continue;
     }
@@ -398,6 +399,7 @@ function auditRepoEntry(entry, packageRoot) {
       status,
       optional: !!file.optional,
       category: file.category || "template",
+      templatePath: file.templatePath,
     });
   }
 
@@ -439,7 +441,109 @@ function auditManagedRepos(manifestPath, packageRoot) {
   };
 }
 
+function applyFixes(auditResults, packageRoot, opts = {}) {
+  const dryRun = opts.dryRun === true;
+  const exclude = opts.exclude || [];
+  const fixed = [];
+  const skipped = [];
+  const errors = [];
+
+  function shouldExclude(targetPath) {
+    for (const pattern of exclude) {
+      if (targetPath.includes(pattern)) return true;
+    }
+    return false;
+  }
+
+  for (const auditRepo of auditResults.repos) {
+    const repoPath = auditRepo.entry.repoPath;
+    const replacements = auditRepo.entry.replacements || {};
+
+    for (const result of auditRepo.results) {
+      const { targetPath, status, templatePath, optional } = result;
+
+      if (shouldExclude(targetPath)) {
+        skipped.push({ repoPath, targetPath, reason: "excluded" });
+        continue;
+      }
+
+      if (status === "OK") {
+        continue;
+      }
+
+      if (status === "CUSTOM") {
+        skipped.push({ repoPath, targetPath, reason: "customized (user changes detected)" });
+        continue;
+      }
+
+      if (status === "OPTIONAL_MISSING") {
+        skipped.push({ repoPath, targetPath, reason: "optional file" });
+        continue;
+      }
+
+      if (status === "MISSING" && optional) {
+        skipped.push({ repoPath, targetPath, reason: "optional file missing" });
+        continue;
+      }
+
+      const targetAbs = repoPath ? path.join(repoPath, targetPath) : null;
+      if (!targetAbs) {
+        errors.push({ repoPath, targetPath, error: "no repo path available" });
+        continue;
+      }
+
+      try {
+        if (status === "MISSING") {
+          const templateAbs = path.join(packageRoot, templatePath);
+          if (!fs.existsSync(templateAbs)) {
+            errors.push({ repoPath, targetPath, error: "template file not found" });
+            continue;
+          }
+
+          if (dryRun) {
+            fixed.push({ repoPath, targetPath, action: "create" });
+          } else {
+            const rendered = renderTemplate(templateAbs, replacements);
+            fs.mkdirSync(path.dirname(targetAbs), { recursive: true });
+            fs.writeFileSync(targetAbs, rendered, "utf8");
+            fixed.push({ repoPath, targetPath, action: "create" });
+          }
+        } else if (status === "DRIFT") {
+          const templateAbs = path.join(packageRoot, templatePath);
+          if (!fs.existsSync(templateAbs)) {
+            errors.push({ repoPath, targetPath, error: "template file not found" });
+            continue;
+          }
+
+          if (dryRun) {
+            fixed.push({ repoPath, targetPath, action: "restore" });
+          } else {
+            const rendered = renderTemplate(templateAbs, replacements);
+            fs.writeFileSync(targetAbs, rendered, "utf8");
+            fixed.push({ repoPath, targetPath, action: "restore" });
+          }
+        }
+      } catch (err) {
+        errors.push({ repoPath, targetPath, error: err.message });
+      }
+    }
+  }
+
+  return {
+    fixed: fixed.length,
+    skipped: skipped.length,
+    errors: errors.length,
+    details: {
+      fixed,
+      skipped,
+      errors,
+    },
+    dryRun,
+  };
+}
+
 module.exports = {
+  applyFixes,
   auditManagedRepos,
   buildOrchestratorRecords,
   buildProductRepoRecords,

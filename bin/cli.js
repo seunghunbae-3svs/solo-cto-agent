@@ -11,7 +11,7 @@ const https = require("https");
 const { execSync } = require("child_process");
 
 const { syncCommand } = require("./sync");
-const { auditManagedRepos, defaultAuditSettings, loadManifest, makeManagedRepoEntry, upsertManagedRepo, writeManifest } = require("./template-audit");
+const { applyFixes, auditManagedRepos, defaultAuditSettings, loadManifest, makeManagedRepoEntry, upsertManagedRepo, writeManifest } = require("./template-audit");
 const { runWizard, hasWizardFlag } = require("./wizard");
 const i18n = require("./i18n");
 const { localReview, knowledgeCapture, dualReview, detectMode, sessionSave, sessionRestore, sessionList, recordFeedback, setLogChannel, fireRoutine, buildRoutineSchedules, managedAgentReview, getDiff } = require("./cowork-engine");
@@ -130,6 +130,8 @@ Examples:
   npx solo-cto-agent sync --org myorg --repos app1,app2   # dry-run: fetch + display
   npx solo-cto-agent sync --org myorg --apply              # apply: merge remote data into local
   npx solo-cto-agent template-audit                        # audit managed repos against current templates
+  npx solo-cto-agent template-audit --apply --dry-run     # preview fixes without writing
+  npx solo-cto-agent template-audit --apply               # apply fixes (restore drifted/missing files)
   npx solo-cto-agent review                                # Claude review of staged changes
   npx solo-cto-agent review --branch                       # review branch diff vs auto-detected default
   npx solo-cto-agent review --branch --target develop      # review branch diff vs explicit base
@@ -1359,11 +1361,15 @@ function statusCommand() {
   console.log("");
 }
 
-function templateAuditCommand() {
+function templateAuditCommand(opts = {}) {
+  const apply = opts.apply === true;
+  const dryRun = opts.dryRun === true;
+  const exclude = opts.exclude || [];
+
   const audit = auditManagedRepos(localManagedReposPath(), ROOT);
 
   console.log("");
-  console.log("solo-cto-agent template-audit");
+  console.log("solo-cto-agent template-audit" + (apply ? " --apply" : ""));
   console.log("-".repeat(40));
   const summary = printTemplateAudit(audit);
   console.log("");
@@ -1383,10 +1389,39 @@ function templateAuditCommand() {
   console.log(`  Optional missing: ${summary.totals.optionalMissing}`);
   console.log(`  OK files:         ${summary.totals.ok}`);
   console.log("");
-  console.log("Default policy");
-  console.log("  Audit:   enabled");
-  console.log("  Mode:    report-only");
-  console.log("  When:    daily");
+
+  if (apply) {
+    console.log("Applying fixes...");
+    const result = applyFixes(audit, ROOT, { dryRun, exclude });
+
+    console.log("");
+    console.log("Fix Results");
+    console.log(`  Fixed:   ${result.fixed}`);
+    console.log(`  Skipped: ${result.skipped}`);
+    console.log(`  Errors:  ${result.errors}`);
+
+    if (dryRun) {
+      console.log("");
+      console.log("DRY RUN: No changes were written. Use --apply without --dry-run to apply fixes.");
+    }
+
+    if (result.details.errors.length > 0) {
+      console.log("");
+      console.log("Errors");
+      for (const err of result.details.errors) {
+        console.log(`  ${err.repoPath}/${err.targetPath}: ${err.error}`);
+      }
+    }
+  } else {
+    console.log("Default policy");
+    console.log("  Audit:   enabled");
+    console.log("  Mode:    report-only");
+    console.log("  When:    daily");
+    console.log("");
+    console.log("To apply fixes:");
+    console.log("  solo-cto-agent template-audit --apply --dry-run");
+    console.log("  solo-cto-agent template-audit --apply");
+  }
   console.log("");
 }
 
@@ -2200,7 +2235,11 @@ async function main() {
   }
 
   if (cmd === "template-audit") {
-    templateAuditCommand();
+    const apply = args.includes("--apply");
+    const dryRun = args.includes("--dry-run");
+    const exclude = (args.indexOf("--exclude") >= 0) ? args[args.indexOf("--exclude") + 1] : null;
+    const excludeList = exclude ? exclude.split(",").map(s => s.trim()) : [];
+    templateAuditCommand({ apply, dryRun, exclude: excludeList });
     return;
   }
 
@@ -2867,6 +2906,43 @@ async function main() {
       return;
     }
 
+    if (sub === "install") {
+      const nameOrPath = args[2];
+      if (!nameOrPath) {
+        console.error("❌ Usage: solo-cto-agent plugin install <name|path>");
+        console.error("   Example: solo-cto-agent plugin install my-plugin");
+        console.error("   Example: solo-cto-agent plugin install ./plugins/my-plugin");
+        process.exit(1);
+      }
+
+      // Detect if it's a path (contains / or \ or .) or a plugin name
+      const isPath = nameOrPath.includes("/") || nameOrPath.includes("\\") || nameOrPath.startsWith(".");
+
+      (async () => {
+        let res;
+        if (isPath) {
+          res = pluginManager.installFromPath(nameOrPath);
+        } else {
+          res = await pluginManager.installFromRegistry(nameOrPath);
+        }
+
+        if (!res.ok) {
+          console.error(`❌ ${res.error}`);
+          process.exit(1);
+        }
+
+        console.log(`✓ ${res.message}`);
+        console.log(`  agents: ${res.plugin.agents.join(", ")}`);
+        if (res.plugin.capabilities.length) {
+          console.log(`  capabilities: ${res.plugin.capabilities.join(", ")}`);
+        }
+      })().catch((e) => {
+        console.error(`❌ ${e.message}`);
+        process.exit(1);
+      });
+      return;
+    }
+
     if (sub === "test-hooks") {
       let pluginLoader;
       try { pluginLoader = require("./plugin-loader"); }
@@ -2908,7 +2984,7 @@ async function main() {
     }
 
     console.error(`❌ Unknown plugin subcommand: ${sub}`);
-    console.error(`   Use: solo-cto-agent plugin list|show|add|remove`);
+    console.error(`   Use: solo-cto-agent plugin list|show|search|install|add|remove`);
     process.exit(1);
   }
 
