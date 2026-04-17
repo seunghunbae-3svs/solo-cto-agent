@@ -121,6 +121,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* fix: rewrite managedAgentReview to match real Managed Agents API
+
 * chore: vscode extension packaging verified (icon, license, gitignore)
 
 * fix: routine.js readTier import from personalization (not core)
