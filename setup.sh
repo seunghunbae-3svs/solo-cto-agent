@@ -351,6 +351,27 @@ else
       replace_placeholders "$file"
     done
 
+    # Install context compaction defense hooks (2026)
+    echo "  Installing compaction defense hooks..."
+    mkdir -p "$repo_dir/.claude/hooks"
+
+    if [ -f "$SRC/templates/product-repo/.claude/hooks/post-compact.sh" ]; then
+      cp "$SRC/templates/product-repo/.claude/hooks/post-compact.sh" "$repo_dir/.claude/hooks/"
+      chmod +x "$repo_dir/.claude/hooks/post-compact.sh"
+      echo "  ✅ post-compact.sh installed"
+    fi
+
+    if [ -f "$SRC/templates/product-repo/.claude/settings.json" ]; then
+      cp "$SRC/templates/product-repo/.claude/settings.json" "$repo_dir/.claude/"
+      echo "  ✅ .claude/settings.json installed"
+    fi
+
+    # Install compaction-aware CLAUDE.md if not present
+    if [ ! -f "$repo_dir/CLAUDE.md" ] && [ -f "$SRC/templates/product-repo/CLAUDE.md" ]; then
+      cp "$SRC/templates/product-repo/CLAUDE.md" "$repo_dir/"
+      echo "  ✅ CLAUDE.md (compaction defense) installed"
+    fi
+
     AGENT_LABEL=$([ "$TIER" = "cto" ] && echo "multi-agent" || echo "single-agent")
     echo "  ✅ $repo — $WF_INSTALLED workflows ($AGENT_LABEL)"
   done

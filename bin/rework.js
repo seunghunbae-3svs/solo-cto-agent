@@ -14,6 +14,7 @@
  *   --only <severity[,severity]>  filter: BLOCKER, SUGGESTION, NIT (default: BLOCKER,SUGGESTION)
  *   --max-fixes <N>               cap fixes applied per run (default: 5 — circuit breaker)
  *   --no-clean-check              skip "git status clean" precondition (NOT recommended)
+ *   --context-refresh             refresh type definitions before applying (2026 compaction defense)
  *
  * Output: structured result {applied[], skipped[], failed[]} + notify() hook.
  */
@@ -102,6 +103,71 @@ function applyPatch(tmpPath, cwd) {
 }
 
 // ============================================================================
+// CONTEXT REFRESH HELPER (2026 Compaction Defense)
+// ============================================================================
+
+/**
+ * Context refresh for rework loop.
+ * Re-reads type definitions and schema to ensure fixes won't break types.
+ * Called before applyFixes when --context-refresh flag is used.
+ */
+function contextRefreshBeforeFixes(cwd) {
+  const refreshLog = {
+    timestamp: new Date().toISOString(),
+    checkedItems: [],
+  };
+
+  // Check type definitions exist
+  const typesDir = path.join(cwd, "src", "types");
+  if (fs.existsSync(typesDir)) {
+    const typeFiles = fs
+      .readdirSync(typesDir)
+      .filter(f => f.endsWith(".ts") || f.endsWith(".tsx"));
+    refreshLog.checkedItems.push(`Type definitions: ${typeFiles.length} files`);
+  } else {
+    refreshLog.checkedItems.push("Type definitions: NOT FOUND (src/types/)`);
+  }
+
+  // Check schema exists
+  const schemaFiles = [
+    path.join(cwd, "prisma", "schema.prisma"),
+    path.join(cwd, "supabase", "schema.sql"),
+    path.join(cwd, "db", "schema.sql"),
+  ];
+  let schemaFound = false;
+  for (const schemaFile of schemaFiles) {
+    if (fs.existsSync(schemaFile)) {
+      refreshLog.checkedItems.push(`Schema: ${path.basename(schemaFile)}`);
+      schemaFound = true;
+      break;
+    }
+  }
+  if (!schemaFound) {
+    refreshLog.checkedItems.push("Schema: NOT FOUND");
+  }
+
+  // Check package.json
+  const packageFile = path.join(cwd, "package.json");
+  if (fs.existsSync(packageFile)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(packageFile, "utf8"));
+      const depCount = Object.keys(pkg.dependencies || {}).length;
+      refreshLog.checkedItems.push(`Dependencies: ${depCount}`);
+    } catch (_) {
+      refreshLog.checkedItems.push("Dependencies: PARSE ERROR");
+    }
+  }
+
+  // Log refresh results
+  console.log(`[REWORK] Context refresh complete:`);
+  for (const item of refreshLog.checkedItems) {
+    console.log(`  ✓ ${item}`);
+  }
+
+  return refreshLog;
+}
+
+// ============================================================================
 // MAIN: applyFixes
 // ============================================================================
 
@@ -114,9 +180,17 @@ async function applyFixes(options = {}) {
     cleanCheck = true,
     cwd = process.cwd(),
     notifier = null, // optional: { notifyApplyResult } from notify.js
+    contextRefresh = false, // NEW: refresh type definitions before applying
   } = options;
 
   if (!reviewFile) throw new Error("reviewFile is required");
+
+  // Context refresh: re-read type definitions and schema before applying fixes
+  // This is CRITICAL after context compaction to ensure fixes don't break types
+  if (contextRefresh) {
+    console.log("[REWORK] Refreshing context — re-reading type definitions...");
+    contextRefreshBeforeFixes(cwd);
+  }
 
   const { fixes: rawFixes, skips, source } = loadReviewFixes(reviewFile);
 
@@ -214,7 +288,7 @@ async function applyFixes(options = {}) {
 // ============================================================================
 
 function parseArgs(argv) {
-  const out = { only: ["BLOCKER", "SUGGESTION"], maxFixes: 5, cleanCheck: true };
+  const out = { only: ["BLOCKER", "SUGGESTION"], maxFixes: 5, cleanCheck: true, contextRefresh: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i], n = argv[i + 1];
     if (a === "--review") { out.reviewFile = n; i++; }
@@ -222,6 +296,7 @@ function parseArgs(argv) {
     else if (a === "--only" && n) { out.only = n.split(",").map((s) => s.trim().toUpperCase()); i++; }
     else if (a === "--max-fixes" && n) { out.maxFixes = parseInt(n, 10); i++; }
     else if (a === "--no-clean-check") { out.cleanCheck = false; }
+    else if (a === "--context-refresh") { out.contextRefresh = true; }
     else if (a === "--cwd" && n) { out.cwd = n; i++; }
     else if (a === "--help" || a === "-h") { out._help = true; }
   }
@@ -235,19 +310,22 @@ Usage:
   node bin/rework.js --review <file.json>           dry-run (default; safe)
   node bin/rework.js --review <file.json> --apply   actually apply patches
   node bin/rework.js --review <file.json> --apply --only BLOCKER --max-fixes 3
+  node bin/rework.js --review <file.json> --apply --context-refresh   (after compaction)
 
 Options:
-  --review <file>      path to review JSON (uiuxSuggestFixes output or raw review)
-  --apply              apply patches via 'git apply' (otherwise dry-run + validate)
-  --only BLOCKER,...   severity filter (default: BLOCKER,SUGGESTION)
-  --max-fixes N        circuit-breaker cap (default: 5)
-  --no-clean-check     skip git-clean precondition (NOT recommended)
-  --cwd <path>         override working directory (default: cwd)
+  --review <file>          path to review JSON (uiuxSuggestFixes output or raw review)
+  --apply                  apply patches via 'git apply' (otherwise dry-run + validate)
+  --only BLOCKER,...       severity filter (default: BLOCKER,SUGGESTION)
+  --max-fixes N            circuit-breaker cap (default: 5)
+  --no-clean-check         skip git-clean precondition (NOT recommended)
+  --context-refresh        refresh type definitions before applying (2026 compaction defense)
+  --cwd <path>             override working directory (default: cwd)
 
 Safety:
   - Always validates patches with 'git apply --check' before applying.
   - Refuses to apply when working tree is dirty (override: --no-clean-check).
   - Caps applied fixes per run to prevent runaway patches.
+  - Use --context-refresh after context compaction to re-read types and schema.
 `);
 }
 

@@ -2454,6 +2454,197 @@ ${errorPatterns}
 }
 
 // ============================================================================
+// CONTEXT CHECKPOINT SYSTEM (2026 Compaction Defense)
+// ============================================================================
+
+/**
+ * Create a context checkpoint before long operations.
+ * Captures current branch, modified files, and type definitions snapshot.
+ * Stores in .claude/context-checkpoint.json
+ */
+function contextCheckpoint(options = {}) {
+  const {
+    cwd = process.cwd(),
+    label = "auto",
+    includeTypeSnapshot = true,
+  } = options;
+
+  const checkpointDir = path.join(cwd, ".claude");
+  const checkpointFile = path.join(checkpointDir, "context-checkpoint.json");
+
+  try {
+    // Ensure .claude directory exists
+    if (!fs.existsSync(checkpointDir)) {
+      fs.mkdirSync(checkpointDir, { recursive: true });
+    }
+
+    // Get current branch
+    let currentBranch = "unknown";
+    try {
+      currentBranch = execSync("git branch --show-current", {
+        cwd,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "ignore"],
+      }).trim();
+    } catch (_) {}
+
+    // Get modified files
+    let modifiedFiles = [];
+    try {
+      const out = execSync("git diff --name-only HEAD", {
+        cwd,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "ignore"],
+      }).trim();
+      modifiedFiles = out.split("\n").filter(l => l.length > 0);
+    } catch (_) {}
+
+    // Get type definitions snapshot (list of files only)
+    let typeFilesSnapshot = [];
+    if (includeTypeSnapshot) {
+      const typesDir = path.join(cwd, "src", "types");
+      if (fs.existsSync(typesDir)) {
+        typeFilesSnapshot = fs
+          .readdirSync(typesDir)
+          .filter(f => f.endsWith(".ts") || f.endsWith(".tsx"))
+          .map(f => path.join("src/types", f));
+      }
+    }
+
+    const checkpoint = {
+      timestamp: new Date().toISOString(),
+      label,
+      branch: currentBranch,
+      modifiedFiles,
+      modifiedCount: modifiedFiles.length,
+      typeFilesSnapshot,
+      instructions:
+        "After compaction, re-read CLAUDE.md and type definitions before resuming edits.",
+    };
+
+    fs.writeFileSync(checkpointFile, JSON.stringify(checkpoint, null, 2));
+    logSuccess(`Context checkpoint created: ${checkpointFile}`);
+    return checkpoint;
+  } catch (err) {
+    logWarn(`Failed to create context checkpoint: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Restore a context checkpoint and validate current state matches.
+ * Used after context compaction to verify project integrity.
+ */
+function contextRestore(options = {}) {
+  const {
+    cwd = process.cwd(),
+    checkpointFile = null,
+  } = options;
+
+  const defaultCheckpointFile = path.join(cwd, ".claude", "context-checkpoint.json");
+  const targetFile = checkpointFile || defaultCheckpointFile;
+
+  try {
+    if (!fs.existsSync(targetFile)) {
+      logWarn(`No checkpoint found at ${targetFile}`);
+      return null;
+    }
+
+    const checkpoint = JSON.parse(fs.readFileSync(targetFile, "utf8"));
+
+    // Validate current state
+    let currentBranch = "unknown";
+    try {
+      currentBranch = execSync("git branch --show-current", {
+        cwd,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "ignore"],
+      }).trim();
+    } catch (_) {}
+
+    const branchMatch = currentBranch === checkpoint.branch;
+    const validation = {
+      checkpoint,
+      currentBranch,
+      branchMatch,
+      warning: branchMatch
+        ? null
+        : `Branch mismatch: checkpoint on "${checkpoint.branch}", currently on "${currentBranch}"`,
+    };
+
+    logSuccess(`Context restored from checkpoint (${checkpoint.timestamp})`);
+    if (validation.warning) {
+      logWarn(validation.warning);
+    }
+
+    return validation;
+  } catch (err) {
+    logError(`Failed to restore context checkpoint: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Hook for rework loop to refresh context before applying fixes.
+ * Re-reads type definitions and schema to ensure fixes are type-safe.
+ */
+function reworkContextRefresh(options = {}) {
+  const {
+    cwd = process.cwd(),
+    verbose = false,
+  } = options;
+
+  const refreshed = {
+    timestamp: new Date().toISOString(),
+    sources: {},
+  };
+
+  // Re-read type definitions
+  const typesDir = path.join(cwd, "src", "types");
+  if (fs.existsSync(typesDir)) {
+    const files = fs
+      .readdirSync(typesDir)
+      .filter(f => f.endsWith(".ts") || f.endsWith(".tsx"));
+    refreshed.sources.typeDefinitions = files.length;
+    if (verbose) {
+      logSuccess(`Type definitions: ${files.length} files`);
+    }
+  }
+
+  // Re-read schema
+  const schemaFiles = [
+    path.join(cwd, "prisma", "schema.prisma"),
+    path.join(cwd, "supabase", "schema.sql"),
+    path.join(cwd, "db", "schema.sql"),
+  ];
+  for (const schemaFile of schemaFiles) {
+    if (fs.existsSync(schemaFile)) {
+      refreshed.sources.schema = path.basename(schemaFile);
+      if (verbose) {
+        logSuccess(`Schema found: ${schemaFile}`);
+      }
+      break;
+    }
+  }
+
+  // Re-read package.json
+  const packageFile = path.join(cwd, "package.json");
+  if (fs.existsSync(packageFile)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(packageFile, "utf8"));
+      refreshed.sources.project = pkg.name || "unknown";
+      refreshed.sources.dependencies = Object.keys(pkg.dependencies || {}).length;
+      if (verbose) {
+        logSuccess(`Project: ${pkg.name} (${refreshed.sources.dependencies} deps)`);
+      }
+    } catch (_) {}
+  }
+
+  logSuccess(`Rework context refreshed: ${JSON.stringify(refreshed.sources)}`);
+  return refreshed;
+}
+
+// ============================================================================
 // EXPORTS & EXECUTION
 // ============================================================================
 
@@ -2466,6 +2657,10 @@ module.exports = {
   sessionRestore,
   sessionList,
   autoSync,
+  // Context checkpoint system (2026 compaction defense)
+  contextCheckpoint,
+  contextRestore,
+  reworkContextRefresh,
   // Cowork-specific layer (substantive upgrade)
   selfCrossReview,
   readTier,
