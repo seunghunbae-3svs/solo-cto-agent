@@ -84,6 +84,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* fix: create local ref for base branch in solo-cto-review template
+
 * chore: anonymize personal info and internal project names
 
 * release: v1.2.0 — public release polish — Toolkit upgrade: per-tool entry points + examples/
