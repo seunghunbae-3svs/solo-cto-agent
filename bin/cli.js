@@ -2774,6 +2774,31 @@ async function main() {
       return;
     }
 
+    if (sub === "search") {
+      const query = args[2];
+      if (!query) {
+        console.error("❌ Usage: solo-cto-agent plugin search <query>");
+        console.error("   Example: solo-cto-agent plugin search typescript");
+        process.exit(1);
+      }
+      (async () => {
+        const result = await pluginManager.searchRegistry(query);
+        if (!result.ok) {
+          console.error(`❌ ${result.error}`);
+          process.exit(1);
+        }
+        if (args.includes("--json")) {
+          console.log(JSON.stringify(result.results, null, 2));
+        } else {
+          console.log(pluginManager.formatSearchResults(result.results, query));
+        }
+      })().catch((e) => {
+        console.error(`❌ ${e.message}`);
+        process.exit(1);
+      });
+      return;
+    }
+
     if (sub === "show") {
       const name = args[2];
       if (!name) {

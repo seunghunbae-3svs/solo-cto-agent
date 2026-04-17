@@ -285,6 +285,66 @@ function readPackageJsonFromPath(dir) {
 }
 
 // ---------------------------------------------------------------------------
+// NPM Registry Search
+// ---------------------------------------------------------------------------
+
+async function searchRegistry(query) {
+  if (!query || typeof query !== "string") {
+    return { ok: false, error: "query must be a non-empty string" };
+  }
+
+  try {
+    const url = `https://registry.npmjs.org/-/v1/search?text=keywords:solo-cto-agent-plugin%20${encodeURIComponent(query)}&size=20`;
+    const response = await fetch(url, {
+      headers: { "User-Agent": "solo-cto-agent/1.3.0" },
+      timeout: 10000,
+    });
+
+    if (!response.ok) {
+      return { ok: false, error: `npm registry error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    if (!data.objects || !Array.isArray(data.objects)) {
+      return { ok: true, results: [] };
+    }
+
+    const results = data.objects.map((obj) => {
+      const pkg = obj.package || {};
+      return {
+        name: pkg.name || "",
+        version: pkg.version || "unknown",
+        description: pkg.description || "",
+        links: pkg.links || {},
+        keywords: pkg.keywords || [],
+        author: pkg.author?.name || "",
+      };
+    });
+
+    return { ok: true, results, total: data.total || 0 };
+  } catch (e) {
+    return { ok: false, error: `registry unreachable: ${e.message}` };
+  }
+}
+
+function formatSearchResults(results, query) {
+  if (!results.length) {
+    return `No plugins found matching "${query}". Visit: https://www.npmjs.com/search?q=solo-cto-agent-plugin`;
+  }
+
+  const lines = [`Search results for "${query}" (${results.length}):`, ""];
+  for (const r of results) {
+    lines.push(`  ${r.name}@${r.version}`);
+    if (r.description) lines.push(`    ${r.description}`);
+    if (r.author) lines.push(`    by ${r.author}`);
+    if (r.links?.npm) lines.push(`    npm: ${r.links.npm}`);
+    lines.push("");
+  }
+  lines.push("Install with: solo-cto-agent plugin add --path <local-dir>");
+  return lines.join("\n").trimEnd();
+}
+
+// ---------------------------------------------------------------------------
 // Pretty-printing for `solo-cto-agent plugin list`
 // ---------------------------------------------------------------------------
 
@@ -330,5 +390,7 @@ module.exports = {
   addPlugin,
   removePlugin,
   readPackageJsonFromPath,
+  searchRegistry,
+  formatSearchResults,
   formatPluginListText,
 };

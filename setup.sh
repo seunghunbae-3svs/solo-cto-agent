@@ -19,6 +19,7 @@ TIER="builder"
 REPOS=""
 ORCH_NAME="dual-agent-orchestrator"
 MODE="--install"
+INCLUDE_BENCHMARKS=0
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -26,6 +27,7 @@ while [[ $# -gt 0 ]]; do
     --tier) TIER="$2"; shift 2 ;;
     --repos) REPOS="$2"; shift 2 ;;
     --orchestrator-name) ORCH_NAME="$2"; shift 2 ;;
+    --include-benchmarks) INCLUDE_BENCHMARKS=1; shift ;;
     --update|--force) MODE="$1"; shift ;;
     --help|-h)
       echo "Usage: bash setup.sh --org <github-org> [--tier builder|cto] [--repos repo1,repo2]"
@@ -35,6 +37,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --tier builder|cto         builder=Lv4 base (default), cto=Lv5+6 pro"
       echo "  --repos <repo1,repo2>      Product repos to install workflows into"
       echo "  --orchestrator-name <name> Custom orchestrator repo name (default: dual-agent-orchestrator)"
+      echo "  --include-benchmarks       Copy benchmarks/dashboard.html to orchestrator"
       echo "  --update                   Overwrite existing skills"
       exit 0
       ;;
@@ -158,6 +161,15 @@ PY
   fi
 else
   echo "  autopilot.md not found, skipping"
+fi
+
+# ─── Editor Detection ───
+
+DETECTED_EDITOR=""
+if [ -d "$HOME/.cursor" ]; then
+  DETECTED_EDITOR="cursor"
+elif [ -d "$HOME/.windsurf" ]; then
+  DETECTED_EDITOR="windsurf"
 fi
 
 # ─── Step 5: Setup Orchestrator Repo ───
@@ -377,6 +389,30 @@ else
   done
 fi
 
+# ─── Step 6.5: Copy Benchmarks (if requested) ───
+
+if [ "$INCLUDE_BENCHMARKS" = "1" ]; then
+  if [ -f "$SRC/benchmarks/dashboard.html" ]; then
+    mkdir -p "$ORCH_DIR/benchmarks"
+    cp "$SRC/benchmarks/dashboard.html" "$ORCH_DIR/benchmarks/"
+    echo "  ✅ benchmarks/dashboard.html copied"
+  fi
+fi
+
+# ─── Step 6.6: Copy Editor-Specific Docs ───
+
+if [ "$DETECTED_EDITOR" = "cursor" ]; then
+  if [ -f "$SRC/docs/cursor.md" ]; then
+    cp "$SRC/docs/cursor.md" "$CLAUDE_DIR/docs/" 2>/dev/null || mkdir -p "$CLAUDE_DIR/docs" && cp "$SRC/docs/cursor.md" "$CLAUDE_DIR/docs/"
+    echo "  ✅ docs/cursor.md installed (Cursor detected)"
+  fi
+elif [ "$DETECTED_EDITOR" = "windsurf" ]; then
+  if [ -f "$SRC/docs/windsurf.md" ]; then
+    cp "$SRC/docs/windsurf.md" "$CLAUDE_DIR/docs/" 2>/dev/null || mkdir -p "$CLAUDE_DIR/docs" && cp "$SRC/docs/windsurf.md" "$CLAUDE_DIR/docs/"
+    echo "  ✅ docs/windsurf.md installed (Windsurf detected)"
+  fi
+fi
+
 # ─── Step 7: Summary + Required Secrets ───
 
 echo ""
@@ -390,6 +426,12 @@ echo "│  Tier:         $TIER ($([ "$TIER" = "cto" ] && echo "Lv5+6 Pro" || ech
 echo "│  Skills:       ${#SKILLS[@]} installed"
 echo "│  Orchestrator: $ORCH_DIR"
 echo "│  Workflows:    $WF_COUNT"
+if [ "$DETECTED_EDITOR" != "" ]; then
+  echo "│  Editor:       $DETECTED_EDITOR (docs auto-copied)"
+fi
+if [ "$INCLUDE_BENCHMARKS" = "1" ]; then
+  echo "│  Benchmarks:   dashboard.html included"
+fi
 echo "└──────────────────────────────────────────────────────────┘"
 echo ""
 echo "═══ REQUIRED: Set GitHub Secrets ═══"

@@ -1,5 +1,42 @@
 # Changelog
 
+## v1.3.0 (2026-04-17)
+
+**Theme**: Tier 3 deep integration features — plugin registry search, setup automation, type system enhancements.
+
+### Highlights
+* `solo-cto-agent plugin search <query>` — search npm registry for plugins with "solo-cto-agent-plugin" keyword
+* setup.sh enhancements: `--include-benchmarks` flag to deploy dashboard.html, auto-detection of Cursor/Windsurf editors
+* Auto-copy of editor-specific docs (docs/cursor.md, docs/windsurf.md) based on detected environment
+* Enhanced TypeScript definitions: BenchmarkMetrics, BenchmarkDiffResult, PluginSearchResult, HistoryEntry
+* Full test coverage for plugin search, CLI subcommands, and new features
+
+### New: Plugin Search
+* `solo-cto-agent plugin search <query>` fetches from npm registry with fallback to helpful error messages
+* `--json` flag for programmatic consumption
+* Graceful handling of network failures with user-friendly messages
+* Integration with plugin-manager.js for unified plugin experience
+
+### New: Setup.sh Enhancements
+* `--include-benchmarks` flag copies benchmarks/dashboard.html to orchestrator directory
+* Auto-detection of Cursor editor (checks ~/.cursor/ directory)
+* Auto-detection of Windsurf editor (checks ~/.windsurf/ directory)
+* Automatic copy of editor-specific documentation to CLAUDE_DIR/docs/
+* Enhanced summary output showing detected editor and installed features
+
+### Enhanced Types
+* `BenchmarkMetrics`: Matches metrics-latest.json shape (name, description, value, unit, timestamp)
+* `BenchmarkDiffResult`: For --diff output (baseline, current, delta, percentChange)
+* `PluginSearchResult`: npm registry search results (name, version, description, author, links)
+* `HistoryEntry`: For benchmarks/history/*.json (timestamp, metrics[], changes[])
+
+### Tests
+* `tests/plugin-search.test.mjs` — 10 new tests for registry search with HTTP mocking
+* Updated CLI tests for `plugin search` and `plugin list` subcommands
+* All existing tests pass with version bump
+
+---
+
 ## v1.2.0 (2026-04-17)
 
 **Theme**: Public release polish + cowork-main Phase 2/3 + dual-agent metrics.
