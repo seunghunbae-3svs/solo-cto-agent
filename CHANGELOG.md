@@ -121,6 +121,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* chore: v1.3.2 — clean up README slop, sync versions, update metrics
+
 * ci: add VS Code extension auto-publish to release workflow
 
 * docs: add hero banner to README, update test badge to 996
