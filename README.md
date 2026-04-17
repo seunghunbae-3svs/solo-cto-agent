@@ -1,9 +1,13 @@
+<p align="center">
+  <img src="docs/hero-banner.png" alt="solo-cto-agent — AI code review for solo founders" width="720" />
+</p>
+
 # solo-cto-agent
 
 **Your AI coding agent already writes code. This makes it think like a CTO.**
 
 [![npm](https://img.shields.io/npm/v/solo-cto-agent)](https://www.npmjs.com/package/solo-cto-agent)
-[![Test](https://img.shields.io/badge/tests-894%20passing-brightgreen)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/test.yml)
+[![Test](https://img.shields.io/badge/tests-996%20passing-brightgreen)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
