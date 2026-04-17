@@ -281,12 +281,6 @@ async function runWizard(opts = {}, deps = {}) {
     _i18n.setLocale(opts.lang);
   }
 
-  const experimental = process.env.SOLO_CTO_EXPERIMENTAL === "1";
-  if (!experimental && !opts.force) {
-    errLog(t("telegram.wizard.not_experimental"));
-    return { ok: false, reason: "NOT_EXPERIMENTAL" };
-  }
-
   const nonInteractive = !!opts.nonInteractive || !isTTY();
   let rl = null;
 
