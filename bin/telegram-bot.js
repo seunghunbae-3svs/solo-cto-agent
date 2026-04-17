@@ -40,7 +40,8 @@ let pollInterval = null;
 // HTTP helpers (match notify.js + telegram-wizard.js pattern)
 // --------------------------------------------------------------------------
 
-function httpGetJson(rawUrl) {
+function httpGetJson(rawUrl, timeoutMs) {
+  const timeout = timeoutMs || 15000;
   return new Promise((resolve, reject) => {
     const req = https.get(rawUrl, (res) => {
       const chunks = [];
@@ -55,7 +56,7 @@ function httpGetJson(rawUrl) {
       });
     });
     req.on("error", reject);
-    req.setTimeout(15000, () => {
+    req.setTimeout(timeout, () => {
       req.destroy(new Error("telegram-bot: request timeout"));
     });
   });
@@ -409,8 +410,10 @@ async function _pollLoop(token, opts = {}) {
 
   while (botState.running) {
     try {
-      const url = `https://api.telegram.org/bot${token}/getUpdates?offset=${botState.offset}&allowed_updates=["callback_query","message"]&timeout=30`;
-      const res = await httpGetJsonImpl(url);
+      // Telegram long-poll: server holds connection for `timeout` seconds.
+      // HTTP client timeout must be longer than server timeout.
+      const url = `https://api.telegram.org/bot${token}/getUpdates?offset=${botState.offset}&allowed_updates=["callback_query","message"]&timeout=10`;
+      const res = await httpGetJsonImpl(url, 20000);
 
       if (!res.json || !res.json.ok) {
         console.error(`[telegram-bot] getUpdates failed: ${res.json?.description || "unknown error"}`);
