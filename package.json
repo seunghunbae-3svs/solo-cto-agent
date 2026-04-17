@@ -1,6 +1,6 @@
 {
   "name": "solo-cto-agent",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": false,
   "description": "CTO-level AI agent toolkit for solo founders. Dual-agent review, circuit breakers, design quality gates, and session memory for Claude Cowork + OpenAI Codex.",
   "author": "seunghunbae-3svs",
