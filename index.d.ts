@@ -102,6 +102,46 @@ export interface GroundTruthContext {
   packageJson?: Record<string, unknown>;
 }
 
+export interface BenchmarkMetrics {
+  name: string;
+  description?: string;
+  value: number | string;
+  unit: string;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface BenchmarkDiffResult {
+  baseline: number;
+  current: number;
+  delta: number;
+  percentChange: number;
+  improved: boolean;
+}
+
+export interface PluginSearchResult {
+  name: string;
+  version: string;
+  description?: string;
+  author?: string;
+  keywords?: string[];
+  links?: {
+    npm?: string;
+    repository?: string;
+    homepage?: string;
+  };
+}
+
+export interface HistoryEntry {
+  timestamp: string;
+  metrics: BenchmarkMetrics[];
+  changes?: Array<{
+    metric: string;
+    before: number;
+    after: number;
+  }>;
+}
+
 export interface ExternalKnowledgeContext {
   packageCurrency?: Record<string, string>;
   securityAdvisories?: Array<{
@@ -681,4 +721,19 @@ export function dualReview(opts: any): Promise<ReviewResult>;
 export function detectMode(): string;
 
 // Re-export shared types
-export type { ReviewIssue, ReviewResult, NotifyOptions, NotifyResult, SignalFlags, PersonalizationData, GroundTruthContext, ExternalKnowledgeContext, VercelDeployment, SupabaseProject };
+export type {
+  ReviewIssue,
+  ReviewResult,
+  NotifyOptions,
+  NotifyResult,
+  SignalFlags,
+  PersonalizationData,
+  GroundTruthContext,
+  ExternalKnowledgeContext,
+  VercelDeployment,
+  SupabaseProject,
+  BenchmarkMetrics,
+  BenchmarkDiffResult,
+  PluginSearchResult,
+  HistoryEntry,
+};

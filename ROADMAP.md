@@ -69,7 +69,14 @@
 - collect-metrics.js: orchestrator repo name fix, array-aware project-config parsing, rework + cross-repo metrics
 - changelog.yml CI fix (PAT token, null-safe condition, skip-ci loop prevention)
 
-## v1.3.0 Plan
-- plugin marketplace listing
-- benchmark dashboard with historical trends
-- `docs/cursor.md` / `docs/windsurf.md` when those surfaces land with compatible execution adapters
+## Completed (v1.3.0)
+- Tier 3: Plugin Registry Search Command (`solo-cto-agent plugin search <query>`)
+- Tier 3: Setup.sh Enhancement (--include-benchmarks flag, Cursor/Windsurf auto-detection)
+- Tier 3: Enhanced index.d.ts Types (BenchmarkMetrics, BenchmarkDiffResult, PluginSearchResult, HistoryEntry)
+- Tier 3: Tests for plugin-search, CLI subcommands, version bump
+
+## v1.4.0 Plan
+- plugin marketplace listing (full npm registry integration)
+- benchmark dashboard with historical trends visualization
+- cursor.md / windsurf.md adapter support for editor-specific workflows
+- performance metrics aggregation across sessions
