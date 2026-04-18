@@ -459,27 +459,29 @@ describe("cmdList", () => {
 });
 
 describe("cmdDo", () => {
-  it("creates an inbox issue with nl-order label", async () => {
+  it("dispatches nl-order-process to the orchestrator when orch slug is set", async () => {
     const calls = [];
     const ghApi = async (endpoint, opts) => {
       calls.push({ endpoint, method: opts?.method, body: opts?.body });
-      if (endpoint.endsWith("/issues") && opts?.method === "POST") {
-        return { number: 42, html_url: "https://github.com/me/solo-cto-agent-inbox/issues/42" };
-      }
       return {};
     };
     const result = await cmdDo({
       args: ['"refactor login"'],
       ghApi,
       trackedRepos: [],
-      env: { GITHUB_OWNER: "me" },
+      env: { GITHUB_OWNER: "me", ORCH_REPO: "dual-agent-orchestrator" },
       adminChatIds: [],
     });
-    // /do parser strips the outer quotes via parseCommand, so we simulate
-    // the unquoted payload here by passing the bare string too:
-    expect(result.text).toMatch(/Queued as inbox issue/);
-    const issueCall = calls.find((c) => c.endpoint.includes("/issues") && c.method === "POST");
-    expect(issueCall.body.labels).toContain("nl-order");
+    // New behaviour: cmdDo sends repository_dispatch(nl-order-process)
+    // to the orchestrator; the NL processor there picks the target
+    // product repo and opens the labeled issue itself.
+    expect(result.text).toMatch(/NL order dispatched/);
+    const dispatchCall = calls.find(
+      (c) => c.endpoint.includes("/dispatches") && c.method === "POST"
+    );
+    expect(dispatchCall).toBeTruthy();
+    expect(dispatchCall.body.event_type).toBe("nl-order-process");
+    expect(dispatchCall.body.client_payload.text).toContain("refactor login");
   });
 
   it("rejects missing payload", async () => {
@@ -487,13 +489,13 @@ describe("cmdDo", () => {
       args: [""],
       ghApi: async () => ({}),
       trackedRepos: [],
-      env: { GITHUB_OWNER: "me" },
+      env: { GITHUB_OWNER: "me", ORCH_REPO: "dual-agent-orchestrator" },
       adminChatIds: [],
     });
     expect(result.text).toMatch(/Usage/);
   });
 
-  it("rejects when GITHUB_OWNER missing", async () => {
+  it("rejects when orchestrator slug is not configured", async () => {
     const result = await cmdDo({
       args: ["do the thing"],
       ghApi: async () => ({}),
@@ -501,7 +503,7 @@ describe("cmdDo", () => {
       env: {},
       adminChatIds: [],
     });
-    expect(result.text).toMatch(/GITHUB_OWNER/);
+    expect(result.text).toMatch(/ORCH_REPO_SLUG/);
   });
 });
 

@@ -1,8 +1,8 @@
 {
   "name": "solo-cto-agent",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "private": false,
-  "description": "Dual-agent AI code review for solo founders. Sends diffs to Claude + GPT, cross-checks findings, auto-detects secrets. CLI, GitHub Action, and VS Code extension.",
+  "description": "The full CTO loop for solo founders: dual-agent review, 3-round consensus, auto-rework, before/after visual report, natural-language orders, Telegram/Discord control surface, auto-merge.",
   "author": "seunghunbae-3svs",
   "license": "MIT",
   "engines": {
