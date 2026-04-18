@@ -55,14 +55,34 @@ async function gh(endpoint, method = 'GET', body = null) {
   return res.json();
 }
 
-async function telegram(text) {
+// PR-action inline keyboard (mirrors bin/lib/telegram-commands.js
+// buildPrActionKeyboard; duplicated here because this file runs in the
+// orchestrator workflow runtime without the shared module on disk).
+function prActionKeyboard(repo, prNumber, prUrl) {
+  if (!repo || !prNumber) return null;
+  const rows = [];
+  if (prUrl) rows.push([{ text: 'Open PR', url: prUrl }]);
+  rows.push([
+    { text: '✅ Approve', callback_data: `APPROVE|${repo}|${prNumber}` },
+    { text: '❌ Reject', callback_data: `REJECT|${repo}|${prNumber}` },
+  ]);
+  rows.push([
+    { text: '🔧 Rework', callback_data: `REWORK|${repo}|${prNumber}` },
+    { text: '🔀 Merge', callback_data: `MERGE|${repo}|${prNumber}` },
+  ]);
+  return { inline_keyboard: rows };
+}
+
+async function telegram(text, extra = null) {
   // Notifications are optional. Missing creds must never break a review run.
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
+  const payload = { chat_id: TELEGRAM_CHAT_ID, text };
+  if (extra && typeof extra === 'object') Object.assign(payload, extra);
   try {
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text }),
+      body: JSON.stringify(payload),
     });
   } catch (_) {
     // swallow — telegram must not block the review loop
@@ -623,7 +643,8 @@ async function main() {
 
   await telegram(
     `🔍 교차 리뷰 시작\n\n${PR_REPO} PR #${PR_NUMBER}\n브랜치: ${pr.head.ref}\n` +
-      `모드: ${singleAgentFallback ? `단독(${effectiveAgentAName})` : `합의(${agentAName}↔${agentBName})`}`
+      `모드: ${singleAgentFallback ? `단독(${effectiveAgentAName})` : `합의(${agentAName}↔${agentBName})`}`,
+    { reply_markup: prActionKeyboard(PR_REPO, PR_NUMBER, pr.html_url) }
   );
 
   const result = singleAgentFallback
@@ -657,7 +678,7 @@ async function main() {
 
   await gh(`/repos/${PR_REPO}/issues/${PR_NUMBER}/comments`, 'POST', { body: commentBody });
 
-  // One-message Telegram summary.
+  // One-message Telegram summary with PR action keyboard.
   const verdictIcon =
     result.verdict === 'APPROVE' ? '✅' : result.verdict === 'REQUEST_CHANGES' ? '❌' : '💬';
   await telegram(
@@ -665,7 +686,8 @@ async function main() {
       `Rounds: ${result.roundCount}\n` +
       `Blockers(합의): ${result.classified.blockers.length}\n` +
       (result.nonConsensus ? `⚠️ 미해결 이견: ${result.classified.disagreements.length}건\n` : '') +
-      `Verdict: ${result.verdict}\n\n${pr.html_url}`
+      `Verdict: ${result.verdict}\n\n${pr.html_url}`,
+    { reply_markup: prActionKeyboard(PR_REPO, PR_NUMBER, pr.html_url) }
   );
 
   // ---------- C-A auto-rework dispatch (preserved behaviour) ----------
@@ -694,7 +716,8 @@ async function main() {
       });
       console.log(`Dispatched rework-request (${reason})`);
       await telegram(
-        `🔧 자동 rework 디스패치됨\n\n${PR_REPO} PR #${PR_NUMBER}\nReason: ${reason}`
+        `🔧 자동 rework 디스패치됨\n\n${PR_REPO} PR #${PR_NUMBER}\nReason: ${reason}`,
+        { reply_markup: prActionKeyboard(PR_REPO, PR_NUMBER, pr.html_url) }
       );
     } catch (err) {
       console.error('Failed to dispatch rework:', err.message);
