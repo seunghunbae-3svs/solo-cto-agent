@@ -114,6 +114,32 @@ Write in Korean.`
   const reasonLine = hasBlocker ? '막는 문제(블로커)가 발견되었습니다.' : '막는 문제는 표시되지 않았습니다.';
   const verdictIcon = hasBlocker ? '⛔' : (verdict === 'REQUEST_CHANGES' ? '❌' : '✅');
   await telegram(`${verdictIcon} 교차 리뷰 완료\n\n${PR_REPO} PR #${PR_NUMBER}\n리뷰어: ${reviewer}\nVerdict: ${verdict}\n요약: ${reasonLine}\n${actionLine}\n\n${pr.html_url}`);
+
+  // Auto-dispatch rework when a blocker is detected so the loop runs without
+  // a human label. Opt-out with DISABLE_AUTO_REWORK=true. Circuit breaker and
+  // max-rounds in rework-agent.js bound the cost.
+  const autoReworkDisabled = (process.env.DISABLE_AUTO_REWORK || '').toLowerCase() === 'true';
+  if (hasBlocker && !autoReworkDisabled) {
+    const target = process.env.GITHUB_REPOSITORY; // orchestrator's own slug
+    try {
+      await gh(`/repos/${target}/dispatches`, 'POST', {
+        event_type: 'rework-request',
+        client_payload: {
+          repo: PR_REPO,
+          pr: PR_NUMBER,
+          branch: pr.head.ref,
+          title: PR_TITLE,
+          url: pr.html_url,
+          reason: 'cross-review-blocker',
+        },
+      });
+      console.log('Dispatched rework-request to orchestrator');
+      await telegram(`🔧 자동 rework 디스패치됨\n\n${PR_REPO} PR #${PR_NUMBER}\nReason: cross-review blocker`);
+    } catch (err) {
+      console.error('Failed to dispatch rework:', err.message);
+      await telegram(`⚠️ rework 디스패치 실패: ${err.message}`).catch(() => {});
+    }
+  }
 }
 
 main().catch(async (err) => {

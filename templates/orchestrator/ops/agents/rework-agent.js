@@ -9,6 +9,11 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 function telegram(text) {
+  // Telegram is optional. Skip cleanly when creds aren't configured so the
+  // rework path isn't blocked on missing notification setup.
+  if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
+    return;
+  }
   const data = JSON.stringify({ chat_id: process.env.TELEGRAM_CHAT_ID, text, parse_mode: 'HTML' });
   const req = https.request({
     hostname: 'api.telegram.org',
@@ -16,6 +21,7 @@ function telegram(text) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Content-Length': data.length }
   });
+  req.on('error', () => {}); // notification failure must not break rework
   req.write(data);
   req.end();
 }
@@ -112,6 +118,53 @@ async function getFileContent(path) {
     return Buffer.from(response.data.content, 'base64').toString('utf8');
   } catch {
     return null;
+  }
+}
+
+/**
+ * Opt-in auto-merge.
+ *
+ * Only runs when the PR carries the 'auto-merge-when-ready' label. Uses
+ * GitHub's native enablePullRequestAutoMerge mutation so the merge only
+ * happens after every required check passes — we never bypass branch
+ * protection or required reviews.
+ *
+ * Returns { enabled: bool, reason?: string }.
+ */
+async function tryEnableAutoMerge(owner, repo, prNumber) {
+  try {
+    const pr = await gh.pulls.get({ owner, repo, pull_number: prNumber });
+    const labels = (pr.data.labels || []).map(l => l.name);
+    if (!labels.includes('auto-merge-when-ready')) {
+      return { enabled: false, reason: 'label-not-set' };
+    }
+
+    const mutation = `
+      mutation($prId: ID!, $method: PullRequestMergeMethod!) {
+        enablePullRequestAutoMerge(input: { pullRequestId: $prId, mergeMethod: $method }) {
+          pullRequest { autoMergeRequest { enabledAt } }
+        }
+      }
+    `;
+
+    const res = await fetch('https://api.github.com/graphql', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.GH_PAT}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: mutation,
+        variables: { prId: pr.data.node_id, method: 'SQUASH' },
+      }),
+    });
+    const data = await res.json();
+    if (data.errors && data.errors.length) {
+      return { enabled: false, reason: data.errors[0].message };
+    }
+    return { enabled: true };
+  } catch (e) {
+    return { enabled: false, reason: e.message };
   }
 }
 
@@ -233,11 +286,15 @@ Output JSON only:
       });
       response = msg.content[0].text;
     } else {
+      // OpenAI Chat Completions API does not accept a top-level `system`
+      // parameter; system instructions must be the first message in `messages`.
       const msg = await openai.chat.completions.create({
         model: 'gpt-4o',
         max_tokens: 4096,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }]
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ]
       });
       response = msg.choices[0].message.content;
     }
@@ -260,6 +317,22 @@ Output JSON only:
     recordSuccess(repo, prNumber, agent);
 
     telegram(`✅ <b>Rework 완료</b>\nRepo: ${process.env.PR_REPO}\nPR: #${prNumber}\nAgent: ${agent}\nRound: ${roundCount + 1}/${maxRounds}`);
+
+    // Opt-in auto-merge: only fires if PR has 'auto-merge-when-ready' label.
+    // GitHub gates the actual merge on all required checks passing.
+    const autoMerge = await tryEnableAutoMerge(owner, repo, prNumber);
+    if (autoMerge.enabled) {
+      await gh.issues.createComment({
+        owner,
+        repo,
+        issue_number: prNumber,
+        body: `🔀 **Auto-merge enabled.** PR will merge automatically once all required checks pass.`,
+      });
+      telegram(`🔀 <b>Auto-merge 활성화</b>\nPR #${prNumber} — CI green 시 자동 머지`);
+    } else if (autoMerge.reason && autoMerge.reason !== 'label-not-set') {
+      console.log(`Auto-merge not enabled: ${autoMerge.reason}`);
+    }
+
     console.log('Done!');
 
   } catch (err) {

@@ -1,3 +1,8 @@
 node_modules/
 *.tgz
 .DS_Store
+
+# Local env (never commit real secrets); .env.example IS tracked
+.env
+.env.local
+!.env.example
