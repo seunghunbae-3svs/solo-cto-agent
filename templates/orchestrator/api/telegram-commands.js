@@ -412,8 +412,12 @@ async function cmdApprove(ctx) {
 }
 
 /**
- * /do — STUB. Creates an issue in `solo-cto-agent-inbox` under GITHUB_OWNER
- * with label `nl-order`. The NL orchestrator (phase 3) picks these up.
+ * /do — send a natural-language order to the NL processor on the orchestrator.
+ *
+ * Uses repository_dispatch(nl-order-process) with payload { text, via } so
+ * the orchestrator's nl-processor.yml workflow picks it up, asks Claude to
+ * pick the target repo + generate a spec, and creates a labeled issue there.
+ * Existing claude-auto.yml / codex-auto.yml workers then implement the change.
  */
 async function cmdDo(ctx) {
   const payload = (ctx.args[0] || "").trim();
@@ -424,63 +428,32 @@ async function cmdDo(ctx) {
     };
   }
 
-  const owner = ctx.env.GITHUB_OWNER;
-  if (!owner) {
-    return { text: "GITHUB_OWNER not configured — cannot queue NL order." };
-  }
-  const inboxRepo = `${owner}/solo-cto-agent-inbox`;
-
-  // Ensure label exists (ignore 422/already-exists)
-  try {
-    await ctx.ghApi(`/repos/${inboxRepo}/labels`, {
-      method: "POST",
-      body: { name: "nl-order", color: "ededed", description: "Natural language order from Telegram /do" },
-    });
-  } catch (_) {
-    // repo or label already exists, or repo missing — we'll check on issue create
+  const orchSlug = _resolveOrchSlug(ctx.env);
+  if (!orchSlug) {
+    return {
+      text: "Cannot dispatch: set ORCH_REPO_SLUG (or GITHUB_OWNER + ORCH_REPO) in env.",
+    };
   }
 
-  let issue;
   try {
-    issue = await ctx.ghApi(`/repos/${inboxRepo}/issues`, {
+    await ctx.ghApi(`/repos/${orchSlug}/dispatches`, {
       method: "POST",
       body: {
-        title: payload.slice(0, 80),
-        body: `## Natural-language order\n\n${payload}\n\n---\n<sub>Queued via Telegram /do at ${new Date().toISOString()}. Will be processed once the NL orchestrator is wired.</sub>`,
-        labels: ["nl-order"],
+        event_type: "nl-order-process",
+        client_payload: {
+          text: payload,
+          via: "telegram",
+          chat_id: ctx.chatId || null,
+          at: new Date().toISOString(),
+        },
       },
     });
   } catch (e) {
-    // Repo might not exist yet — try to create it gracefully
-    if (/404/.test(String(e.message))) {
-      try {
-        await ctx.ghApi(`/user/repos`, {
-          method: "POST",
-          body: {
-            name: "solo-cto-agent-inbox",
-            description: "Natural-language order inbox for solo-cto-agent",
-            private: true,
-            has_issues: true,
-          },
-        });
-        issue = await ctx.ghApi(`/repos/${inboxRepo}/issues`, {
-          method: "POST",
-          body: {
-            title: payload.slice(0, 80),
-            body: `## Natural-language order\n\n${payload}\n\n---\n<sub>Queued via Telegram /do at ${new Date().toISOString()}. Will be processed once the NL orchestrator is wired.</sub>`,
-            labels: [],
-          },
-        });
-      } catch (e2) {
-        return { text: `Failed to queue NL order: ${e2.message}` };
-      }
-    } else {
-      return { text: `Failed to queue NL order: ${e.message}` };
-    }
+    return { text: `Failed to dispatch NL order: ${e.message}` };
   }
 
   return {
-    text: `✅ Queued as inbox issue #${issue.number} — will be processed once NL orchestrator is wired.`,
+    text: `✅ NL order dispatched to <code>${orchSlug}</code> — the processor will pick a repo, open a labeled issue, and reply when the worker starts.`,
     extra: { parse_mode: "HTML" },
   };
 }

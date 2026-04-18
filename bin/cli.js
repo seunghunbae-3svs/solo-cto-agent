@@ -68,6 +68,7 @@ Usage:
   solo-cto-agent init [--force] [--preset maker|builder|cto] [--wizard]
   solo-cto-agent setup-pipeline --org <github-org> [--tier builder|cto] [--repos <repo1,repo2,...>]
   solo-cto-agent repos list [--org <github-org>]      # show/re-pick the saved repo selection
+  solo-cto-agent do "<instruction>" [--dry-run] [--repo owner/name] [--agent claude|codex]
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent auto-setup                 # Install solo-cto-pipeline.yml to your repos (centralized)
   solo-cto-agent setup --central --org <owner> [--orchestrator <repo>] [--repos <r1,r2,...>] [--dry-run]
@@ -97,6 +98,7 @@ Commands:
   init              Install skills to ~/.claude/skills/, then run doctor to verify setup
   setup-pipeline    Full pipeline setup: create orchestrator repo + install workflows to product repos
   repos list        Print current saved repo selection (from init wizard) and re-pick interactively
+  do                Natural-language work order: LLM parses intent → creates labeled issue → worker runs
   setup-repo        Install dual-agent workflows to a single product repo
   auto-setup        Install solo-cto-pipeline.yml (centralized thin workflow) to selected repos
   setup --central   Centralize cross-repo workflows (digest, bot-runner) to orchestrator repo
@@ -2143,6 +2145,12 @@ async function main() {
 
   if (cmd === "repos") {
     await reposCommand(args);
+    return;
+  }
+
+  if (cmd === "do") {
+    const doModule = require("./do");
+    await doModule.main();
     return;
   }
 
