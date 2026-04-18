@@ -11,11 +11,17 @@ name: Combined PR Gate (Code + UI/UX)
 #   - repository_dispatch: all-checks-passed (explicit path from agents)
 
 on:
+  # Fire only on the LAST stage of the happy path so the consolidated
+  # "all agent checks passed" Telegram goes out exactly once per PR.
+  # Visual Report always runs after Cross Review Dispatch (triggered by
+  # rework-auto success), so using it as the sole trigger avoids sending
+  # two summary messages when both complete close together.
   workflow_run:
     workflows:
-      - "Cross Review Dispatch"
       - "Visual Report (Before/After)"
     types: [completed]
+  # Explicit escape hatch for agents that want to fire the gate directly
+  # (e.g. non-Vercel hosts where visual-report self-skips).
   repository_dispatch:
     types: [all-checks-passed]
 

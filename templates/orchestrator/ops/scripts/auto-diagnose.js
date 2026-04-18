@@ -209,10 +209,16 @@ async function main() {
   }
 }
 
-main().catch(async (err) => {
-  console.error(err);
-  if (process.env.AUTO_DIAGNOSE_NOTIFY === "true") {
-    await sendTelegram(`❌ 자동 진단 실패: ${err.message}`).catch(() => {});
-  }
-  process.exit(1);
-});
+// Only run main() when executed directly. Guards against side-effect
+// invocation if any test / lint pass imports this file for coverage.
+if (require.main === module) {
+  main().catch(async (err) => {
+    console.error(err);
+    if (process.env.AUTO_DIAGNOSE_NOTIFY === "true") {
+      await sendTelegram(`❌ 자동 진단 실패: ${err.message}`).catch(() => {});
+    }
+    process.exit(1);
+  });
+}
+
+module.exports = { main, sendTelegram, sendTelegramDocument, sendDiscord };
