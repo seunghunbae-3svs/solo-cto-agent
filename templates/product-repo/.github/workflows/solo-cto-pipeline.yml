@@ -61,13 +61,21 @@ jobs:
             // Layer 3: Review Engine comment guard (THE KEY FIX)
             // Review Engine comments contain HTML markers like:
             // <!-- review-engine-lock --> <!-- cross-review --> <!-- visual-review -->
+            // Keep this list in sync with every agent script that posts PR
+            // comments — any unlisted format triggers L6 and causes loops.
             if (
               body.includes('<!-- review-engine') ||
+              body.includes('<!-- cross-reviewer:') ||
               body.includes('## 🔍 Cross-Review') ||
+              body.includes('## 🔍 Consensus Review') ||
               body.includes('## 🎨 Visual UI/UX Review') ||
+              body.includes('## Visual Report — Before / After') ||
+              body.includes('[visual-report-skipped:') ||
               body.includes('## 📊 Visual + Performance') ||
               body.includes('## 📋 Consensus Report') ||
-              body.includes('Review engine lock acquired')
+              body.includes('Review engine lock acquired') ||
+              body.includes('Rework Stopped (Circuit Breaker)') ||
+              body.includes('Auto-merge enabled.')
             ) {
               console.log(`ℹ️ [L3] Skipping Review Engine comment`);
               return;
