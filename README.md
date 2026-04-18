@@ -264,6 +264,15 @@ solo-cto-agent/
 
 ## Three Axes: Tier / Agent / Mode
 
+At a glance:
+
+|          | Cowork (semi-auto) | Codex (full-auto)     |
+|----------|--------------------|-----------------------|
+| Builder  | local + manual review | CI dispatch + auto-fix |
+| CTO      | local + dual-agent cross-review | CI dispatch + dual + cross-review + scoring |
+
+Cowork runs in your terminal with you in the loop. Codex runs in CI and reworks itself until the PR passes.
+
 `solo-cto-agent` is configured across three independent axes. You choose each based on your workflow.
 
 | Axis | Decision | Options |
