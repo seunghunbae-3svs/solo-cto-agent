@@ -14,17 +14,27 @@ Any mention of: cross-review, dual agent, orchestrator, agent scoring, circuit b
 ## Architecture
 
 ```
-Product Repo (PR opened on -claude or -codex branch)
+Product Repo (any PR — human or agent branch)
   |
-  +-- cross-review-dispatch.yml -> fires repository_dispatch
-  |
+  +-- solo-cto-pipeline.yml -> unified dispatcher with 7-layer
+  |                            anti-loop guards. Dispatches
+  |                            cross-review, rework-request,
+  |                            or route-issue depending on event.
   v
 Orchestrator Repo
-  +-- route-issue.yml        -> label + assign agent on new issue
-  +-- cross-review.yml       -> receive dispatch, trigger reviewer agent
-  +-- rework-auto.yml        -> parse feedback, re-trigger author agent
-  +-- agent-score-update.yml -> track build pass/fail per agent
-  +-- webhook handler        -> forward events, check circuit breaker
+  +-- route-issue.yml         -> label + assign agent on new issue
+  +-- cross-review-dispatch.yml -> receive cross-review dispatch,
+  |                                run 3-round consensus debate
+  |                                (concurrency-gated per PR)
+  +-- rework-auto.yml         -> receive rework-request, push fixes
+  |                              to PR branch (concurrency-gated)
+  +-- visual-report.yml       -> after successful rework, post
+  |                              before/after screenshots
+  +-- nl-processor.yml        -> receive nl-order-process, turn
+  |                              natural-language orders into
+  |                              labeled issues on product repos
+  +-- agent-score-update.yml  -> track build pass/fail per agent
+  +-- webhook handler (api/)  -> Telegram callbacks, circuit breaker
 ```
 
 ## Setup
@@ -35,9 +45,9 @@ Orchestrator Repo
 gh repo create {{YOUR_ORG}}/{{ORCHESTRATOR_REPO}} --private
 ```
 
-### 2. Add dispatch workflow to each product repo
+### 2. Install product-repo workflows via setup-pipeline
 
-Copy `.github/workflows/cross-review-dispatch.yml` to every repo where agents open PRs. The workflow detects the agent from branch name (`-claude` or `-codex` suffix) and dispatches a `cross-review-request` event to the orchestrator.
+`setup-pipeline` installs `solo-cto-pipeline.yml` into every product repo. That single workflow replaces the legacy per-event dispatchers (`cross-review-dispatch.yml`, `rework-dispatch.yml`) and routes PR events, reviews, and comments to the orchestrator through a unified `cross-review` / `rework-request` / `nl-order-process` event vocabulary with 7-layer anti-loop protection.
 
 ### 3. Required secrets
 
@@ -95,12 +105,16 @@ Each workflow should:
                     
                      15. ```
                          1. Agent A opens PR on product repo
-                         2. cross-review-dispatch.yml fires -> orchestrator
-                         3. Orchestrator assigns Agent B as reviewer
-                         4. Agent B posts review comments
-                         5. If rework needed -> rework-auto.yml triggers Agent A
-                         6. Agent A pushes fixes -> cycle repeats until approved
-                         7. On approval -> merge + deploy + telegram notify
+                         2. solo-cto-pipeline.yml fires -> dispatches cross-review
+                         3. Orchestrator cross-review-dispatch.yml -> cross-reviewer.js
+                            runs 3-round A/B consensus debate (early-exits on agreement)
+                         4. Consensus PR comment posted + Telegram action buttons
+                         5. If blockers -> auto-dispatches rework-request
+                            -> rework-auto.yml -> rework-agent.js pushes fix commits
+                         6. visual-report.yml fires after successful rework,
+                            posts before/after screenshots
+                         7. If label `auto-merge-when-ready` set: GitHub native
+                            auto-merge kicks in once all required checks pass
                          ```
 
                          ## Rework Trigger
