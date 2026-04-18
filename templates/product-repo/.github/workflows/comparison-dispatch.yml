@@ -1,4 +1,4 @@
-﻿name: Comparison Dispatch
+name: Comparison Dispatch
 
 on:
   issue_comment:

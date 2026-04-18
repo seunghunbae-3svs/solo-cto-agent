@@ -437,7 +437,19 @@ echo ""
 # ─── Auto-create orchestrator remote repo + push ────────────
 # This replaces the old "copy-paste the gh repo create command" pattern
 # — the whole point of the toolkit is that users don't do this manually.
-if command -v gh >/dev/null 2>&1 && [ "$MODE" = "--install" ]; then
+GH_AUTHED=0
+if command -v gh >/dev/null 2>&1; then
+  if gh auth status >/dev/null 2>&1; then
+    GH_AUTHED=1
+  else
+    echo ""
+    echo "⚠️  gh CLI found but not authenticated."
+    echo "    Run \`gh auth login\` first, then re-run this command."
+    echo "    Skipping orchestrator repo auto-create; falling back to manual instructions below."
+  fi
+fi
+
+if [ "$GH_AUTHED" = "1" ] && [ "$MODE" = "--install" ]; then
   echo ""
   echo "═══ Creating orchestrator repo on GitHub ═══"
   (

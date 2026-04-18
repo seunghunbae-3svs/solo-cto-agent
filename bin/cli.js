@@ -1832,6 +1832,7 @@ function doctorCommand(opts = {}) {
   console.log("Notifications");
   const hasTgToken = !!process.env.TELEGRAM_BOT_TOKEN;
   const hasTgChat = !!process.env.TELEGRAM_CHAT_ID;
+  const hasTgWebhook = !!process.env.TELEGRAM_WEBHOOK_URL;
   const hasSlack = !!process.env.SLACK_WEBHOOK_URL;
   const hasDiscord = !!process.env.DISCORD_WEBHOOK_URL;
 
@@ -1844,6 +1845,23 @@ function doctorCommand(opts = {}) {
   } else {
     console.log("   INFO Telegram not configured (optional - enables deploy/review alerts)");
     console.log("      Setup: SOLO_CTO_EXPERIMENTAL=1 solo-cto-agent telegram wizard");
+  }
+
+  // Inline-button callbacks require the serverless webhook at
+  // templates/orchestrator/api/telegram-webhook.js to be deployed. If
+  // Telegram creds are set but no webhook URL is configured, the user
+  // will see buttons that do nothing — give them the deploy pointer here
+  // instead of burying it in docs/user-journey.md.
+  if (isCodexMain && hasTgToken && hasTgChat && !hasTgWebhook) {
+    console.log("   WARN Telegram webhook not deployed — inline buttons (Approve/Reject/Rework/Merge) will silently fail");
+    console.log("      Deploy templates/orchestrator/api/telegram-webhook.js to Vercel Functions (easiest)");
+    console.log("      Cloudflare Workers / Netlify / Deno Deploy / Lambda also work");
+    console.log("      Register with: curl -X POST \"https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook\" -d \"url=<your-url>/api/telegram-webhook\"");
+    console.log("      Then: export TELEGRAM_WEBHOOK_URL=\"<your-url>/api/telegram-webhook\"");
+    console.log("      Docs: docs/user-journey.md § \"Deploying the Telegram webhook\"");
+    issues.push({ level: "warn", msg: "Telegram webhook not deployed (inline buttons disabled)" });
+  } else if (hasTgWebhook) {
+    console.log("   OK Telegram webhook deployed (inline buttons active)");
   }
 
   if (hasSlack) console.log("   OK Slack configured");

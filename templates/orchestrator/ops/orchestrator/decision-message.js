@@ -1,4 +1,4 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 const crypto = require('crypto');
 
 const EVENT_PATH = process.env.GITHUB_EVENT_PATH;

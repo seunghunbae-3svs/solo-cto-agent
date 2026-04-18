@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+env:
+  # Opt into Node.js 24 runtime for JS actions before it becomes default (2026-06).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   update:
     # Skip if commit message is from this workflow or if head_commit is missing

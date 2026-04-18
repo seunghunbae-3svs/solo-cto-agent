@@ -1,4 +1,4 @@
-﻿const GITHUB_OWNER = '{{GITHUB_OWNER}}';
+const GITHUB_OWNER = '{{GITHUB_OWNER}}';
 const ORCH_REPO = '{{ORCHESTRATOR_REPO}}';
 const fs = require('fs');
 const TOKEN = process.env.ORCHESTRATOR_PAT || process.env.GITHUB_TOKEN;

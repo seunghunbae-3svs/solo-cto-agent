@@ -1,4 +1,4 @@
-﻿// BDA Orchestrator Telegram Bot Command Handler
+// BDA Orchestrator Telegram Bot Command Handler
 
 const tc = require('./telegram-commands.js');
 

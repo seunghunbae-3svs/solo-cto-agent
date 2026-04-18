@@ -1,4 +1,4 @@
-﻿name: Comparison Report
+name: Comparison Report
 
 on:
   repository_dispatch:

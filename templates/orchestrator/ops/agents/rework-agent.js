@@ -1,4 +1,4 @@
-﻿const { Octokit } = require('@octokit/rest');
+const { Octokit } = require('@octokit/rest');
 const Anthropic = require('@anthropic-ai/sdk');
 const OpenAI = require('openai');
 const https = require('https');
