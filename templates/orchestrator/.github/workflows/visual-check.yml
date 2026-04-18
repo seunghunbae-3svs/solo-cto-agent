@@ -1,12 +1,18 @@
 name: Visual UI Check
 
 on:
-  # Scheduled baseline comparison (existing)
+  # Scheduled baseline comparison
   schedule:
     - cron: "30 */6 * * *"
-  # PR-triggered: preview deployment ready
+  # Preview-deployment-driven (Vercel / Netlify deployment_status events
+  # on product repos can be mirrored via webhook → repository_dispatch).
   repository_dispatch:
     types: [preview-deployed, visual-check]
+  # After rework pushes a fix commit, re-shoot the deployed preview so
+  # the Telegram/Discord channel gets fresh screenshots of the change.
+  workflow_run:
+    workflows: ["Auto Rework on Review"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       mode:
@@ -54,8 +60,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           VISUAL_MODE: ${{ github.event.inputs.mode || github.event.client_payload.mode || 'check' }}
-          VISUAL_NOTIFY: "false"
+          # Notify (Telegram + optional Discord) on every non-scheduled run
+          # so the user sees fresh screenshots after a rework or deploy.
+          # Scheduled baseline runs stay silent to avoid spam.
+          VISUAL_NOTIFY: ${{ github.event_name == 'schedule' && 'false' || 'true' }}
           VISUAL_AUTO_BASELINE: "true"
           # PR-triggered context
           PR_NUMBER: ${{ github.event.inputs.pr_number || github.event.client_payload.pr_number || '' }}

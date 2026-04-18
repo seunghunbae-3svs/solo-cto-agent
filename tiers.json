@@ -7,13 +7,16 @@
       "orchestrator_workflows": [
         "ci.yml",
         "claude-auto.yml",
+        "nl-processor.yml",
         "ops-validate.yml",
         "orchestrator-check.yml",
+        "pr-merge-notify.yml",
         "preview-ready.yml",
         "preview-summary.yml",
         "rework-auto.yml",
         "route-issue.yml",
-        "template-audit.yml"
+        "template-audit.yml",
+        "visual-report.yml"
       ],
       "ops_agents": ["*"],
       "ops_scripts": [

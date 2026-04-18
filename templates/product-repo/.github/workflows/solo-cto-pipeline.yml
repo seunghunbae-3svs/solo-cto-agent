@@ -1,10 +1,11 @@
 name: Solo CTO Pipeline
 on:
   pull_request:
-    # `labeled` included so adding agent-claude / agent-codex / rework
-    # on an already-open PR routes through the same 7-layer anti-loop
-    # guards as on-open events.
-    types: [opened, synchronize, reopened, labeled]
+    # `labeled` — lets late-added agent-claude/codex/rework labels route
+    # through the 7-layer guards.
+    # `closed` — so the orchestrator gets notified on merge/close and can
+    # send the final Telegram summary via pr-merge-notify.yml.
+    types: [opened, synchronize, reopened, labeled, closed]
   pull_request_review:
     types: [submitted]
   issue_comment:
@@ -96,29 +97,39 @@ jobs:
             let branch = '';
 
             if (event === 'pull_request') {
-              // Layer 5: Check commit message for [skip-review]
-              const sha = context.payload.pull_request?.head?.sha;
-              try {
-                const commit = await github.rest.repos.getCommit({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  ref: sha
-                });
-                if ((commit.data.commit.message || '').includes('[skip-review]')) {
-                  console.log(`ℹ️ [L5] Skipping PR with [skip-review] commit`);
-                  return;
+              // PR closed: notify on merge OR explicit close. pr-merge-notify.yml
+              // on the orchestrator sends the final Telegram summary.
+              if (action === 'closed') {
+                eventType = 'pr-merged';
+                prNumber = context.payload.pull_request.number;
+                branch = context.payload.pull_request.head.ref;
+                console.log(`🏁 PR ${prNumber} closed (merged=${context.payload.pull_request.merged})`);
+                // Fall through to dispatch with extra fields below.
+              } else {
+                // Layer 5: Check commit message for [skip-review]
+                const sha = context.payload.pull_request?.head?.sha;
+                try {
+                  const commit = await github.rest.repos.getCommit({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    ref: sha
+                  });
+                  if ((commit.data.commit.message || '').includes('[skip-review]')) {
+                    console.log(`ℹ️ [L5] Skipping PR with [skip-review] commit`);
+                    return;
+                  }
+                } catch (e) {
+                  console.log(`⚠️ Could not fetch commit: ${e.message}`);
                 }
-              } catch (e) {
-                console.log(`⚠️ Could not fetch commit: ${e.message}`);
-              }
 
-              // cross-review — the existing orchestrator listener type.
-              // Unified name means cross-review-dispatch.yml in this product
-              // repo is no longer needed (deleted in the same change set).
-              eventType = 'cross-review';
-              prNumber = context.payload.pull_request.number;
-              branch = context.payload.pull_request.head.ref;
-              console.log(`📋 PR ${prNumber} opened/updated/labeled on branch ${branch}`);
+                // cross-review — the existing orchestrator listener type.
+                // Unified name means cross-review-dispatch.yml in this product
+                // repo is no longer needed (deleted in the same change set).
+                eventType = 'cross-review';
+                prNumber = context.payload.pull_request.number;
+                branch = context.payload.pull_request.head.ref;
+                console.log(`📋 PR ${prNumber} opened/updated/labeled on branch ${branch}`);
+              }
 
             } else if (event === 'pull_request_review' && action === 'submitted') {
               if (context.payload.review?.state === 'changes_requested') {
@@ -175,6 +186,9 @@ jobs:
                   pr: prNumber,
                   branch: branch,
                   title: context.payload.pull_request?.title || context.payload.issue?.title || '',
+                  url: context.payload.pull_request?.html_url || '',
+                  merged: !!context.payload.pull_request?.merged,
+                  author: context.payload.pull_request?.user?.login || '',
                   event: event,
                   action: action || 'triggered'
                 }

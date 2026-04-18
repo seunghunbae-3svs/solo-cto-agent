@@ -4,51 +4,103 @@
 
 # solo-cto-agent
 
-**Dual-agent code review, secret detection, and circuit breakers for solo founders.**
+**The full CTO loop for solo founders — dual-agent review, multi-turn consensus, auto-rework, before/after visual reports, and a Telegram/Discord control surface.**
 
 [![npm](https://img.shields.io/npm/v/solo-cto-agent)](https://www.npmjs.com/package/solo-cto-agent)
 [![Test](https://img.shields.io/badge/tests-996%20passing-brightgreen)](https://github.com/seunghunbae-3svs/solo-cto-agent/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-CLI that sends your git diff to **two AI models independently** and cross-checks the results. Issues flagged by both → `CONFIRMED`. Secrets auto-detected and redacted before anything leaves your machine.
+You push code. Two AI agents review it, debate for up to three rounds until they reach consensus, auto-push fixes for any blockers, shoot before/after screenshots of your Vercel preview, and ping your phone on Telegram with action buttons. When you tap ✅ Merge (or set the `auto-merge-when-ready` label), GitHub merges it once CI is green. You stay in the loop from your phone; you never touch YAML.
 
 ```bash
 npm i -g solo-cto-agent
-solo-cto review --staged --dual    # Claude + GPT cross-check
+solo-cto-agent init --wizard         # pick your repos, pick your tier
+solo-cto-agent do "fix the auth bug in tribo"   # natural-language work order
+# ...PR opens → review → rework → merge, all visible in Telegram.
 ```
 
-**Also available as:** [GitHub Action](action.yml) · [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=seunghunbae-3svs.solo-cto-agent)
+**Surfaces**: CLI · [GitHub Action](action.yml) · [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=seunghunbae-3svs.solo-cto-agent) · Telegram bot · optional Discord mirror.
 
 > **Languages**: English (primary) - [한국어 안내](#한국어-안내) below.
 
-## Quickstart (5 minutes)
+## Quickstart
 
 ```bash
-# 1. Install
+# 1. Install + wizard (wizard auto-discovers your repos via gh CLI,
+#    creates the orchestrator repo on GitHub, sets TRACKED_REPOS,
+#    and installs workflows on every product repo you pick.)
 npm install -g solo-cto-agent
-
-# 2. Initialize (recommended: choose mode during wizard)
 npx solo-cto-agent init --wizard
 
-# 3. Set your Anthropic API key (required for reviews)
-#    Get one at: https://console.anthropic.com/settings/keys
-export ANTHROPIC_API_KEY="sk-ant-..."
+# 2. Keys (all set in your shell, then copied to repo secrets by setup)
+export ANTHROPIC_API_KEY="sk-ant-..."     # required — Claude review + NL orders
+export OPENAI_API_KEY="sk-..."            # required for dual-agent / CTO tier
+export ORCHESTRATOR_PAT="ghp_..."         # required — cross-repo dispatch + write
+export TELEGRAM_BOT_TOKEN="..."           # optional — PR notifications + /commands
+export TELEGRAM_CHAT_ID="..."             # optional
+export DISCORD_WEBHOOK_URL="https://..."  # optional — mirror of Telegram output
+export VERCEL_TOKEN="..."                 # optional — before/after visual reports
 
-# 4. (Optional) Set OpenAI key for dual-review mode
-#    Get one at: https://platform.openai.com/api-keys
-export OPENAI_API_KEY="sk-..."
+# 3. Run setup-pipeline (reads saved wizard selection; no manual --repos needed)
+solo-cto-agent setup-pipeline --org <your-github-org>
 
-# 5. Verify everything is ready
-solo-cto-agent doctor --quick
+# 4. Verify
+solo-cto-agent doctor
 
-# 6. Run your first review (inside a git repo with staged changes)
-solo-cto-agent review
+# 5. Kick off a real work order
+solo-cto-agent do "add a monthly ARPU chart to the tribo admin dashboard"
+#   → LLM picks target repo, drafts a spec issue, labels agent-claude
+#   → claude worker opens a PR
+#   → cross-reviewer.js runs 3-round consensus
+#   → rework-agent.js pushes fixes if needed
+#   → visual-report.yml posts before/after screenshots
+#   → combined-pr-gate.yml sends "all checks passed" to Telegram
+#   → auto-merge-when-ready label makes GitHub merge on CI green
+#   → pr-merge-notify.yml sends final "✅ merged" to Telegram/Discord
 ```
 
-That is it. `doctor --quick` will tell you what is missing, where to get it, and the next command to run.
+Every step above ships end-to-end today. The `doctor` subcommand tells you anything missing with the exact command to run.
 
-### Platform-specific setup
+### Telegram bot — the phone-first control surface
+
+After you set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`, the bot gives you:
+
+| Command | What it does |
+|---|---|
+| `/status [repo]` | Open, non-draft PRs + review state across tracked repos |
+| `/list [repo]` | Last 10 PRs, one-line summary each |
+| `/rework <pr>` | Force a rework cycle on an existing PR |
+| `/approve <pr>` | Approve the PR |
+| `/do "<instruction>"` | Natural-language work order (same as CLI `do`) |
+| `/digest` | Today's PR activity summary |
+| `/merge <pr>` | Immediate merge (admin-only: `TELEGRAM_ADMIN_CHAT_IDS`) |
+
+Every review / rework / visual-report message includes inline buttons — ✅ Approve · ❌ Reject · 🔧 Rework · 🔀 Merge. Tap to act without leaving Telegram.
+
+If `DISCORD_WEBHOOK_URL` is set, visual-change screenshots and auto-diagnose reports mirror to Discord as attachments.
+
+### External services
+
+| Service | Used for | Required? | Setup |
+|---|---|---|---|
+| **GitHub** | orchestrator repo + product repo workflows | ✅ required | wizard auto-creates orchestrator repo via `gh repo create` |
+| **Anthropic** | Claude consensus review, NL orders, rework | ✅ required | `ANTHROPIC_API_KEY` env var |
+| **OpenAI** | Codex counter-review (dual-agent) | CTO tier | `OPENAI_API_KEY` env var |
+| **Vercel** | preview URLs for before/after visual-report | optional | `VERCEL_TOKEN` + `VERCEL_PROJECT_ID`. Works with **Netlify / Cloudflare Pages / Render / Railway previews** too if their `deployment_status` webhooks fire — the visual stage resolves the URL from SHA and shoots whichever host serves it. |
+| **Telegram** | notifications + CTO commands | optional | `/telegram wizard` command + bot token |
+| **Discord** | optional mirror of Telegram output | optional | `DISCORD_WEBHOOK_URL` on orchestrator secrets |
+| **Browserless** | alternate screenshot provider (skips Playwright install cost) | optional | `VISUAL_REVIEW_PROVIDER=browserless` + `BROWSERLESS_API_KEY` |
+
+### Compatibility
+
+- **Stack-agnostic.** The toolkit never touches your application code directly. Agents produce patches that land on your PR branch; your repo's existing CI / build tools verify them. Works with Next.js, Vite, Remix, SvelteKit, FastAPI, Rails — anything with a PR workflow.
+- **Hosting-agnostic.** Vercel is the default for the visual-report preview URL resolver, but any host that ships preview URLs tied to commit SHAs works. For hosts without that (plain Docker, bare-metal, self-hosted): set `VISUAL_REVIEW_PROVIDER=off` and the pipeline just skips the visual stage — everything else still runs.
+- **Database-agnostic.** The toolkit doesn't read or write your database. Postgres (Supabase / Neon / PlanetScale-Postgres), MySQL, SQLite, MongoDB — all fine. Agent workers DO see your schema files if they're in the repo (prisma/schema.prisma, supabase/schema.sql, etc.) so suggested fixes can be schema-aware.
+- **Docker.** If your product repo is dockerized, nothing changes — GitHub Actions runners handle the build per your existing Dockerfile. The agents commit to the PR branch, your CI rebuilds the container, the auto-merge gate waits on that CI.
+- **Windows / macOS / Linux** for the CLI. GitHub Actions runners are Linux for all automation paths.
+
+### Platform-specific CLI setup
 
 **macOS / Linux**
 
@@ -69,6 +121,8 @@ solo-cto-agent doctor
 If you choose `codex-main` during the wizard, also install:
 - GitHub CLI: [cli.github.com](https://cli.github.com/)
 - GitHub PAT for cross-repo dispatch: [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
+  - **Classic PAT**: check `repo` + `workflow` scopes.
+  - **Fine-grained PAT**: grant `Contents: write`, `Issues: write`, `Pull requests: write`, `Actions: write` on every product repo listed in `setup-pipeline --repos`. The orchestrator pushes fix commits and posts comments on those repos on your behalf.
 
 If you choose `codex-main`, template drift audit is enabled by default:
 - local check: `solo-cto-agent template-audit`

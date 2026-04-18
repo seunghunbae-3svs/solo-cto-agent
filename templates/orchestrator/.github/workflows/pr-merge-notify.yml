@@ -1,0 +1,86 @@
+name: PR Merge Notify
+
+# Sends the final Telegram summary when a PR closes on a product repo —
+# merged OR closed-unmerged (separate messages so the user can tell).
+# Fired by solo-cto-pipeline.yml on pull_request.closed.
+
+on:
+  repository_dispatch:
+    types: [pr-merged]
+
+concurrency:
+  group: pr-merge-notify-${{ github.event.client_payload.repo }}-${{ github.event.client_payload.pr }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compose + send Telegram summary
+        env:
+          GH_TOKEN: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PR_REPO: ${{ github.event.client_payload.repo }}
+          PR_NUMBER: ${{ github.event.client_payload.pr }}
+          PR_TITLE: ${{ github.event.client_payload.title }}
+          PR_URL: ${{ github.event.client_payload.url }}
+          PR_MERGED: ${{ github.event.client_payload.merged }}
+          PR_AUTHOR: ${{ github.event.client_payload.author }}
+        run: |
+          # Bail cleanly if Telegram isn't configured — this whole workflow
+          # is opt-in on creds being set.
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram not configured; skipping."
+            exit 0
+          fi
+
+          # Fetch a quick rework-round count for the summary. Best-effort.
+          OWNER="${PR_REPO%%/*}"
+          NAME="${PR_REPO##*/}"
+          ROUND_COUNT=0
+          if [ -n "$GH_TOKEN" ]; then
+            ROUND_COUNT=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/${OWNER}/${NAME}/issues/${PR_NUMBER}/comments?per_page=100" \
+              | grep -c '\[rework-round\]' || echo 0)
+          fi
+
+          if [ "$PR_MERGED" = "true" ]; then
+            ICON="✅"
+            VERB="머지 완료"
+            LINE="Rework rounds: ${ROUND_COUNT}"
+          else
+            ICON="🚫"
+            VERB="닫힘 (머지 안 됨)"
+            LINE="Closed by ${PR_AUTHOR} without merging."
+          fi
+
+          # Inline action keyboard — links + useful follow-ups.
+          KB=$(cat <<JSON
+          {
+            "inline_keyboard": [
+              [{ "text": "Open PR", "url": "${PR_URL}" }],
+              [
+                { "text": "📋 Recent PRs", "callback_data": "LIST|${PR_REPO}" },
+                { "text": "📊 Digest", "callback_data": "DIGEST|${PR_REPO}" }
+              ]
+            ]
+          }
+          JSON
+          )
+
+          TEXT="${ICON} <b>PR #${PR_NUMBER} ${VERB}</b>%0A<code>${PR_REPO}</code>%0A${PR_TITLE}%0A%0A${LINE}"
+
+          curl -sS -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${TEXT}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "reply_markup=${KB}" \
+            | head -c 300
+          echo
