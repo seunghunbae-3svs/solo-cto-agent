@@ -6,9 +6,20 @@ on:
   workflow_dispatch:
   repository_dispatch:
     types: [auto-diagnose]
+  # Fire automatically when a rework run fails — so the user gets a
+  # Telegram/Discord ping with a full diagnostic report attached instead
+  # of quietly discovering the failure days later.
+  workflow_run:
+    workflows: ["Auto Rework on Review"]
+    types: [completed]
 
 jobs:
   diagnose:
+    # For the workflow_run path, only run on failure (avoid doubling up
+    # with visual-check on the success path). Other triggers always run.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'failure'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,5 +34,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          AUTO_DIAGNOSE_NOTIFY: "false"
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          # Notify on rework failure + dispatch + manual runs. Silence the
+          # 6-hour scheduled sweep to avoid alert fatigue.
+          AUTO_DIAGNOSE_NOTIFY: ${{ github.event_name == 'schedule' && 'false' || 'true' }}
         run: node ops/scripts/auto-diagnose.js

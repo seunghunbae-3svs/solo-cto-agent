@@ -67,11 +67,53 @@ async function gh(endpoint, method = "GET", body = null) {
 
 async function sendTelegram(text) {
   if (!BOT_TOKEN || !CHAT_ID) return;
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: CHAT_ID, text }),
-  });
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: CHAT_ID, text }),
+    });
+  } catch (_) { /* swallow */ }
+  await sendDiscord(text);
+}
+
+// sendTelegramDocument — attaches the full diagnostic report as a file
+// so triaging doesn't require clicking through 10 issues one-by-one.
+async function sendTelegramDocument(docPath, caption) {
+  if (!BOT_TOKEN || !CHAT_ID) return;
+  const fs = require("fs");
+  if (!fs.existsSync(docPath)) return;
+  try {
+    const form = new FormData();
+    form.append("chat_id", CHAT_ID);
+    form.append("caption", caption);
+    form.append("document", new Blob([fs.readFileSync(docPath)]), require("path").basename(docPath));
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
+      method: "POST",
+      body: form,
+    });
+  } catch (_) { /* ignore */ }
+  await sendDiscord(caption, docPath);
+}
+
+async function sendDiscord(text, attachmentPath) {
+  const url = process.env.DISCORD_WEBHOOK_URL;
+  if (!url) return;
+  const fs = require("fs");
+  try {
+    if (attachmentPath && fs.existsSync(attachmentPath)) {
+      const form = new FormData();
+      form.append("content", text);
+      form.append("file", new Blob([fs.readFileSync(attachmentPath)]), require("path").basename(attachmentPath));
+      await fetch(url, { method: "POST", body: form });
+    } else {
+      await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text }),
+      });
+    }
+  } catch (_) { /* ignore */ }
 }
 
 async function fetchCheck(url) {
@@ -144,7 +186,26 @@ async function main() {
 
   if (failures.length && process.env.AUTO_DIAGNOSE_NOTIFY === "true") {
     const lines = failures.map((f) => `- ${f.check.repo}: ${f.check.title} (${f.check.url})`);
-    await sendTelegram(`🚨 자동 진단 이슈 감지\n${lines.join("\n")}`);
+    const summary = `🚨 자동 진단 이슈 감지\n${lines.join("\n")}`;
+    // Write the full diagnostic report as JSON + attach to Telegram/Discord so
+    // the user can triage each failure offline instead of scraping issues.
+    const fs = require("fs");
+    const path = require("path");
+    const reportPath = path.join(process.cwd(), `auto-diagnose-${Date.now()}.json`);
+    const report = {
+      runAt: new Date().toISOString(),
+      totalFailures: failures.length,
+      failures: failures.map((f) => ({
+        id: f.check.id,
+        repo: f.check.repo,
+        title: f.check.title,
+        url: f.check.url,
+        status: f.result.status,
+        snippet: String(f.result.text || "").slice(0, 500),
+      })),
+    };
+    fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), "utf8");
+    await sendTelegramDocument(reportPath, summary);
   }
 }
 

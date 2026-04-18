@@ -49,11 +49,53 @@ async function gh(endpoint, method = "GET", body = null) {
 
 async function sendTelegram(text) {
   if (!BOT_TOKEN || !CHAT_ID) return;
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: CHAT_ID, text, parse_mode: "Markdown" }),
-  });
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: CHAT_ID, text, parse_mode: "Markdown" }),
+    });
+  } catch (_) { /* swallow — notification must never block the check */ }
+  await sendDiscord(text);
+}
+
+// ── Telegram sendPhoto (with local file attachment) ──
+// Used when we detect a visual change and want the user to see it
+// without clicking through to the PR.
+async function sendTelegramPhoto(photoPath, caption) {
+  if (!BOT_TOKEN || !CHAT_ID) return;
+  if (!fs.existsSync(photoPath)) return;
+  try {
+    const form = new FormData();
+    form.append("chat_id", CHAT_ID);
+    form.append("caption", caption);
+    form.append("parse_mode", "Markdown");
+    form.append("photo", new Blob([fs.readFileSync(photoPath)]), "shot.png");
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+      method: "POST",
+      body: form,
+    });
+  } catch (_) { /* ignore */ }
+  await sendDiscord(caption, photoPath);
+}
+
+async function sendDiscord(text, attachmentPath) {
+  const url = process.env.DISCORD_WEBHOOK_URL;
+  if (!url) return;
+  try {
+    if (attachmentPath && fs.existsSync(attachmentPath)) {
+      const form = new FormData();
+      form.append("content", text);
+      form.append("file", new Blob([fs.readFileSync(attachmentPath)]), require("path").basename(attachmentPath));
+      await fetch(url, { method: "POST", body: form });
+    } else {
+      await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text }),
+      });
+    }
+  } catch (_) { /* ignore */ }
 }
 
 // ── Playwright screenshot ──
@@ -261,7 +303,12 @@ async function runScheduledCheck() {
         if (!exists) {
           await createIssue(check, vp, item.hash, currentHash, outputPath);
           if (process.env.VISUAL_NOTIFY === "true") {
-            await sendTelegram(`⚠️ *Visual change*: ${check.repo} ${check.title} (${vp.name})\n${check.url}`);
+            // sendTelegramPhoto attaches the current screenshot so the
+            // user can eyeball the change without clicking through.
+            await sendTelegramPhoto(
+              outputPath,
+              `⚠️ *Visual change*: ${check.repo} ${check.title} (${vp.name})\n${check.url}`
+            );
           }
         }
       } else {

@@ -257,6 +257,22 @@ async function postSkipComment(gh, prRepo, prNumber, reason) {
       `[visual-report-skipped: ${reason}]`
     );
   } catch {}
+  // Also ping Telegram so the user sees why the visual stage didn't
+  // produce a report — silent-skip UX fails people otherwise.
+  const token = optional('TELEGRAM_BOT_TOKEN');
+  const chatId = optional('TELEGRAM_CHAT_ID');
+  if (!token || !chatId) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: `⚠️ <b>Visual report skipped</b>\n<code>${prRepo}</code> PR #${prNumber}\nReason: <code>${reason}</code>`,
+        parse_mode: 'HTML',
+      }),
+    });
+  } catch (_) { /* notification failure must never propagate */ }
 }
 
 async function main() {

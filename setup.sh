@@ -434,15 +434,62 @@ if [ "$INCLUDE_BENCHMARKS" = "1" ]; then
 fi
 echo "└──────────────────────────────────────────────────────────┘"
 echo ""
+# ─── Auto-create orchestrator remote repo + push ────────────
+# This replaces the old "copy-paste the gh repo create command" pattern
+# — the whole point of the toolkit is that users don't do this manually.
+if command -v gh >/dev/null 2>&1 && [ "$MODE" = "--install" ]; then
+  echo ""
+  echo "═══ Creating orchestrator repo on GitHub ═══"
+  (
+    cd "$ORCH_DIR"
+    # Skip if already has a remote (re-run of install)
+    if git remote get-url origin >/dev/null 2>&1; then
+      echo "  remote already set → skipping create/push"
+    else
+      git add -A >/dev/null
+      git -c user.email="orchestrator-bot@users.noreply.github.com" \
+          -c user.name="orchestrator-bot" \
+          commit -m "feat: init dual-agent orchestrator" >/dev/null 2>&1 || true
+      if gh repo view "$ORG/$ORCH_NAME" >/dev/null 2>&1; then
+        echo "  repo $ORG/$ORCH_NAME exists → linking remote + pushing"
+        git remote add origin "https://github.com/$ORG/$ORCH_NAME.git" 2>/dev/null || true
+        git branch -M main 2>/dev/null || true
+        git push -u origin main 2>&1 | tail -3 || echo "  push failed — resolve manually"
+      else
+        echo "  creating private repo $ORG/$ORCH_NAME..."
+        if gh repo create "$ORG/$ORCH_NAME" --private --source . --push 2>&1 | tail -3; then
+          echo "  ✓ orchestrator repo ready: https://github.com/$ORG/$ORCH_NAME"
+        else
+          echo "  ✗ gh repo create failed. Run manually:"
+          echo "      cd $ORCH_DIR && gh repo create $ORG/$ORCH_NAME --private --source . --push"
+        fi
+      fi
+    fi
+  )
+
+  # ─── Auto-set TRACKED_REPOS variable on orchestrator ────────
+  # nl-processor.yml reads this to know which product repos the natural-
+  # language /do command is allowed to route to. Previously the user had
+  # to set this manually via GitHub UI — easy to miss.
+  if [ -n "$REPOS" ]; then
+    TRACKED_SLUGS=$(echo "$REPOS" | sed "s/[ ,]\+/,/g" | awk -v org="$ORG" 'BEGIN{RS=","; ORS=","} {printf "%s/%s", org, $0}' | sed 's/,$//')
+    echo "  setting orchestrator repo variable TRACKED_REPOS=$TRACKED_SLUGS"
+    gh variable set TRACKED_REPOS -R "$ORG/$ORCH_NAME" --body "$TRACKED_SLUGS" 2>&1 | tail -2 || \
+      echo "  ⚠️  could not set TRACKED_REPOS variable (set manually: gh variable set TRACKED_REPOS -R $ORG/$ORCH_NAME --body \"$TRACKED_SLUGS\")"
+  fi
+else
+  echo ""
+  echo "═══ Orchestrator repo (manual step — gh CLI not found) ═══"
+  echo "  cd $ORCH_NAME"
+  echo "  git add -A && git commit -m 'feat: init dual-agent orchestrator'"
+  echo "  gh repo create $ORG/$ORCH_NAME --push --source . --private"
+  echo "  gh variable set TRACKED_REPOS -R $ORG/$ORCH_NAME --body \"$ORG/repo1,$ORG/repo2\""
+fi
+
+echo ""
 echo "═══ REQUIRED: Set GitHub Secrets ═══"
 echo ""
-echo "Run these commands in your orchestrator repo:"
-echo ""
-echo "  cd $ORCH_NAME"
-echo "  git add -A && git commit -m 'feat: init dual-agent orchestrator'"
-echo "  gh repo create $ORG/$ORCH_NAME --push --source . --private"
-echo ""
-echo "Then set secrets (REQUIRED for automation to work):"
+echo "Set secrets (REQUIRED for automation to work):"
 echo ""
 echo "  # 1. GitHub PAT with repo + workflow scope (for cross-repo dispatch)"
 echo "  gh secret set ORCHESTRATOR_PAT"
@@ -470,8 +517,12 @@ fi
 echo ""
 echo "═══ Why each secret is needed ═══"
 echo ""
-echo "  ORCHESTRATOR_PAT  Cross-repo dispatch (product → orchestrator)"
-echo "                    Required scope: repo, workflow"
+echo "  ORCHESTRATOR_PAT  Cross-repo dispatch + write access on product repos"
+echo "                    Classic PAT: check [repo] + [workflow] scopes."
+echo "                    Fine-grained: grant Contents:write, Issues:write,"
+echo "                    Pull requests:write, and Actions:write on EVERY product"
+echo "                    repo listed in setup-pipeline --repos (the orchestrator"
+echo "                    comments + pushes fix commits back to those repos)."
 echo "                    Create at: https://github.com/settings/tokens"
 echo ""
 echo "  ANTHROPIC_API_KEY Claude-powered code review, visual analysis,"

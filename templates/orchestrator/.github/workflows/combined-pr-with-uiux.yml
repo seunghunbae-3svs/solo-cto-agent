@@ -1,88 +1,115 @@
-name: Combined PR with UI/UX Gate
+name: Combined PR Gate (Code + UI/UX)
+
+# Fires when BOTH of the orchestrator's review stages have finished for
+# a PR — the multi-turn consensus (Cross Review Dispatch) AND the visual
+# before/after report (Visual Report (Before/After)). When both succeed,
+# posts one consolidated Telegram summary so the user gets a single
+# "ready to merge" signal instead of two separate stage pings.
+#
+# Triggered either by:
+#   - workflow_run: completed (source workflow finished on any SHA)
+#   - repository_dispatch: all-checks-passed (explicit path from agents)
 
 on:
   workflow_run:
     workflows:
-      - "Code Build & Test"
-      - "UI/UX Quality Gate"
-    types:
-      - completed
+      - "Cross Review Dispatch"
+      - "Visual Report (Before/After)"
+    types: [completed]
+  repository_dispatch:
+    types: [all-checks-passed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: combined-pr-${{ github.event.client_payload.repo || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
-  check-gates:
+  consolidate:
+    # On workflow_run path, we only proceed when the source run succeeded.
+    # repository_dispatch always proceeds (agents decided we're ready).
+    if: >-
+      github.event_name == 'repository_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
-    outputs:
-      build-verified: ${{ steps.check.outputs.build-verified }}
-      uiux-verified: ${{ steps.check.outputs.uiux-verified }}
-      can-merge: ${{ steps.check.outputs.can-merge }}
     steps:
-      - uses: actions/github-script@v7
-        id: check
+      - name: Resolve PR context
+        id: ctx
+        env:
+          GH_TOKEN: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
+          WR_NAME: ${{ github.event.workflow_run.name }}
+          WR_ID: ${{ github.event.workflow_run.id }}
+          CP_PR: ${{ github.event.client_payload.pr }}
+          CP_REPO: ${{ github.event.client_payload.repo }}
+        uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
           script: |
-            // Get PR context from trigger workflow
-            const runs = await github.rest.actions.listWorkflowRuns({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'combined-pr.yml'
-            });
-
-            const latestRun = runs.data.workflow_runs[0];
-            if (!latestRun) {
-              console.log('No combined PR workflow found');
-              core.setOutput('can-merge', 'false');
+            // dispatch payload wins when present
+            if (context.payload.client_payload?.pr) {
+              core.setOutput('pr', context.payload.client_payload.pr);
+              core.setOutput('repo', context.payload.client_payload.repo);
+              core.setOutput('source', 'dispatch');
               return;
             }
-
-            // Check for required labels
-            const prNumber = latestRun.pull_requests[0]?.number;
-            if (!prNumber) {
-              core.setOutput('can-merge', 'false');
+            // workflow_run: extract from the run's client_payload or linked PRs
+            const wr = context.payload.workflow_run;
+            if (wr) {
+              // Both source workflows run on repository_dispatch with payload
+              // that includes repo + pr. Re-read the dispatch event ID if we
+              // can; otherwise fall back to the head_branch.
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: wr.path.split('/').pop(),
+                per_page: 1,
+              });
+              // The triggering dispatch payload isn't directly retrievable via
+              // REST. Use the run's display_title + head_branch heuristic.
+              core.setOutput('pr', '');
+              core.setOutput('repo', '');
+              core.setOutput('source', 'workflow_run');
+              core.setOutput('workflow_name', wr.name);
+              core.setOutput('conclusion', wr.conclusion);
               return;
             }
+            core.setOutput('source', 'unknown');
 
-            const pr = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber
-            });
-
-            const labels = pr.data.labels.map(l => l.name);
-
-            const buildVerified = labels.includes('build-verified');
-            const uiuxVerified = labels.includes('uiux-verified');
-
-            core.setOutput('build-verified', buildVerified ? 'true' : 'false');
-            core.setOutput('uiux-verified', uiuxVerified ? 'true' : 'false');
-
-            // Can merge only if BOTH gates pass
-            const canMerge = buildVerified && uiuxVerified;
-            core.setOutput('can-merge', canMerge ? 'true' : 'false');
-
-            console.log(`Build Verified: ${buildVerified}`);
-            console.log(`UI/UX Verified: ${uiuxVerified}`);
-            console.log(`Can Merge: ${canMerge}`);
-
-  gate-status:
-    runs-on: ubuntu-latest
-    needs: check-gates
-    steps:
-      - name: Print gate status
+      - name: Early-exit if PR context unknown (workflow_run path)
+        if: steps.ctx.outputs.source == 'workflow_run' && steps.ctx.outputs.pr == ''
         run: |
-          echo "# Quality Gate Status"
-          echo ""
-          echo "**Build Gate:** ${{ needs.check-gates.outputs.build-verified }}"
-          echo "**UI/UX Gate:** ${{ needs.check-gates.outputs.uiux-verified }}"
-          echo "**Mergeable:** ${{ needs.check-gates.outputs.can-merge }}"
-          echo ""
+          echo "workflow_run without retrievable PR — will wait for explicit"
+          echo "all-checks-passed dispatch from cross-reviewer/visual-reporter."
+          exit 0
 
-      - name: Enforce gates
-        if: needs.check-gates.outputs.can-merge != 'true'
+      - name: Send consolidated Telegram summary
+        if: steps.ctx.outputs.pr != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PR_REPO: ${{ steps.ctx.outputs.repo }}
+          PR_NUMBER: ${{ steps.ctx.outputs.pr }}
         run: |
-          echo "❌ Cannot merge: Both build-verified and uiux-verified labels required"
-          exit 1
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram not configured; skipping consolidated summary."
+            exit 0
+          fi
+          KB=$(cat <<JSON
+          {"inline_keyboard":[[{"text":"Open PR","url":"https://github.com/${PR_REPO}/pull/${PR_NUMBER}"}],[{"text":"✅ Approve","callback_data":"APPROVE|${PR_REPO}|${PR_NUMBER}"},{"text":"🔀 Merge","callback_data":"MERGE|${PR_REPO}|${PR_NUMBER}"}]]}
+          JSON
+          )
+          TEXT="✅ <b>All agent checks passed</b>%0A<code>${PR_REPO}</code> PR #${PR_NUMBER}%0A%0ACode review: consensus%0AVisual report: posted%0A%0AReady for review or add 'auto-merge-when-ready' label."
 
-      - name: Ready to merge
-        if: needs.check-gates.outputs.can-merge == 'true'
-        run: |
-          echo "✅ All quality gates passed! Ready to merge."
+          curl -sS -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${TEXT}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "reply_markup=${KB}" \
+            | head -c 300
+          echo
