@@ -17,6 +17,7 @@ jobs:
       - name: Install dependencies
         run: npm install @octokit/rest @anthropic-ai/sdk openai
       - name: Run rework agent
+        id: rework
         env:
           GH_PAT: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -26,4 +27,21 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.client_payload.pr }}
           PR_REPO: ${{ github.event.pull_request.head.repo.full_name || github.event.client_payload.repo }}
           PR_BRANCH: ${{ github.event.pull_request.head.ref || github.event.client_payload.branch }}
+          # rework-agent writes visual-report-payload.json here if it
+          # successfully pushed a commit. The file is then uploaded as
+          # an artifact for visual-report.yml to consume.
+          VISUAL_REPORT_PAYLOAD_PATH: ${{ github.workspace }}/visual-report-payload.json
         run: node ops/agents/rework-agent.js
+
+      # Uploaded even if rework failed — the visual-report workflow
+      # gates on workflow_run conclusion == "success" anyway, so no-op
+      # on failure branches. continue-on-error keeps rework succeeding
+      # when there's simply nothing to upload.
+      - name: Upload visual-report payload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-report-payload
+          path: ${{ github.workspace }}/visual-report-payload.json
+          if-no-files-found: ignore
+          retention-days: 7

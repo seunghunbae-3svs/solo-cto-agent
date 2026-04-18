@@ -2,6 +2,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const OpenAI = require('openai');
 const https = require('https');
+const fs = require('fs');
 const { recordFailure, recordSuccess, isBlocked } = require('../lib/circuit-breaker');
 
 const gh = new Octokit({ auth: process.env.GH_PAT });
@@ -202,6 +203,49 @@ async function pushFiles(updates) {
   }
 }
 
+/**
+ * Look up the current HEAD SHA of the PR branch. Called both before and
+ * after pushFiles() so the visual-report stage can screenshot the exact
+ * pre- and post-rework commits.
+ */
+async function getBranchHeadSha() {
+  const [owner, repo] = process.env.PR_REPO.split('/');
+  const ref = await gh.repos.getBranch({
+    owner,
+    repo,
+    branch: process.env.PR_BRANCH,
+  });
+  return ref.data.commit.sha;
+}
+
+/**
+ * Write a visual-report payload JSON to disk so the rework workflow
+ * can upload it as an artifact for visual-report.yml to consume.
+ * Only invoked on the happy path (rework pushed successfully).
+ */
+function writeVisualReportPayload({ prevSha, newSha }) {
+  const out = process.env.VISUAL_REPORT_PAYLOAD_PATH;
+  if (!out) return;
+  try {
+    fs.writeFileSync(
+      out,
+      JSON.stringify(
+        {
+          pr: parseInt(process.env.PR_NUMBER, 10),
+          repo: process.env.PR_REPO,
+          branch: process.env.PR_BRANCH,
+          prevSha,
+          newSha,
+        },
+        null,
+        2
+      )
+    );
+  } catch (err) {
+    console.warn('Failed to write visual-report payload:', err.message);
+  }
+}
+
 async function main() {
   try {
     const [owner, repo] = process.env.PR_REPO.split('/');
@@ -303,8 +347,30 @@ Output JSON only:
     if (!jsonMatch) throw new Error('No JSON in response');
 
     const result = JSON.parse(jsonMatch[0]);
+
+    // Capture the branch HEAD *before* we push — this is the "Before"
+    // commit for the visual-report stage.
+    let prevSha = null;
+    try {
+      prevSha = await getBranchHeadSha();
+    } catch (err) {
+      console.warn('Could not read prevSha:', err.message);
+    }
+
     console.log('Pushing fixed files...');
     await pushFiles(result.updates);
+
+    // And capture the new HEAD — the "After" commit.
+    let newSha = null;
+    try {
+      newSha = await getBranchHeadSha();
+    } catch (err) {
+      console.warn('Could not read newSha:', err.message);
+    }
+
+    if (prevSha && newSha && prevSha !== newSha) {
+      writeVisualReportPayload({ prevSha, newSha });
+    }
 
     await gh.issues.createComment({
       owner,
