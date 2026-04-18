@@ -9,6 +9,11 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 function telegram(text) {
+  // Telegram is optional. Skip cleanly when creds aren't configured so the
+  // rework path isn't blocked on missing notification setup.
+  if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
+    return;
+  }
   const data = JSON.stringify({ chat_id: process.env.TELEGRAM_CHAT_ID, text, parse_mode: 'HTML' });
   const req = https.request({
     hostname: 'api.telegram.org',
@@ -16,6 +21,7 @@ function telegram(text) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Content-Length': data.length }
   });
+  req.on('error', () => {}); // notification failure must not break rework
   req.write(data);
   req.end();
 }
@@ -233,11 +239,15 @@ Output JSON only:
       });
       response = msg.content[0].text;
     } else {
+      // OpenAI Chat Completions API does not accept a top-level `system`
+      // parameter; system instructions must be the first message in `messages`.
       const msg = await openai.chat.completions.create({
         model: 'gpt-4o',
         max_tokens: 4096,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }]
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ]
       });
       response = msg.choices[0].message.content;
     }
