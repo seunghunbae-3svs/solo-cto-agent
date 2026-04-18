@@ -1,7 +1,10 @@
 name: Solo CTO Pipeline
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    # `labeled` included so adding agent-claude / agent-codex / rework
+    # on an already-open PR routes through the same 7-layer anti-loop
+    # guards as on-open events.
+    types: [opened, synchronize, reopened, labeled]
   pull_request_review:
     types: [submitted]
   issue_comment:
@@ -109,10 +112,13 @@ jobs:
                 console.log(`⚠️ Could not fetch commit: ${e.message}`);
               }
 
-              eventType = 'review-request';
+              // cross-review — the existing orchestrator listener type.
+              // Unified name means cross-review-dispatch.yml in this product
+              // repo is no longer needed (deleted in the same change set).
+              eventType = 'cross-review';
               prNumber = context.payload.pull_request.number;
               branch = context.payload.pull_request.head.ref;
-              console.log(`📋 PR ${prNumber} opened/updated on branch ${branch}`);
+              console.log(`📋 PR ${prNumber} opened/updated/labeled on branch ${branch}`);
 
             } else if (event === 'pull_request_review' && action === 'submitted') {
               if (context.payload.review?.state === 'changes_requested') {

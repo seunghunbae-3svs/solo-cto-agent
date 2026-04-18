@@ -66,7 +66,7 @@ There are **five** ways to kick off a cycle. Pick whichever matches your workflo
 
 | # | How | What happens |
 |---|---|---|
-| 1 | `git push` → PR opens | `solo-cto-pipeline.yml` dispatches `review-request` to orchestrator |
+| 1 | `git push` → PR opens | `solo-cto-pipeline.yml` dispatches `cross-review` to orchestrator |
 | 2 | Label an issue `agent-claude` or `agent-codex` | `claude-auto.yml` / `codex-auto.yml` creates a branch + opens a PR with the implementation |
 | 3 | `solo-cto-agent do "<plain English>"` | LLM picks the target repo, drafts a spec issue, labels it `agent-claude` or `agent-codex` → same path as #2 |
 | 4 | Telegram `/do "<plain English>"` | Dispatches `nl-order-process` to the orchestrator → same as #3 |
@@ -108,7 +108,7 @@ solo-cto-pipeline.yml (product repo)
   │   commit skip-review, rework-signal gate, self-dispatch
   │
   ▼  repository_dispatch(cross-review)
-cross-review-dispatch.yml (orchestrator)
+cross-review-dispatch.yml (orchestrator, concurrency-gated per PR)
   │
   ▼
 ops/agents/cross-reviewer.js — 3-round consensus
