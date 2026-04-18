@@ -1,10 +1,14 @@
 const GITHUB_OWNER = '{{GITHUB_OWNER}}';
 const ORCH_REPO = '{{ORCHESTRATOR_REPO}}';
 const fs = require('fs');
+const path = require('path');
 const TOKEN = process.env.ORCHESTRATOR_PAT || process.env.GITHUB_TOKEN;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const SETTINGS_PATH = 'ops/orchestrator/telegram-settings.json';
+const SENT_PATH = process.env.DECISION_QUEUE_STATE_PATH || path.join(process.cwd(), '.cache', 'decision-queue-sent.json');
+const SENT_TTL_HOURS = Math.max(1, parseInt(process.env.DECISION_QUEUE_DEDUPE_HOURS || '24', 10) || 24);
+const SENT_TTL_MS = SENT_TTL_HOURS * 60 * 60 * 1000;
 
 const PROJECTS = [
   { key: 'tribo', repo: '{{PRODUCT_REPO_1}}' },
@@ -64,6 +68,27 @@ function normalizeChatSettings(entry, defaults) {
   return null;
 }
 
+function buildDecisionFingerprint(item) {
+  const headSha = item?.pr?.head?.sha || 'no-sha';
+  return `${item.repo}#${item.prNumber}:${headSha}:${item.status}`;
+}
+
+function getReportIntervalHours(mode) {
+  const lower = String(mode || '').toLowerCase();
+  if (lower === 'both' || lower === 'all') return 6;
+  const match = lower.match(/^(\d+)h$/);
+  if (!match) return null;
+  const hours = parseInt(match[1], 10);
+  return Number.isFinite(hours) && hours > 0 ? hours : null;
+}
+
+function shouldSendIntervalReport(recipient, now = Date.now()) {
+  const intervalHours = getReportIntervalHours(recipient?.report_mode);
+  if (!intervalHours) return false;
+  const currentHourSlot = Math.floor(now / (60 * 60 * 1000));
+  return currentHourSlot % intervalHours === 0;
+}
+
 function getRecipients(settings) {
   const defaults = normalizeDefaultSettings(settings || {});
   const chats = settings?.chats || {};
@@ -74,6 +99,24 @@ function getRecipients(settings) {
     list.push({ id: CHAT_ID, ...defaults });
   }
   return list;
+}
+
+function loadRecentlySent() {
+  try {
+    const raw = fs.readFileSync(SENT_PATH, 'utf8');
+    const data = JSON.parse(raw);
+    const cutoff = Date.now() - SENT_TTL_MS;
+    return Object.fromEntries(Object.entries(data).filter(([, ts]) => ts > cutoff));
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveRecentlySent(sent) {
+  try {
+    fs.mkdirSync(path.dirname(SENT_PATH), { recursive: true });
+    fs.writeFileSync(SENT_PATH, JSON.stringify(sent, null, 2));
+  } catch (_) {}
 }
 
 function extractUrl(text) {
@@ -207,16 +250,18 @@ async function main() {
   const settings = loadSettings();
   const recipients = getRecipients(settings);
   const queue = await buildQueue();
+  const recentlySent = loadRecentlySent();
+  const freshQueue = queue.filter(item => !recentlySent[buildDecisionFingerprint(item)]);
   for (const recipient of recipients) {
-    if (!['6h', 'both', 'all'].includes(recipient.report_mode || '')) continue;
+    if (!shouldSendIntervalReport(recipient)) continue;
     const locale = recipient.locale || 'en';
     const isDetail = recipient.report_format === 'detail';
     const allowButtons = recipient.approval_mode !== 'text';
-    if (!queue.length) {
+    if (!freshQueue.length) {
       await sendTelegram(recipient.id, L(locale, '✅ No pending decisions', '✅ 결정 대기 없음'));
       continue;
     }
-    for (const item of queue) {
+    for (const item of freshQueue) {
       const age = formatAge(item.ageMs);
       const status = item.status === 'BLOCKER' ? '🔴 BLOCKER' : '🕒 PENDING';
       const previewLine = item.previewUrl
@@ -228,8 +273,10 @@ async function main() {
         `🚨 <b>결정 필요</b>\n${item.repo} PR #${item.prNumber}\n${item.title}\n\n상태: ${status} (${item.agent}, ${age})${detailLine}`
       );
       await sendTelegram(recipient.id, text, buildDecisionKeyboard(item, allowButtons));
+      recentlySent[buildDecisionFingerprint(item)] = Date.now();
     }
   }
+  saveRecentlySent(recentlySent);
 }
 
 main().catch(async (err) => {

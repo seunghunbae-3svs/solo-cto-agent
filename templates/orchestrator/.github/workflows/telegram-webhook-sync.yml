@@ -2,22 +2,65 @@ name: Telegram Webhook Sync
 
 on:
   deployment_status:
+  workflow_dispatch:
 
 jobs:
   sync:
     if: >
-      github.event.deployment_status.state == 'success' &&
-      github.event.deployment_status.environment_url != '' &&
-      github.event.deployment_status.environment == 'Production'
+      github.event_name == 'workflow_dispatch' || (
+        github.event.deployment_status.state == 'success' &&
+        github.event.deployment_status.environment_url != '' &&
+        github.event.deployment_status.environment == 'Production'
+      )
     runs-on: ubuntu-latest
     steps:
-      - name: Update Telegram webhook
+      - name: Update Telegram webhook and commands
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
-          URL="${{ github.event.deployment_status.environment_url }}"
-          HOOK="${URL%/}/api/telegram-webhook"
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
-            -d url="$HOOK" \
-            -d allowed_updates='["message","callback_query"]' \
-            -d drop_pending_updates=true || true
+          if [ -n "${{ github.event.deployment_status.environment_url || '' }}" ]; then
+            URL="${{ github.event.deployment_status.environment_url }}"
+            HOOK="${URL%/}/api/telegram-webhook"
+            curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+              -d url="$HOOK" \
+              -d allowed_updates='["message","callback_query"]' \
+              -d drop_pending_updates=true || true
+          fi
+
+          DEFAULT_COMMANDS=$(cat <<'JSON'
+          [
+            {"command":"welcome","description":"Open dashboard"},
+            {"command":"status","description":"View overall status"},
+            {"command":"pending","description":"View decision queue"},
+            {"command":"reviews","description":"View open PRs"},
+            {"command":"projects","description":"List projects"},
+            {"command":"activity","description":"View work log"},
+            {"command":"briefing","description":"Send daily briefing"},
+            {"command":"setup","description":"Configure alerts and language"},
+            {"command":"help","description":"Show help"}
+          ]
+          JSON
+          )
+
+          KO_COMMANDS=$(cat <<'JSON'
+          [
+            {"command":"welcome","description":"대시보드 열기"},
+            {"command":"status","description":"전체 현황 보기"},
+            {"command":"pending","description":"결정 대기 큐"},
+            {"command":"reviews","description":"오픈 PR 보기"},
+            {"command":"projects","description":"프로젝트 목록"},
+            {"command":"activity","description":"작업 내역"},
+            {"command":"briefing","description":"데일리 브리핑"},
+            {"command":"setup","description":"알림/언어 설정"},
+            {"command":"help","description":"도움말"}
+          ]
+          JSON
+          )
+
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setMyCommands" \
+            --data-urlencode "commands=$DEFAULT_COMMANDS" || true
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setMyCommands" \
+            -d language_code=ko \
+            --data-urlencode "commands=$KO_COMMANDS" || true
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setChatMenuButton" \
+            --data-urlencode 'menu_button={"type":"commands"}' || true

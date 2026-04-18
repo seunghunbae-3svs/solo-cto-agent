@@ -2,7 +2,7 @@ name: Decision Queue
 
 on:
   schedule:
-    - cron: "10 */6 * * *"
+    - cron: "10 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -11,9 +11,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore decision queue state
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/decision-queue-sent.json
+          key: decision-queue-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            decision-queue-${{ github.ref_name }}-
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+
+      - name: Prepare decision queue state path
+        run: mkdir -p .cache
 
       - name: Send decision queue
         env:
@@ -22,4 +33,13 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DECISION_QUEUE_LIMIT: "3"
+          DECISION_QUEUE_STATE_PATH: .cache/decision-queue-sent.json
+          DECISION_QUEUE_DEDUPE_HOURS: "24"
         run: node ops/scripts/decision-queue.js
+
+      - name: Save decision queue state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/decision-queue-sent.json
+          key: decision-queue-${{ github.ref_name }}-${{ github.run_id }}

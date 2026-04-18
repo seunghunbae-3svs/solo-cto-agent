@@ -424,8 +424,8 @@ function formatSettings(settings) {
 
 function buildWelcomeMessage(locale) {
   return L(locale,
-    `👋 Welcome to BDA\n\nQuick setup:\n/setup report=6h format=compact approval=buttons\n\nKey commands:\n/status  | /pending | /setup\n"project 1 status"\n"PR17 detail"\n"tribo approve"\n\nDecision keywords:\napprove / revise / hold / detail\n\nTip: approvals auto-merge when possible.\nHelp: /help`,
-    `👋 BDA 설치 완료\n\n빠른 설정:\n/setup report=6h format=compact approval=buttons\n\n주요 명령:\n/현황  | /pending | /setup\n"프로젝트 1 현황"\n"PR17 확인"\n"트리보 승인"\n\n결정 키워드:\n승인 / 수정 / 보류 / 확인\n\n팁: 승인 시 자동 머지됩니다.\n도움말: /help`
+    `👋 Welcome to BDA\n\nQuick setup:\n/setup report=6h format=compact approval=buttons\n\nReport cadence examples:\n/setup report=1h\n/setup report=12h\n/setup report=daily\n\nKey commands:\n/status  | /pending | /setup\n"project 1 status"\n"PR17 detail"\n"tribo approve"\n\nDecision keywords:\napprove / revise / hold / detail\n\nTip: approvals auto-merge when possible.\nHelp: /help`,
+    `👋 BDA 설치 완료\n\n빠른 설정:\n/setup report=6h format=compact approval=buttons\n\n리포트 주기 예시:\n/setup report=1h\n/setup report=12h\n/setup report=daily\n\n주요 명령:\n/현황  | /pending | /setup\n"프로젝트 1 현황"\n"PR17 확인"\n"트리보 승인"\n\n결정 키워드:\n승인 / 수정 / 보류 / 확인\n\n팁: 승인 시 자동 머지됩니다.\n도움말: /help`
   );
 }
 
@@ -436,7 +436,12 @@ function parseSetupInput(text) {
     const match = lower.match(/report\s*=\s*([a-z0-9-]+)/i);
     updates.report_mode = match ? match[1] : undefined;
   }
+  const intervalMatch = lower.match(/\b(1|6|12|24)h\b/);
+  if (intervalMatch) updates.report_mode = `${intervalMatch[1]}h`;
+  if (/1h|1시간/.test(lower)) updates.report_mode = '1h';
   if (/6h|6시간/.test(lower)) updates.report_mode = '6h';
+  if (/12h|12시간/.test(lower)) updates.report_mode = '12h';
+  if (/24h|24시간/.test(lower)) updates.report_mode = '24h';
   if (/daily|day|일일|매일/.test(lower)) updates.report_mode = 'daily';
   if (/off|stop|끄기|중지/.test(lower)) updates.report_mode = 'off';
 
@@ -1029,8 +1034,8 @@ async function cmdSetup(chatId, text, locale) {
 
   if (!Object.keys(updates).length) {
     const guide = L(locale,
-      `Current: ${formatSettings(existing)}\n\nSetup examples:\n/setup report=6h format=compact approval=buttons\n/setup report=daily format=detail\n/setup report=off\n\nOptions:\nreport: 6h | daily | off\nformat: compact | detail\napproval: buttons | text\nlocale: en | ko`,
-      `현재 설정: ${formatSettings(existing)}\n\n설정 예시:\n/setup report=6h format=compact approval=buttons\n/setup report=daily format=detail\n/setup report=off\n\n옵션:\nreport: 6h | daily | off\nformat: compact | detail\napproval: buttons | text\nlocale: en | ko`
+      `Current: ${formatSettings(existing)}\n\nSetup examples:\n/setup report=1h format=compact\n/setup report=12h format=compact\n/setup report=daily format=detail\n/setup report=off\n\nOptions:\nreport: 1h | 6h | 12h | 24h | daily | off\nformat: compact | detail\napproval: buttons | text\nlocale: en | ko`,
+      `현재 설정: ${formatSettings(existing)}\n\n설정 예시:\n/setup report=1h format=compact\n/setup report=12h format=compact\n/setup report=daily format=detail\n/setup report=off\n\n옵션:\nreport: 1h | 6h | 12h | 24h | daily | off\nformat: compact | detail\napproval: buttons | text\nlocale: en | ko`
     );
     return reply(chatId, guide);
   }
