@@ -121,6 +121,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* Merge pull request #108 from seunghunbae-3svs/claude/docs-sync
+
 * Merge pull request #107 from seunghunbae-3svs/claude/pipeline-consolidation
 
 * Merge pull request #106 from seunghunbae-3svs/claude/vision-batch
