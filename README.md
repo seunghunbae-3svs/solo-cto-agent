@@ -268,14 +268,13 @@ solo-cto-agent/
 
 | Axis | Decision | Options |
 |---|---|---|
-| Tier | Scope of capability | Maker / Builder / CTO |
+| Tier | Scope of capability | Builder / CTO |
 | Agent | Who reviews | Cowork (Claude) / Cowork + Codex |
 | Mode | Automation depth | Semi-auto (cowork-main) / Full-auto (codex-main) |
 
 Quick pick if you are unsure:
-- Start with Maker + Cowork + Semi-auto.
-- Move to Builder when you are shipping real features.
-- Move to CTO + Full-auto when you want always-on CI/CD and multi-agent routing.
+- Start with Builder + Cowork (single Claude agent, semi-auto, optional Telegram bot).
+- Move to CTO + Full-auto when you want dual-agent cross-review and always-on CI/CD across repos.
 
 ### Agents (summary)
 
@@ -312,15 +311,13 @@ Full-auto adds:
 ### Tiers (summary)
 
 **Not sure which tier? One question:**
-- Are you shipping code to production? → **Builder** (default, recommended for most users)
-- Only doing idea validation / reviews? → **Maker**
-- Running multi-repo CI/CD with full automation? → **CTO**
+- Solo dev shipping code with one Claude agent? → **Builder** (default, recommended for most users)
+- Want dual-agent cross-review (Claude + Codex) and multi-repo CI/CD? → **CTO**
 
-| Tier | Includes | Recommended for |
-|---|---|---|
-| Maker | spark + review + memory + craft | idea and validation loops |
-| Builder | Maker + build + ship | solo dev shipping |
-| CTO | Builder + orchestrate | multi-agent + routing |
+| Tier | Includes | Agents | Extras | Recommended for |
+|---|---|---|---|---|
+| Builder | spark + review + memory + craft + build + ship | solo Claude | optional Telegram bot for PR notify/approve | solo dev shipping |
+| CTO | Builder + orchestrate | Claude + Codex (dual-agent cross-review) | agent scoring, routing, decision queue, daily briefing | multi-agent CI/CD across repos |
 
 Details: `docs/tier-matrix.md`, `docs/tier-examples.md`, `docs/cto-policy.md`, `docs/cowork-main-install.md`, `docs/configuration.md`.
 
