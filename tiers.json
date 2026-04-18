@@ -127,18 +127,17 @@
   "product_repo_templates": {
     "description": "Product repo workflows split by tier. Builder = single-agent (Claude), CTO = dual/triple-agent (Claude + Codex + cross-review).",
     "builder": {
-      "description": "Single-agent CI/CD: Claude auto-review, preview feedback, rework cycle",
+      "description": "Single-agent CI/CD: Claude auto-review, preview feedback, rework cycle. solo-cto-pipeline.yml is the unified dispatcher with 7-layer anti-loop guards.",
       "workflows": [
         "claude-auto.yml",
         "preview-summary.yml",
-        "rework-dispatch.yml"
+        "solo-cto-pipeline.yml"
       ]
     },
     "cto": {
-      "description": "Dual/triple-agent: adds Codex agent, cross-review, comparison reports",
+      "description": "Dual/triple-agent: adds Codex agent, cross-review, comparison reports. Dispatch routing is handled by solo-cto-pipeline.yml from the builder tier.",
       "additional_workflows": [
         "codex-auto.yml",
-        "cross-review-dispatch.yml",
         "cross-review.yml",
         "comparison-dispatch.yml"
       ]

@@ -5,6 +5,12 @@ on:
   repository_dispatch:
     types: [rework-request]
 
+# Serialize rework per (repo, PR) so rapid successive review signals don't
+# spawn parallel rework-agent runs that race on the same PR branch.
+concurrency:
+  group: rework-${{ github.event.client_payload.repo || github.repository }}-${{ github.event.client_payload.pr || github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   rework:
     if: github.event_name == 'repository_dispatch' || github.event.label.name == 'rework'

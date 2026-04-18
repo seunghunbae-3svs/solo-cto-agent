@@ -4,6 +4,13 @@ on:
   repository_dispatch:
     types: [cross-review]
 
+# One review per (repo, PR) at a time. In-progress runs get cancelled when
+# a newer event lands — avoids double-comment if a PR is opened and labeled
+# in quick succession, and costs nothing when nothing is racing.
+concurrency:
+  group: cross-review-${{ github.event.client_payload.repo }}-${{ github.event.client_payload.pr }}
+  cancel-in-progress: true
+
 jobs:
   cross-review:
     runs-on: ubuntu-latest
