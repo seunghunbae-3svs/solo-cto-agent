@@ -1,5 +1,52 @@
 # Changelog
 
+## Unreleased — 2026-04-19
+
+**Theme**: End-to-end automation complete. Install is fully automatic; review → rework → visual → merge runs without human copy-paste; Telegram / Discord carry the full operational loop.
+
+### Highlights
+* **Natural-language work orders** — `solo-cto-agent do "..."` CLI + Telegram `/do` route a plain-English instruction to the right product repo as a labeled, spec-rich issue the existing worker pipeline picks up.
+* **3-round agent consensus** — `cross-reviewer.js` runs an A/B debate (R1 propose → R2 agree/disagree/add → R3 verdict) with early-exit on agreement; non-consensus after R3 still dispatches rework with a distinguishable reason.
+* **Before/After visual report** — new `visual-report.yml` + `visual-reporter.js` capture screenshots of the Vercel preview at the pre- and post-rework SHA, compose side-by-side PNGs, commit them to the orchestrator, post to PR + Telegram `sendMediaGroup`.
+* **Opt-in GitHub auto-merge** — PR with `auto-merge-when-ready` label is merged by GitHub the moment all required checks pass (native `enablePullRequestAutoMerge` mutation; branch protection respected).
+* **Unified dispatcher** — `solo-cto-pipeline.yml` is now the single product-repo dispatcher with 7-layer anti-loop guards. Legacy `cross-review-dispatch.yml` + `rework-dispatch.yml` deleted; concurrency guards added on orchestrator receivers.
+* **Full install automation** — `setup.sh` now creates the orchestrator repo on GitHub, pushes it, and sets the `TRACKED_REPOS` variable itself instead of printing copy-paste commands.
+* **Telegram CTO command surface** — `/status`, `/list`, `/rework`, `/approve`, `/do`, `/digest`, `/merge` (admin-gated). Every review / rework / report message includes inline buttons for ✅ Approve · ❌ Reject · 🔧 Rework · 🔀 Merge.
+* **Discord mirror** — set `DISCORD_WEBHOOK_URL` and visual-change screenshots / auto-diagnose reports mirror to Discord as file attachments.
+* **Repo auto-discovery** — `init --wizard` shells out to `gh api` and offers a multi-select of the user's repos; saved selection auto-fills `--repos` on every subsequent command.
+
+### Pipeline fixes
+* `review-request` dispatch no longer orphaned — solo-cto-pipeline now emits `cross-review` to match the existing orchestrator listener.
+* Anti-loop guards in solo-cto-pipeline extended to recognise new comment formats: `## 🔍 Consensus Review`, `## Visual Report — Before / After`, `[visual-report-skipped:…]`, circuit-breaker comments, auto-merge-enabled comments, `<!-- cross-reviewer:consensus -->` machine tag.
+* Claude model IDs unified to `claude-sonnet-4-6` across rework-agent, claude-reviewer, claude-worker (was mixed 4.0 / 4.6).
+* Hardcoded `seunghunbae-3svs` owner in `solo-cto-pipeline.yml` replaced with `{{GITHUB_OWNER}}` placeholder — every non-maintainer user was hitting silent dispatch failures.
+* OpenAI call in rework-agent was passing `system` as a top-level parameter (wrong shape); moved into `messages[]` as a system-role message.
+
+### New notification paths
+* **`pr-merge-notify.yml`** — fires on PR closed (merged or not); posts consolidated Telegram + Discord summary with rework round count.
+* **`combined-pr-with-uiux.yml` rewired** — now triggers on the real workflow name (`Visual Report (Before/After)`), posts the single "all agent checks passed" message exactly once per PR.
+* `visual-check.yml` fires on `workflow_run: Auto Rework on Review completed` → fresh preview screenshots after every rework.
+* `auto-diagnose.yml` fires on rework-auto **failure** → Telegram-attached JSON diagnostic.
+* Skip paths (`[visual-report-skipped:…]`) now notify Telegram/Discord too so silent failures aren't silent.
+
+### Docs + hygiene
+* README front section rewritten to describe the full pipeline (consensus, rework, visual, Telegram) instead of just dual-agent review.
+* New `docs/user-journey.md` — install → trigger → review → rework → visual → merge, with ASCII flow diagram, common scenarios, troubleshooting table.
+* `docs/hero-banner-prompt.md` (new) — regeneration prompt for the README hero image aligned with the expanded surface.
+* `.env.example` covers Discord / Vercel / Browserless / admin Telegram chat IDs.
+* PAT scope guidance expanded for classic vs fine-grained tokens.
+* `require.main === module` guards on `visual-check.js` + `auto-diagnose.js` so tests can import them without firing `main()`.
+* Audit report from 2026-04-19 published as a gist: https://gist.github.com/seunghunbae-3svs/4f3da08f149fdb2b2451b43751f6f35c
+
+### Merged PRs
+* #106 — vision batch (repo-discovery / consensus / visual-report / NL orders / Telegram CTO)
+* #107 — pipeline consolidation
+* #108 — docs sync with #106/#107
+* #109 — end-to-end loop closure (install automation, merge notifications, D1/D2 wiring, README)
+* (this release) — `require.main` guards + hero banner prompt + de-dupe combined-pr-with-uiux trigger
+
+---
+
 ## v1.3.0 (2026-04-17)
 
 **Theme**: Tier 3 deep integration features — plugin registry search, setup automation, type system enhancements.
