@@ -10,9 +10,9 @@ const require = createRequire(import.meta.url);
 const nl = require(path.join(process.cwd(), "bin", "lib", "nl-orchestrator.js"));
 
 const TRACKED = [
-  { name: "tribo-store", fullName: "acme/tribo-store", description: "K-beauty group buying", language: "TypeScript", pushedAt: "2026-04-18" },
-  { name: "ohmywork", fullName: "acme/ohmywork", description: "B2G field-practice platform", language: "TypeScript", pushedAt: "2026-04-17" },
-  { name: "pista-app", fullName: "acme/pista-app", description: "PH social gifting", language: "TypeScript", pushedAt: "2026-04-16" },
+  { name: "project-a-store", fullName: "acme/project-a-store", description: "K-beauty group buying", language: "TypeScript", pushedAt: "2026-04-18" },
+  { name: "project-b-work", fullName: "acme/project-b-work", description: "B2G field-practice platform", language: "TypeScript", pushedAt: "2026-04-17" },
+  { name: "project-c-app", fullName: "acme/project-c-app", description: "PH social gifting", language: "TypeScript", pushedAt: "2026-04-16" },
 ];
 
 // ── looksLikeDesignTask ───────────────────────────────────────────────────
@@ -65,7 +65,7 @@ describe("extractJson", () => {
 // ── validateIntent ───────────────────────────────────────────────────────
 describe("validateIntent", () => {
   const valid = {
-    repo: "acme/tribo-store",
+    repo: "acme/project-a-store",
     title: "Fix login redirect",
     body: "context...",
     agent: "claude",
@@ -112,7 +112,7 @@ function mockAnthropic(jsonOut) {
 describe("parseIntent", () => {
   it("returns a validated intent", async () => {
     const want = {
-      repo: "acme/tribo-store",
+      repo: "acme/project-a-store",
       title: "Improve empty-cart state",
       body: "The empty cart currently shows a generic message...",
       agent: "claude",
@@ -120,17 +120,17 @@ describe("parseIntent", () => {
       confidence: "medium",
     };
     const intent = await nl.parseIntent({
-      userText: "redesign the empty cart on tribo",
+      userText: "redesign the empty cart on project-a",
       trackedRepos: TRACKED,
       anthropicClient: mockAnthropic(want),
     });
-    expect(intent.repo).toBe("acme/tribo-store");
+    expect(intent.repo).toBe("acme/project-a-store");
     expect(intent.scope).toBe("design");
   });
 
   it("upgrades scope to design when userText is clearly design but LLM missed it", async () => {
     const want = {
-      repo: "acme/tribo-store",
+      repo: "acme/project-a-store",
       title: "Improve empty-cart state",
       body: "...",
       agent: "claude",
@@ -186,7 +186,7 @@ describe("dispatchOrder", () => {
   }
 
   const intent = {
-    repo: "acme/tribo-store",
+    repo: "acme/project-a-store",
     title: "Fix auth",
     body: "...",
     agent: "claude",
@@ -198,11 +198,11 @@ describe("dispatchOrder", () => {
     const gh = mockGh();
     const out = await nl.dispatchOrder({ intent, ghApi: gh });
     expect(out.issueNumber).toBe(42);
-    expect(out.repo).toBe("acme/tribo-store");
+    expect(out.repo).toBe("acme/project-a-store");
     expect(gh.calls).toHaveLength(1);
     const c = gh.calls[0];
     expect(c.owner).toBe("acme");
-    expect(c.repo).toBe("tribo-store");
+    expect(c.repo).toBe("project-a-store");
     expect(c.labels).toContain("agent-claude");
     expect(c.labels).toContain("nl-order");
     expect(c.labels).not.toContain("design-review");

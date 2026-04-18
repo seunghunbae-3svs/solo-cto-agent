@@ -16,7 +16,7 @@ You push code. Two AI agents review it, debate for up to three rounds until they
 ```bash
 npm i -g solo-cto-agent
 solo-cto-agent init --wizard         # pick your repos, pick your tier
-solo-cto-agent do "fix the auth bug in tribo"   # natural-language work order
+solo-cto-agent do "fix the auth bug in my-app"   # natural-language work order
 # ...PR opens → review → rework → merge, all visible in Telegram.
 ```
 
@@ -49,7 +49,7 @@ solo-cto-agent setup-pipeline --org <your-github-org>
 solo-cto-agent doctor
 
 # 5. Kick off a real work order
-solo-cto-agent do "add a monthly ARPU chart to the tribo admin dashboard"
+solo-cto-agent do "add a monthly ARPU chart to the admin dashboard"
 #   → LLM picks target repo, drafts a spec issue, labels agent-claude
 #   → claude worker opens a PR
 #   → cross-reviewer.js runs 3-round consensus
@@ -331,12 +331,13 @@ Cowork runs in your terminal with you in the loop. Codex runs in CI and reworks 
 
 | Axis | Decision | Options |
 |---|---|---|
-| Tier | Scope of capability | Builder / CTO |
+| Tier | Scope of capability | Maker / Builder / CTO |
 | Agent | Who reviews | Cowork (Claude) / Cowork + Codex |
 | Mode | Automation depth | Semi-auto (cowork-main) / Full-auto (codex-main) |
 
 Quick pick if you are unsure:
-- Start with Builder + Cowork (single Claude agent, semi-auto, optional Telegram bot).
+- Start with Maker + Cowork when you are still validating ideas (no CI required).
+- Move to Builder + Cowork once you are shipping real features (single Claude agent, semi-auto, optional Telegram bot).
 - Move to CTO + Full-auto when you want dual-agent cross-review and always-on CI/CD across repos.
 
 ### Agents (summary)
@@ -374,12 +375,14 @@ Full-auto adds:
 ### Tiers (summary)
 
 **Not sure which tier? One question:**
+- Only doing idea validation / reviews, no CI? → **Maker**
 - Solo dev shipping code with one Claude agent? → **Builder** (default, recommended for most users)
 - Want dual-agent cross-review (Claude + Codex) and multi-repo CI/CD? → **CTO**
 
 | Tier | Includes | Agents | Extras | Recommended for |
 |---|---|---|---|---|
-| Builder | spark + review + memory + craft + build + ship | solo Claude | optional Telegram bot for PR notify/approve | solo dev shipping |
+| Maker | spark + review + memory + craft | local-only | no CI required | idea and validation loops |
+| Builder | Maker + build + ship | solo Claude | optional Telegram bot for PR notify/approve | solo dev shipping |
 | CTO | Builder + orchestrate | Claude + Codex (dual-agent cross-review) | agent scoring, routing, decision queue, daily briefing | multi-agent CI/CD across repos |
 
 Details: `docs/tier-matrix.md`, `docs/tier-examples.md`, `docs/cto-policy.md`, `docs/cowork-main-install.md`, `docs/configuration.md`.

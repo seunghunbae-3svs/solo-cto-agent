@@ -3,7 +3,7 @@
  *
  * Two trigger paths, same outcome:
  *   A) repository_dispatch type=nl-order-process with payload
- *      { text: "fix auth in tribo", via: "telegram" }
+ *      { text: "fix auth in my-app", via: "telegram" }
  *      → process ORDER_TEXT directly, no issue bookkeeping.
  *   B) an issue in the orchestrator repo labeled `nl-order` (legacy /do path)
  *      → read the issue body, process, close the issue linking the target.

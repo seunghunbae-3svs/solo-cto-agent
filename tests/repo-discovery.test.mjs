@@ -20,8 +20,8 @@ const repoDiscovery = require(path.join(process.cwd(), "bin", "repo-discovery.js
 // ── Fixtures ──────────────────────────────────────────────────────
 const SAMPLE_REPOS = [
   {
-    name: "tribo-store",
-    full_name: "bae/tribo-store",
+    name: "project-a-store",
+    full_name: "acme/project-a-store",
     description: "K-beauty group buying",
     language: "TypeScript",
     pushed_at: "2026-04-18T10:00:00Z",
@@ -30,8 +30,8 @@ const SAMPLE_REPOS = [
     archived: false,
   },
   {
-    name: "pista-app",
-    full_name: "bae/pista-app",
+    name: "project-b-app",
+    full_name: "acme/project-b-app",
     description: "PH social gifting",
     language: "TypeScript",
     pushed_at: "2026-04-17T10:00:00Z",
@@ -41,7 +41,7 @@ const SAMPLE_REPOS = [
   },
   {
     name: "legacy-fork",
-    full_name: "bae/legacy-fork",
+    full_name: "acme/legacy-fork",
     description: null,
     language: "Python",
     pushed_at: "2026-04-16T10:00:00Z",
@@ -51,7 +51,7 @@ const SAMPLE_REPOS = [
   },
   {
     name: "old-archived",
-    full_name: "bae/old-archived",
+    full_name: "acme/old-archived",
     description: "",
     language: "Go",
     pushed_at: "2026-04-15T10:00:00Z",
@@ -60,8 +60,8 @@ const SAMPLE_REPOS = [
     archived: true,
   },
   {
-    name: "ohmywork",
-    full_name: "bae/ohmywork",
+    name: "project-c-work",
+    full_name: "acme/project-c-work",
     description: "B2G field-practice platform",
     language: "TypeScript",
     pushed_at: "2026-04-14T10:00:00Z",
@@ -70,8 +70,8 @@ const SAMPLE_REPOS = [
     archived: false,
   },
   {
-    name: "awaketune",
-    full_name: "bae/awaketune",
+    name: "project-d-tune",
+    full_name: "acme/project-d-tune",
     description: "Wake-shift algorithm",
     language: "Swift",
     pushed_at: "2026-04-13T10:00:00Z",
@@ -80,8 +80,8 @@ const SAMPLE_REPOS = [
     archived: false,
   },
   {
-    name: "grief-gov",
-    full_name: "bae/grief-gov",
+    name: "project-e-gov",
+    full_name: "acme/project-e-gov",
     description: "Grief risk governance",
     language: "Python",
     pushed_at: "2026-04-12T10:00:00Z",
@@ -118,8 +118,8 @@ describe("repo-discovery: parseReposJson", () => {
     const parsed = repoDiscovery.parseReposJson(JSON.stringify(SAMPLE_REPOS));
     expect(parsed).toHaveLength(7);
     expect(parsed[0]).toMatchObject({
-      name: "tribo-store",
-      fullName: "bae/tribo-store",
+      name: "project-a-store",
+      fullName: "acme/project-a-store",
       language: "TypeScript",
       private: false,
       fork: false,
@@ -158,11 +158,11 @@ describe("repo-discovery: defaultPreselect", () => {
     const parsed = repoDiscovery.parseReposJson(JSON.stringify(SAMPLE_REPOS));
     const preselected = repoDiscovery.defaultPreselect(parsed);
     expect(preselected).toEqual([
-      "tribo-store",
-      "pista-app",
-      "ohmywork",
-      "awaketune",
-      "grief-gov",
+      "project-a-store",
+      "project-b-app",
+      "project-c-work",
+      "project-d-tune",
+      "project-e-gov",
     ]);
     // legacy-fork (fork) and old-archived (archived) are excluded.
     expect(preselected).not.toContain("legacy-fork");
@@ -171,7 +171,7 @@ describe("repo-discovery: defaultPreselect", () => {
 
   it("respects a smaller count param", () => {
     const parsed = repoDiscovery.parseReposJson(JSON.stringify(SAMPLE_REPOS));
-    expect(repoDiscovery.defaultPreselect(parsed, 2)).toEqual(["tribo-store", "pista-app"]);
+    expect(repoDiscovery.defaultPreselect(parsed, 2)).toEqual(["project-a-store", "project-b-app"]);
   });
 });
 
@@ -193,31 +193,31 @@ describe("repo-discovery: parseSelectionInput", () => {
 
   it("'1,3,5-6' → specific numeric picks + range", () => {
     const sel = repoDiscovery.parseSelectionInput("1,3,5-6", parsed, pre);
-    expect(sel).toContain("tribo-store"); // #1
+    expect(sel).toContain("project-a-store"); // #1
     expect(sel).toContain("legacy-fork"); // #3
-    expect(sel).toContain("ohmywork");    // #5
-    expect(sel).toContain("awaketune");   // #6
+    expect(sel).toContain("project-c-work");    // #5
+    expect(sel).toContain("project-d-tune");   // #6
     expect(sel).toHaveLength(4);
   });
 
   it("accepts raw repo name", () => {
-    expect(repoDiscovery.parseSelectionInput("tribo-store", parsed, pre)).toEqual(["tribo-store"]);
+    expect(repoDiscovery.parseSelectionInput("project-a-store", parsed, pre)).toEqual(["project-a-store"]);
   });
 });
 
 describe("repo-discovery: fetchRepos (mocked gh)", () => {
   it("returns parsed repo list when gh is available", () => {
     const out = repoDiscovery.fetchRepos({
-      org: "bae",
+      org: "acme",
       execFile: makeExecFile({ result: SAMPLE_REPOS }),
     });
     expect(out).toHaveLength(7);
-    expect(out[0].name).toBe("tribo-store");
+    expect(out[0].name).toBe("project-a-store");
   });
 
   it("returns null when gh is not on PATH", () => {
     const out = repoDiscovery.fetchRepos({
-      org: "bae",
+      org: "acme",
       execFile: makeExecFile({ ghMissing: true }),
     });
     expect(out).toBeNull();
@@ -226,7 +226,7 @@ describe("repo-discovery: fetchRepos (mocked gh)", () => {
   it("throws a tagged error when gh api itself fails (auth/404)", () => {
     expect(() =>
       repoDiscovery.fetchRepos({
-        org: "bae",
+        org: "acme",
         execFile: makeExecFile({ failWith: "HTTP 404: Not Found" }),
       }),
     ).toThrowError(/gh api failed/);
@@ -239,7 +239,7 @@ describe("repo-discovery: fetchRepos (mocked gh)", () => {
       capturedArgs = args;
       return JSON.stringify(SAMPLE_REPOS);
     };
-    repoDiscovery.fetchRepos({ org: "bae-org", execFile: exec });
+    repoDiscovery.fetchRepos({ org: "acme-org", execFile: exec });
     expect(capturedArgs[1]).toContain("/orgs/bae-org/repos");
   });
 
@@ -268,10 +268,10 @@ describe("repo-discovery: saveSelection / loadSelection", () => {
   it("round-trips a selection", () => {
     const file = path.join(tmp, "repos.json");
     const parsed = repoDiscovery.parseReposJson(JSON.stringify(SAMPLE_REPOS));
-    const selected = ["tribo-store", "pista-app"];
+    const selected = ["project-a-store", "project-b-app"];
 
     const written = repoDiscovery.saveSelection(
-      { org: "bae", selected, discovered: parsed },
+      { org: "acme", selected, discovered: parsed },
       file,
     );
     expect(written).toBe(file);

@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.4.1 (2026-04-19)
+
+**Theme**: Hotfix — restore Maker tier in README, remove maintainer's hardcoded repo/owner leaks from shipped CLI + tests.
+
+### Fixes
+* **Restore Maker tier in README** — Maker preset is still supported by `bin/cli.js` (SKILLS map + help text) and by `docs/tier-matrix.md` / `docs/tier-examples.md` / `docs/CLAUDE.md`, but `v1.4.0` dropped it from the top-level README decision-axis + tier-summary tables. README now matches what the CLI actually installs: Maker (spark+review+memory+craft) / Builder (Maker+build+ship) / CTO (Builder+orchestrate).
+* **Remove hardcoded dashboard repos from `bin/telegram-bot.js`** — `DASHBOARD_REPOS` previously shipped the maintainer's private repo list to every `npm i -g solo-cto-agent` install. Replaced with env-var resolution: `TRACKED_REPOS` → `DASHBOARD_REPOS` → `PRODUCT_REPOS`, empty-list message prompts the user to configure.
+* **Remove hardcoded default owner in `bin/telegram-bot.js` callback handler** — previously fell back to the maintainer's GitHub handle when a Telegram callback used a bare repo name. Now reads `GITHUB_OWNER` env, falls back to the first owner segment of `TRACKED_REPOS`, returns an actionable error if neither is set.
+* **Mask maintainer's private project names in shipped docs, demo data, and test fixtures** — references in `README.md`, `bin/do.js`, `docs/user-journey.md`, `docs/hero-banner-prompt.md`, `benchmarks/dashboard.html`, `templates/orchestrator/.github/workflows/nl-processor.yml`, `templates/orchestrator/ops/agents/nl-processor.js`, `tests/nl-orchestrator.test.mjs`, `tests/repo-discovery.test.mjs`, `tests/telegram-bot.test.mjs` replaced with generic `project-a` … `project-f` placeholders or `my-app` / `my-store` in example text.
+
+### No behavior change beyond the above
+* CLI surface, workflow contracts, env-var names, and agent scoring are identical to v1.4.0. Users who already set `TRACKED_REPOS` via the wizard see no change in `/dashboard` behavior.
+
+---
+
 ## v1.4.0 (2026-04-19)
 
 **Theme**: End-to-end automation complete. Install is fully automatic; review → rework → visual → merge runs without human copy-paste; Telegram / Discord carry the full operational loop.

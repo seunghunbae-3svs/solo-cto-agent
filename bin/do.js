@@ -4,7 +4,7 @@
  * do — natural-language work order entry point.
  *
  * Usage:
- *   solo-cto-agent do "fix the login bug in tribo"
+ *   solo-cto-agent do "fix the login bug in my-app"
  *   solo-cto-agent do "improve the hero section typography on the landing page"
  *
  * What it does:
@@ -50,9 +50,9 @@ Setup:
   - Set GITHUB_TOKEN (for issue creation).
 
 Examples:
-  solo-cto-agent do "fix the staging deploy error I saw in tribo"
-  solo-cto-agent do "redesign the login hero on ohmywork — cleaner, less gradient" --agent claude
-  solo-cto-agent do "add unit tests for the ARPU calculator in tribo" --agent codex
+  solo-cto-agent do "fix the staging deploy error I saw in my-app"
+  solo-cto-agent do "redesign the login hero on another-app — cleaner, less gradient" --agent claude
+  solo-cto-agent do "add unit tests for the ARPU calculator in my-app" --agent codex
 `);
 }
 
