@@ -25,6 +25,9 @@ const https = require("https");
 const fs = require("fs");
 const url = require("url");
 
+// Shared command surface (single source of truth for both Telegram surfaces)
+const tc = require("./lib/telegram-commands.js");
+
 // Polling state
 let botState = {
   running: false,
@@ -90,6 +93,21 @@ function httpPostJson(rawUrl, payload) {
     req.write(data);
     req.end();
   });
+}
+
+// --------------------------------------------------------------------------
+// GitHub helper matching shared module's ghApi(endpoint, opts?) signature.
+// Returns the parsed JSON body directly so command handlers can treat GitHub
+// responses like the webhook's `fetch`-based helper.
+// --------------------------------------------------------------------------
+
+function _makeGhApi(token) {
+  return async function ghApi(endpoint, opts = {}) {
+    const method = (opts.method || "GET").toUpperCase();
+    const body = opts.body || null;
+    const res = await _githubApi({ method, endpoint, body, token });
+    return res && res.json ? res.json : res;
+  };
 }
 
 // --------------------------------------------------------------------------
@@ -193,6 +211,67 @@ async function handleCallback(callbackQuery, botToken, deps = {}) {
   if (!callback_query_id || !data || !message) {
     console.log("[telegram-bot] Invalid callback_query structure");
     return { ok: false, error: "Invalid callback_query" };
+  }
+
+  // --- New ACTION|repo|pr callbacks (APPROVE/REJECT/REWORK/MERGE) ---
+  // Route these through the shared module. Legacy DECISION|…|action callbacks
+  // keep hitting the original code path below for full backward compat.
+  const head = String(data).split("|")[0];
+  if (tc.ACTION_CALLBACK_PREFIXES.includes(head)) {
+    const env = deps.env || process.env;
+    const githubToken = env.GITHUB_TOKEN || env.ORCHESTRATOR_PAT;
+    if (!githubToken && !deps.ghApi) {
+      try {
+        await (deps.httpPostJson || httpPostJson)(
+          `https://api.telegram.org/bot${botToken}/answerCallbackQuery`,
+          { callback_query_id, text: "❌ GITHUB_TOKEN not set", show_alert: true }
+        );
+      } catch (_) { /* best-effort */ }
+      return { ok: false, error: "no github token" };
+    }
+    const ghApi = deps.ghApi || _makeGhApi(githubToken);
+    const ctx = {
+      chatId: message?.chat?.id,
+      fromLabel: (from && (from.username || from.first_name)) || "user",
+      env,
+      ghApi,
+      trackedRepos: tc.resolveTrackedRepos(env, deps.trackedRepos || null),
+      adminChatIds: tc.resolveAdminChatIds(env),
+    };
+
+    const result = await tc.dispatchCallback(data, ctx);
+    if (result.handled) {
+      const response = result.response || {};
+      try {
+        await (deps.httpPostJson || httpPostJson)(
+          `https://api.telegram.org/bot${botToken}/answerCallbackQuery`,
+          { callback_query_id, text: response.text || (response.ok ? "Done" : "Failed"), show_alert: !response.ok }
+        );
+      } catch (_) { /* best-effort */ }
+
+      // Edit the keyboard to reflect action completion
+      try {
+        const origText = (message && message.text) || "";
+        const suffix = `\n\n${response.text || result.action}`;
+        await (deps.httpPostJson || httpPostJson)(
+          `https://api.telegram.org/bot${botToken}/editMessageText`,
+          {
+            chat_id: message.chat.id,
+            message_id: message.message_id,
+            text: `${origText}${suffix}`.slice(0, 4000),
+            parse_mode: "HTML",
+            reply_markup: { inline_keyboard: [] },
+          }
+        );
+      } catch (_) { /* best-effort */ }
+
+      return {
+        ok: !!response.ok,
+        action: result.action,
+        repo: result.repo,
+        prNumber: result.prNumber,
+      };
+    }
   }
 
   const parsed = _parseCallbackData(data);
@@ -357,13 +436,77 @@ async function _handleDashboard(chat, botToken, deps, detailed) {
 
 /**
  * Process a single text message.
- * Routes basic commands like /status, /help, /prs, /dashboard.
+ * Routes basic commands like /status, /help, /prs, /dashboard plus the
+ * new CTO-level commands (/list, /rework, /approve, /do, /digest, /merge).
  */
 async function handleMessage(message, botToken, deps = {}) {
   const { chat, text } = message;
   if (!chat || !text) {
     console.log("[telegram-bot] Invalid message structure");
     return { ok: false, error: "Invalid message" };
+  }
+
+  const post = deps.httpPostJson || httpPostJson;
+
+  // First — try shared CTO command surface. Only take over when a GitHub
+  // token is present *and* the command is one of the new CTO-level commands
+  // (/list, /rework, /approve, /do, /digest, /merge). /status keeps its
+  // legacy "bot status" behaviour unless explicitly routed via ghApi.
+  const parsedCmd = tc.parseCommand(text);
+  const env = deps.env || process.env;
+  const ctoCommands = ["/list", "/rework", "/approve", "/do", "/digest", "/merge"];
+  const githubToken = env.GITHUB_TOKEN || env.ORCHESTRATOR_PAT;
+  const hasGh = !!(githubToken || deps.ghApi);
+
+  // Extend /status handling to the CTO surface when GitHub is wired up;
+  // otherwise fall through to the legacy (bot-meta) /status below.
+  const useSharedStatus = parsedCmd && parsedCmd.cmd === "/status" && hasGh;
+
+  if (parsedCmd && (ctoCommands.includes(parsedCmd.cmd) || useSharedStatus)) {
+    if (!botToken) {
+      return { ok: false, error: "TELEGRAM_BOT_TOKEN missing" };
+    }
+
+    if (!hasGh) {
+      try {
+        await post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          chat_id: chat.id,
+          text: "GITHUB_TOKEN not set — cannot run this command.",
+        });
+      } catch (_) { /* already logged upstream */ }
+      return { ok: false, error: "no github token", command: parsedCmd.cmd };
+    }
+
+    const ghApi = deps.ghApi || _makeGhApi(githubToken);
+    const trackedRepos = tc.resolveTrackedRepos(env, deps.trackedRepos || null);
+    const adminChatIds = tc.resolveAdminChatIds(env);
+
+    const ctx = {
+      chatId: chat.id,
+      fromLabel: (message.from && (message.from.username || message.from.first_name)) || "user",
+      env,
+      ghApi,
+      trackedRepos,
+      adminChatIds,
+    };
+
+    const result = await tc.dispatchCommand(parsedCmd, ctx);
+    if (result.handled) {
+      const response = result.response || {};
+      if (response.text) {
+        try {
+          await post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            chat_id: chat.id,
+            text: response.text,
+            ...(response.extra || {}),
+          });
+        } catch (e) {
+          console.error(`[telegram-bot] Failed to send ${parsedCmd.cmd}: ${e.message}`);
+          return { ok: false, error: e.message, command: parsedCmd.cmd };
+        }
+      }
+      return { ok: true, command: parsedCmd.cmd };
+    }
   }
 
   const trimmed = text.trim().toLowerCase();
@@ -385,12 +528,18 @@ async function handleMessage(message, botToken, deps = {}) {
       "<b>solo-cto-agent Telegram Bot</b>",
       "",
       "Commands:",
-      "/status - Bot status",
-      "/prs - Open PRs across all repos",
-      "/dashboard - Full cross-repo dashboard",
+      "/status [repo] - Active (non-draft) PRs across tracked repos",
+      "/list [repo] - Last 10 PRs across tracked repos",
+      "/rework &lt;pr&gt; - Dispatch rework-request for PR",
+      "/approve &lt;pr&gt; - Submit APPROVE review for PR",
+      "/merge &lt;pr&gt; - Squash-merge PR (admin only)",
+      '/do "&lt;nl order&gt;" - Queue natural-language order as inbox issue',
+      "/digest - Today's activity summary",
+      "/prs - Open PRs across all repos (legacy)",
+      "/dashboard - Full cross-repo dashboard (legacy)",
       "/help - Show this message",
       "",
-      "Use inline buttons to approve, hold, or feedback on PRs.",
+      "Use inline buttons to Approve / Reject / Rework / Merge PRs.",
     ].join("\n");
     try {
       await (deps.httpPostJson || httpPostJson)(
