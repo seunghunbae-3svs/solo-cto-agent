@@ -121,6 +121,53 @@ async function getFileContent(path) {
   }
 }
 
+/**
+ * Opt-in auto-merge.
+ *
+ * Only runs when the PR carries the 'auto-merge-when-ready' label. Uses
+ * GitHub's native enablePullRequestAutoMerge mutation so the merge only
+ * happens after every required check passes — we never bypass branch
+ * protection or required reviews.
+ *
+ * Returns { enabled: bool, reason?: string }.
+ */
+async function tryEnableAutoMerge(owner, repo, prNumber) {
+  try {
+    const pr = await gh.pulls.get({ owner, repo, pull_number: prNumber });
+    const labels = (pr.data.labels || []).map(l => l.name);
+    if (!labels.includes('auto-merge-when-ready')) {
+      return { enabled: false, reason: 'label-not-set' };
+    }
+
+    const mutation = `
+      mutation($prId: ID!, $method: PullRequestMergeMethod!) {
+        enablePullRequestAutoMerge(input: { pullRequestId: $prId, mergeMethod: $method }) {
+          pullRequest { autoMergeRequest { enabledAt } }
+        }
+      }
+    `;
+
+    const res = await fetch('https://api.github.com/graphql', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.GH_PAT}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: mutation,
+        variables: { prId: pr.data.node_id, method: 'SQUASH' },
+      }),
+    });
+    const data = await res.json();
+    if (data.errors && data.errors.length) {
+      return { enabled: false, reason: data.errors[0].message };
+    }
+    return { enabled: true };
+  } catch (e) {
+    return { enabled: false, reason: e.message };
+  }
+}
+
 async function pushFiles(updates) {
   const [owner, repo] = process.env.PR_REPO.split('/');
 
@@ -270,6 +317,22 @@ Output JSON only:
     recordSuccess(repo, prNumber, agent);
 
     telegram(`✅ <b>Rework 완료</b>\nRepo: ${process.env.PR_REPO}\nPR: #${prNumber}\nAgent: ${agent}\nRound: ${roundCount + 1}/${maxRounds}`);
+
+    // Opt-in auto-merge: only fires if PR has 'auto-merge-when-ready' label.
+    // GitHub gates the actual merge on all required checks passing.
+    const autoMerge = await tryEnableAutoMerge(owner, repo, prNumber);
+    if (autoMerge.enabled) {
+      await gh.issues.createComment({
+        owner,
+        repo,
+        issue_number: prNumber,
+        body: `🔀 **Auto-merge enabled.** PR will merge automatically once all required checks pass.`,
+      });
+      telegram(`🔀 <b>Auto-merge 활성화</b>\nPR #${prNumber} — CI green 시 자동 머지`);
+    } else if (autoMerge.reason && autoMerge.reason !== 'label-not-set') {
+      console.log(`Auto-merge not enabled: ${autoMerge.reason}`);
+    }
+
     console.log('Done!');
 
   } catch (err) {
