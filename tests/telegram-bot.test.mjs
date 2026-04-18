@@ -15,24 +15,24 @@ import {
 
 describe("_parseCallbackData", () => {
   it("parses valid DECISION callback data", () => {
-    const result = _parseCallbackData("DECISION|tribo-store|42|APPROVE");
+    const result = _parseCallbackData("DECISION|project-a-store|42|APPROVE");
     expect(result.ok).toBe(true);
     expect(result.type).toBe("DECISION");
-    expect(result.repo).toBe("tribo-store");
+    expect(result.repo).toBe("project-a-store");
     expect(result.prNumber).toBe(42);
     expect(result.action).toBe("APPROVE");
   });
 
   it("handles repo with owner prefix", () => {
-    const result = _parseCallbackData("DECISION|seunghunbae-3svs/golf-now|99|HOLD");
+    const result = _parseCallbackData("DECISION|acme-org/project-e-now|99|HOLD");
     expect(result.ok).toBe(true);
-    expect(result.repo).toBe("seunghunbae-3svs/golf-now");
+    expect(result.repo).toBe("acme-org/project-e-now");
     expect(result.prNumber).toBe(99);
     expect(result.action).toBe("HOLD");
   });
 
   it("parses FEEDBACK action", () => {
-    const result = _parseCallbackData("DECISION|eventbadge|5|FEEDBACK");
+    const result = _parseCallbackData("DECISION|project-f-badge|5|FEEDBACK");
     expect(result.ok).toBe(true);
     expect(result.action).toBe("FEEDBACK");
   });
@@ -43,25 +43,25 @@ describe("_parseCallbackData", () => {
   });
 
   it("rejects wrong number of parts", () => {
-    const result = _parseCallbackData("DECISION|tribo-store|42");
+    const result = _parseCallbackData("DECISION|project-a-store|42");
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/Invalid callback format/);
   });
 
   it("rejects wrong type prefix", () => {
-    const result = _parseCallbackData("ACTION|tribo-store|42|APPROVE");
+    const result = _parseCallbackData("ACTION|project-a-store|42|APPROVE");
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/Invalid callback format/);
   });
 
   it("rejects invalid action", () => {
-    const result = _parseCallbackData("DECISION|tribo-store|42|REJECT");
+    const result = _parseCallbackData("DECISION|project-a-store|42|REJECT");
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/Unknown action/);
   });
 
   it("rejects non-numeric PR number", () => {
-    const result = _parseCallbackData("DECISION|tribo-store|abc|APPROVE");
+    const result = _parseCallbackData("DECISION|project-a-store|abc|APPROVE");
     expect(result.ok).toBe(false);
   });
 });
@@ -95,7 +95,7 @@ describe("handleCallback", () => {
     const callback = {
       callback_query_id: "cq-123",
       from: { id: 1, first_name: "Test" },
-      data: "DECISION|tribo-store|42|APPROVE",
+      data: "DECISION|project-a-store|42|APPROVE",
       message: { message_id: 1, chat: { id: 999 } },
     };
 
@@ -132,7 +132,7 @@ describe("handleCallback", () => {
     const callback = {
       callback_query_id: "cq-456",
       from: { id: 1, first_name: "Test" },
-      data: "DECISION|golf-now|99|HOLD",
+      data: "DECISION|project-e-now|99|HOLD",
       message: { message_id: 1, chat: { id: 999 } },
     };
 
@@ -159,7 +159,7 @@ describe("handleCallback", () => {
     const callback = {
       callback_query_id: "cq-789",
       from: { id: 1, first_name: "Test" },
-      data: "DECISION|eventbadge|5|FEEDBACK",
+      data: "DECISION|project-f-badge|5|FEEDBACK",
       message: { message_id: 1, chat: { id: 999 } },
     };
 
@@ -213,7 +213,7 @@ describe("handleCallback", () => {
     const callback = {
       callback_query_id: "cq-error",
       from: { id: 1, first_name: "Test" },
-      data: "DECISION|tribo-store|42|APPROVE",
+      data: "DECISION|project-a-store|42|APPROVE",
       message: { message_id: 1, chat: { id: 999 } },
     };
 
@@ -228,7 +228,7 @@ describe("handleCallback", () => {
     expect(answerCall.show_alert).toBe(true);
   });
 
-  it("prepends default owner if repo has no slash", async () => {
+  it("prepends default owner from GITHUB_OWNER env if repo has no slash", async () => {
     let capturedEndpoint = null;
 
     const mockGithubApi = async ({ method, endpoint, body, token }) => {
@@ -250,13 +250,48 @@ describe("handleCallback", () => {
       message: { message_id: 1, chat: { id: 999 } },
     };
 
-    await handleCallback(callback, "bot-token", {
-      _githubApi: mockGithubApi,
-      httpPostJson: mockAnswerCallback,
-    });
+    const prevOwner = process.env.GITHUB_OWNER;
+    process.env.GITHUB_OWNER = "acme-org";
+    try {
+      await handleCallback(callback, "bot-token", {
+        _githubApi: mockGithubApi,
+        httpPostJson: mockAnswerCallback,
+      });
+    } finally {
+      if (prevOwner === undefined) delete process.env.GITHUB_OWNER;
+      else process.env.GITHUB_OWNER = prevOwner;
+    }
 
-    // The endpoint should include the default owner
-    expect(capturedEndpoint).toMatch(/seunghunbae-3svs\/my-repo/);
+    // The endpoint should include the configured owner from env.
+    expect(capturedEndpoint).toMatch(/acme-org\/my-repo/);
+  });
+
+  it("returns ok:false when repo has no slash and no GITHUB_OWNER configured", async () => {
+    const mockGithubApi = async () => ({ status: 200, json: { id: 1 } });
+    const mockAnswerCallback = async () => ({ status: 200, json: { ok: true } });
+
+    const callback = {
+      callback_query_id: "cq-noowner",
+      from: { id: 1, first_name: "Test" },
+      data: "DECISION|my-repo|10|APPROVE",
+      message: { message_id: 1, chat: { id: 999 } },
+    };
+
+    const prevOwner = process.env.GITHUB_OWNER;
+    const prevTracked = process.env.TRACKED_REPOS;
+    delete process.env.GITHUB_OWNER;
+    delete process.env.TRACKED_REPOS;
+    try {
+      const result = await handleCallback(callback, "bot-token", {
+        _githubApi: mockGithubApi,
+        httpPostJson: mockAnswerCallback,
+      });
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/owner/i);
+    } finally {
+      if (prevOwner !== undefined) process.env.GITHUB_OWNER = prevOwner;
+      if (prevTracked !== undefined) process.env.TRACKED_REPOS = prevTracked;
+    }
   });
 });
 

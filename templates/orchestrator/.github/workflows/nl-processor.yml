@@ -54,6 +54,6 @@ jobs:
           INBOX_REPO: ${{ github.event_name == 'issues' && github.event.repository.full_name || '' }}
           INBOX_ISSUE_NUMBER: ${{ github.event_name == 'issues' && github.event.issue.number || '' }}
           # TRACKED_REPOS is set as a repository variable on the orchestrator
-          # repo, e.g. "acme/tribo-store,acme/ohmywork,acme/pista-app".
+          # repo, e.g. "acme/my-store,acme/work-app,acme/social-app".
           TRACKED_REPOS: ${{ vars.TRACKED_REPOS }}
         run: node ops/agents/nl-processor.js

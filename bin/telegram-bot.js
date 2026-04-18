@@ -297,8 +297,15 @@ async function handleCallback(callbackQuery, botToken, deps = {}) {
     // Determine the owner/repo format. Support both "owner/repo" and "repo".
     let ownerRepo = repo;
     if (!repo.includes("/")) {
-      // If only repo name, prepend default owner
-      ownerRepo = `seunghunbae-3svs/${repo}`;
+      // If only repo name, prepend default owner from env (GITHUB_OWNER or
+      // first segment of TRACKED_REPOS). No hardcoded fallback.
+      const defaultOwner = process.env.GITHUB_OWNER
+        || (process.env.TRACKED_REPOS || "").split(",").map((s) => s.trim()).find((s) => s.includes("/"))?.split("/")[0]
+        || "";
+      if (!defaultOwner) {
+        return { ok: false, error: "repo missing owner; set GITHUB_OWNER or include owner in callback data" };
+      }
+      ownerRepo = `${defaultOwner}/${repo}`;
     }
 
     if (action === "APPROVE") {
@@ -364,11 +371,13 @@ async function handleCallback(callbackQuery, botToken, deps = {}) {
 // Dashboard: cross-repo PR status via GitHub API
 // --------------------------------------------------------------------------
 
-const DASHBOARD_REPOS = [
-  "seunghunbae-3svs/eventbadge",
-  "seunghunbae-3svs/golf-now",
-  "seunghunbae-3svs/tribo-store",
-];
+function _loadDashboardRepos() {
+  const raw = process.env.TRACKED_REPOS || process.env.DASHBOARD_REPOS || process.env.PRODUCT_REPOS || "";
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s && s.includes("/"));
+}
 
 async function _handleDashboard(chat, botToken, deps, detailed) {
   const post = deps.httpPostJson || httpPostJson;
@@ -383,10 +392,20 @@ async function _handleDashboard(chat, botToken, deps, detailed) {
     return { ok: false, error: "no github token" };
   }
 
+  const repos = _loadDashboardRepos();
+  if (repos.length === 0) {
+    await post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      chat_id: chat.id,
+      text: "No tracked repos configured. Set <code>TRACKED_REPOS</code> (comma-separated owner/repo).",
+      parse_mode: "HTML",
+    });
+    return { ok: false, error: "no tracked repos" };
+  }
+
   const lines = ["<b>Cross-Repo Dashboard</b>", ""];
   let totalOpen = 0;
 
-  for (const repo of DASHBOARD_REPOS) {
+  for (const repo of repos) {
     const short = repo.split("/")[1];
     try {
       const res = await _githubApi({
@@ -564,7 +583,7 @@ async function handleMessage(message, botToken, deps = {}) {
         `https://api.telegram.org/bot${botToken}/sendMessage`,
         {
           chat_id: chat.id,
-          text: `Use inline buttons on PR notifications, or specify repo:\n<code>approve eventbadge #${prMatch[1]}</code>`,
+          text: `Use inline buttons on PR notifications, or specify repo:\n<code>approve my-repo #${prMatch[1]}</code>`,
           parse_mode: "HTML",
         }
       );

@@ -75,7 +75,7 @@ There are **five** ways to kick off a cycle. Pick whichever matches your workflo
 ### Example — natural-language order
 
 ```bash
-solo-cto-agent do "redesign the empty-cart state on tribo, less gradient, more typography"
+solo-cto-agent do "redesign the empty-cart state on my-store, less gradient, more typography"
 ```
 
 The CLI asks Claude to classify the order. For the example above, it notices UI/design keywords, so `scope: design`. The worker later inspects the current rendering (Playwright via visual-report) and any configured Figma source before coding.
@@ -83,8 +83,8 @@ The CLI asks Claude to classify the order. For the example above, it notices UI/
 Output looks like:
 
 ```
-✅ Issue created: https://github.com/acme/tribo-store/issues/127
-   Repo:       acme/tribo-store
+✅ Issue created: https://github.com/acme/my-store/issues/127
+   Repo:       acme/my-store
    Agent:      claude
    Scope:      design
    Labels:     agent-claude, nl-order, design-review
@@ -307,7 +307,7 @@ Pipeline runs dual-review → consensus → rework → visual-report → GitHub 
 ### You want an AI to build a new feature from a prompt
 
 ```bash
-solo-cto-agent do "add a monthly ARPU chart to the tribo admin dashboard, colored OKLCH(70% 0.10 200)"
+solo-cto-agent do "add a monthly ARPU chart to the admin dashboard, colored OKLCH(70% 0.10 200)"
 ```
 
 The order is routed, the appropriate worker opens a branch + PR, consensus reviews it, rework polishes it, visual-report shows before/after.

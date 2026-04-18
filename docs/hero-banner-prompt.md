@@ -29,7 +29,7 @@ Aspect ratio **1200 × 630** (standard OG image; works for npm, GitHub, Twitter/
 │  solo-cto-agent                          ┌─ • • •──────────┐ │
 │  The full CTO loop, on your phone.       │ $ solo-cto do   │ │
 │                                          │     "fix auth   │ │
-│  • Natural-language work orders          │      in tribo"  │ │
+│  • Natural-language work orders          │      in my-app"  │ │
 │  • 3-round agent consensus               │                 │ │
 │  • Auto-rework to PR branch              │ ✓ issue #127    │ │
 │  • Before / after visual report          │ ✓ Claude R1→R3  │ │
@@ -63,7 +63,7 @@ Midjourney / Ideogram / DALL-E / Gemini Imagen:
 >
 > Left half of the frame: the wordmark "solo-cto-agent" in a clean geometric sans-serif (like Inter or Söhne), violet accent color matching npm's package page purple (#B265FF-ish). One-line tagline below: "The full CTO loop, on your phone." Beneath the tagline, a vertical list of six short feature bullets, each prefixed by a small minimal outline icon: "Natural-language work orders", "3-round agent consensus", "Auto-rework to PR branch", "Before / after visual report", "Telegram + Discord control", "Auto-merge when CI green". At the very bottom-left, the install command in monospace: "npm i -g solo-cto-agent".
 >
-> Right half of the frame: a flat dark terminal window with macOS traffic-light dots (red, yellow, green) in the top bar, subtle 1px border. Inside the terminal, monospace text in slate tones showing an end-to-end happy path: "$ solo-cto-agent do \"fix auth in tribo\"", then below "✓ issue #127 created on tribo", "✓ Claude review → Codex counter → consensus (2 rounds)", "✓ rework pushed (2 fix commits)", "✓ visual report posted", "✓ auto-merge enabled — CI green in 47s", "$ ". Use a green checkmark glyph. Cost readout in muted gray at the bottom: "total LLM cost: $0.042".
+> Right half of the frame: a flat dark terminal window with macOS traffic-light dots (red, yellow, green) in the top bar, subtle 1px border. Inside the terminal, monospace text in slate tones showing an end-to-end happy path: "$ solo-cto-agent do \"fix auth in my-app\"", then below "✓ issue #127 created on my-app", "✓ Claude review → Codex counter → consensus (2 rounds)", "✓ rework pushed (2 fix commits)", "✓ visual report posted", "✓ auto-merge enabled — CI green in 47s", "$ ". Use a green checkmark glyph. Cost readout in muted gray at the bottom: "total LLM cost: $0.042".
 >
 > Constraints: no rounded-blue SaaS aesthetic, no default Tailwind-looking gradients, no decorative shadows, no emoji except inside the terminal mock, no cluttered background. Sharp corners or ≤4px radius only. Minimal, editorial, like a well-designed documentation site hero. Contrast AA minimum.
 

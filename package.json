@@ -1,6 +1,6 @@
 {
   "name": "solo-cto-agent",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": false,
   "description": "The full CTO loop for solo founders: dual-agent review, 3-round consensus, auto-rework, before/after visual report, natural-language orders, Telegram/Discord control surface, auto-merge.",
   "author": "seunghunbae-3svs",
