@@ -30,6 +30,8 @@ let telegramBot;
 try { telegramBot = require("./telegram-bot"); } catch (_) { telegramBot = null; }
 let selfEvolve;
 try { selfEvolve = require("./self-evolve"); } catch (_) { selfEvolve = null; }
+let repoDiscovery;
+try { repoDiscovery = require("./repo-discovery"); } catch (_) { repoDiscovery = null; }
 
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CATALOG = path.join(ROOT, "failure-catalog.json");
@@ -65,6 +67,7 @@ function printHelp() {
 Usage:
   solo-cto-agent init [--force] [--preset maker|builder|cto] [--wizard]
   solo-cto-agent setup-pipeline --org <github-org> [--tier builder|cto] [--repos <repo1,repo2,...>]
+  solo-cto-agent repos list [--org <github-org>]      # show/re-pick the saved repo selection
   solo-cto-agent setup-repo <repo-path> --org <github-org> [--tier builder|cto]
   solo-cto-agent auto-setup                 # Install solo-cto-pipeline.yml to your repos (centralized)
   solo-cto-agent setup --central --org <owner> [--orchestrator <repo>] [--repos <r1,r2,...>] [--dry-run]
@@ -93,6 +96,7 @@ Usage:
 Commands:
   init              Install skills to ~/.claude/skills/, then run doctor to verify setup
   setup-pipeline    Full pipeline setup: create orchestrator repo + install workflows to product repos
+  repos list        Print current saved repo selection (from init wizard) and re-pick interactively
   setup-repo        Install dual-agent workflows to a single product repo
   auto-setup        Install solo-cto-pipeline.yml (centralized thin workflow) to selected repos
   setup --central   Centralize cross-repo workflows (digest, bot-runner) to orchestrator repo
@@ -399,6 +403,82 @@ Style: {{YOUR_STYLE}}
   console.log("Running doctor --quick to check remaining setup...");
   console.log("");
   doctorCommand({ exitOnError: false, quick: true });
+}
+
+// ─── repos: show/re-pick saved selection ────────────────────
+
+async function reposCommand(args) {
+  if (!repoDiscovery) {
+    console.error("❌ repo-discovery module not available in this install.");
+    process.exit(1);
+  }
+  const sub = args[1] || "list";
+  if (sub !== "list") {
+    console.error(`Unknown repos subcommand: ${sub}`);
+    console.error("Usage: solo-cto-agent repos list [--org <github-org>]");
+    process.exit(1);
+  }
+
+  const orgIndex = args.indexOf("--org");
+  let org = orgIndex >= 0 ? args[orgIndex + 1] : null;
+
+  const saved = repoDiscovery.loadSelection();
+  if (saved) {
+    console.log(`Saved selection (${repoDiscovery.selectionPath()}):`);
+    console.log(`  org:     ${saved.org || "(user-scoped)"}`);
+    console.log(`  updated: ${saved.updatedAt || "—"}`);
+    console.log(`  repos:   ${saved.selected.length ? saved.selected.join(", ") : "(none)"}`);
+    if (!org && saved.org) org = saved.org;
+  } else {
+    console.log("No saved selection yet. Run `solo-cto-agent init --wizard` first, or re-pick below.");
+  }
+
+  // Non-TTY callers (CI) just get the print-out.
+  const { isTTY, createRl } = require("./prompt-utils");
+  const { ask } = require("./prompt-utils");
+  if (!isTTY()) {
+    console.log("\nℹ️  Non-interactive terminal — skipping re-pick prompt.");
+    return;
+  }
+
+  const rl = createRl();
+  try {
+    const again = await ask(rl, "\nRe-pick repos now?", "n");
+    if (!/^y(es)?$/i.test(again.trim())) {
+      rl.close();
+      return;
+    }
+
+    let repos = null;
+    try {
+      repos = repoDiscovery.fetchRepos({ org });
+    } catch (err) {
+      console.log(`⚠️  ${err.message}`);
+    }
+
+    if (repos == null) {
+      console.log("`gh` CLI not found. Install from https://cli.github.com/ then `gh auth login`.");
+      const manual = await ask(rl, "Paste repo slugs manually (comma-separated, or blank to cancel)", "");
+      const selected = manual.split(",").map((s) => s.trim()).filter(Boolean);
+      if (selected.length) {
+        const file = repoDiscovery.saveSelection({ org, selected, discovered: [] });
+        console.log(`✅ Saved ${selected.length} repo(s) to ${file}`);
+      } else {
+        console.log("No changes.");
+      }
+    } else if (repos.length === 0) {
+      console.log("No repositories returned from gh.");
+    } else {
+      const preselected = saved && Array.isArray(saved.selected) && saved.selected.length
+        ? saved.selected
+        : repoDiscovery.defaultPreselect(repos);
+      const selected = await repoDiscovery.pickReposInteractive(rl, ask, repos, preselected);
+      const file = repoDiscovery.saveSelection({ org, selected, discovered: repos });
+      console.log(`✅ Saved ${selected.length} repo(s) to ${file}`);
+    }
+  } finally {
+    rl.close();
+  }
 }
 
 // ─── setup-pipeline: Full Pipeline Deploy ───────────────────
@@ -2061,6 +2141,11 @@ async function main() {
     return false;
   }
 
+  if (cmd === "repos") {
+    await reposCommand(args);
+    return;
+  }
+
   if (cmd === "setup-pipeline") {
     if (checkCoworkMainMode()) {
       console.log("ℹ️  Not needed in cowork-main mode. Use `review`, `knowledge`, and `sync` commands instead.");
@@ -2071,7 +2156,15 @@ async function main() {
     const orgIndex = args.indexOf("--org");
     const org = orgIndex >= 0 ? args[orgIndex + 1] : null;
     const reposIndex = args.indexOf("--repos");
-    const repos = reposIndex >= 0 ? args[reposIndex + 1] : null;
+    let repos = reposIndex >= 0 ? args[reposIndex + 1] : null;
+    // Fall back to the selection persisted by `init --wizard` / `repos list`.
+    if (!repos && repoDiscovery) {
+      const saved = repoDiscovery.loadSelection();
+      if (saved && Array.isArray(saved.selected) && saved.selected.length) {
+        repos = saved.selected.join(",");
+        console.log(`ℹ️  Using saved repo selection (${saved.selected.length} repos from ${repoDiscovery.selectionPath()}).`);
+      }
+    }
     const orchIndex = args.indexOf("--orchestrator-name");
     const orchName = orchIndex >= 0 ? args[orchIndex + 1] : null;
     setupPipelineCommand(tier, org, repos, orchName, force);
@@ -2136,7 +2229,14 @@ async function main() {
     const orgIndex = args.indexOf("--org");
     const org = orgIndex >= 0 ? args[orgIndex + 1] : null;
     const reposIndex = args.indexOf("--repos");
-    const repos = reposIndex >= 0 ? args[reposIndex + 1] : null;
+    let repos = reposIndex >= 0 ? args[reposIndex + 1] : null;
+    if (!repos && repoDiscovery) {
+      const saved = repoDiscovery.loadSelection();
+      if (saved && Array.isArray(saved.selected) && saved.selected.length) {
+        repos = saved.selected.join(",");
+        console.log(`ℹ️  Using saved repo selection (${saved.selected.length} repos).`);
+      }
+    }
     const orchIndex = args.indexOf("--orchestrator-name");
     const orchName = orchIndex >= 0 ? args[orchIndex + 1] : null;
     upgradeCommand(org, repos, orchName);
@@ -2147,7 +2247,14 @@ async function main() {
     const orgIndex = args.indexOf("--org");
     const org = orgIndex >= 0 ? args[orgIndex + 1] : null;
     const reposIndex = args.indexOf("--repos");
-    const repos = reposIndex >= 0 ? args[reposIndex + 1] : null;
+    let repos = reposIndex >= 0 ? args[reposIndex + 1] : null;
+    if (!repos && repoDiscovery) {
+      const saved = repoDiscovery.loadSelection();
+      if (saved && Array.isArray(saved.selected) && saved.selected.length) {
+        repos = saved.selected.join(",");
+        console.log(`ℹ️  Using saved repo selection (${saved.selected.length} repos).`);
+      }
+    }
     const orchIndex = args.indexOf("--orchestrator-name");
     const orchName = orchIndex >= 0 ? args[orchIndex + 1] : "dual-agent-orchestrator";
     const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.ORCHESTRATOR_PAT;
