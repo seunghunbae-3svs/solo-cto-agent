@@ -18,9 +18,13 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install dependencies
+        run: npm install @anthropic-ai/sdk openai node-fetch
+
       - name: Cross Review
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
