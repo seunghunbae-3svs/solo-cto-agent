@@ -168,6 +168,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* Merge pull request #112 from seunghunbae-3svs/claude/polish-v2
+
 * Merge pull request #111 from seunghunbae-3svs/claude/release-v1.4.0
 
 * Merge pull request #109 from seunghunbae-3svs/claude/e2e-audit
