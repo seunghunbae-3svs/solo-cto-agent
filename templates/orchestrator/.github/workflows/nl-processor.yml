@@ -1,0 +1,59 @@
+name: NL Order Processor
+
+# Processes natural-language inbox issues created by Telegram /do.
+# When a user labels an issue 'nl-order' in the inbox repo, we ask Claude
+# to pick the right product repo + generate a spec, then open a labeled
+# issue there so the existing claude-auto/codex-auto pipeline picks it up.
+
+on:
+  issues:
+    types: [opened, labeled]
+  repository_dispatch:
+    types: [nl-order-process]
+
+concurrency:
+  group: nl-processor-${{ github.event.issue.number || github.event.client_payload.issue }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  process:
+    # Only fire when: (a) an issue is labeled 'nl-order', OR
+    #                 (b) an issue is opened already carrying the label, OR
+    #                 (c) explicit repository_dispatch.
+    if: >-
+      github.event_name == 'repository_dispatch' ||
+      (github.event_name == 'issues' &&
+        (
+          (github.event.action == 'labeled' && github.event.label.name == 'nl-order') ||
+          (github.event.action == 'opened' &&
+            contains(join(github.event.issue.labels.*.name, ','), 'nl-order'))
+        ))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --no-save @octokit/rest @anthropic-ai/sdk
+
+      - name: Process NL order
+        env:
+          GH_PAT: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Dispatch path: client_payload.text carries the raw NL order.
+          ORDER_TEXT: ${{ github.event.client_payload.text }}
+          # Issue-label path: the orchestrator repo owns the inbox issue.
+          INBOX_REPO: ${{ github.event_name == 'issues' && github.event.repository.full_name || '' }}
+          INBOX_ISSUE_NUMBER: ${{ github.event_name == 'issues' && github.event.issue.number || '' }}
+          # TRACKED_REPOS is set as a repository variable on the orchestrator
+          # repo, e.g. "acme/tribo-store,acme/ohmywork,acme/pista-app".
+          TRACKED_REPOS: ${{ vars.TRACKED_REPOS }}
+        run: node ops/agents/nl-processor.js

@@ -6,3 +6,7 @@ node_modules/
 .env
 .env.local
 !.env.example
+
+# Session/worktree artifacts — never commit
+.claude/
+solo-cto-agent/

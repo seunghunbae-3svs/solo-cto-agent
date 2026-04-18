@@ -2,19 +2,42 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const OpenAI = require('openai');
 const https = require('https');
+const fs = require('fs');
 const { recordFailure, recordSuccess, isBlocked } = require('../lib/circuit-breaker');
 
 const gh = new Octokit({ auth: process.env.GH_PAT });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-function telegram(text) {
+// PR-action inline keyboard — duplicated from bin/lib/telegram-commands.js
+// because this file runs in a workflow runtime without the shared module.
+function prActionKeyboard(repo, prNumber) {
+  if (!repo || !prNumber) return null;
+  const prUrl = `https://github.com/${repo}/pull/${prNumber}`;
+  return {
+    inline_keyboard: [
+      [{ text: 'Open PR', url: prUrl }],
+      [
+        { text: '✅ Approve', callback_data: `APPROVE|${repo}|${prNumber}` },
+        { text: '❌ Reject', callback_data: `REJECT|${repo}|${prNumber}` },
+      ],
+      [
+        { text: '🔧 Rework', callback_data: `REWORK|${repo}|${prNumber}` },
+        { text: '🔀 Merge', callback_data: `MERGE|${repo}|${prNumber}` },
+      ],
+    ],
+  };
+}
+
+function telegram(text, extra = null) {
   // Telegram is optional. Skip cleanly when creds aren't configured so the
   // rework path isn't blocked on missing notification setup.
   if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) {
     return;
   }
-  const data = JSON.stringify({ chat_id: process.env.TELEGRAM_CHAT_ID, text, parse_mode: 'HTML' });
+  const payload = { chat_id: process.env.TELEGRAM_CHAT_ID, text, parse_mode: 'HTML' };
+  if (extra && typeof extra === 'object') Object.assign(payload, extra);
+  const data = JSON.stringify(payload);
   const req = https.request({
     hostname: 'api.telegram.org',
     path: `/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
@@ -202,6 +225,49 @@ async function pushFiles(updates) {
   }
 }
 
+/**
+ * Look up the current HEAD SHA of the PR branch. Called both before and
+ * after pushFiles() so the visual-report stage can screenshot the exact
+ * pre- and post-rework commits.
+ */
+async function getBranchHeadSha() {
+  const [owner, repo] = process.env.PR_REPO.split('/');
+  const ref = await gh.repos.getBranch({
+    owner,
+    repo,
+    branch: process.env.PR_BRANCH,
+  });
+  return ref.data.commit.sha;
+}
+
+/**
+ * Write a visual-report payload JSON to disk so the rework workflow
+ * can upload it as an artifact for visual-report.yml to consume.
+ * Only invoked on the happy path (rework pushed successfully).
+ */
+function writeVisualReportPayload({ prevSha, newSha }) {
+  const out = process.env.VISUAL_REPORT_PAYLOAD_PATH;
+  if (!out) return;
+  try {
+    fs.writeFileSync(
+      out,
+      JSON.stringify(
+        {
+          pr: parseInt(process.env.PR_NUMBER, 10),
+          repo: process.env.PR_REPO,
+          branch: process.env.PR_BRANCH,
+          prevSha,
+          newSha,
+        },
+        null,
+        2
+      )
+    );
+  } catch (err) {
+    console.warn('Failed to write visual-report payload:', err.message);
+  }
+}
+
 async function main() {
   try {
     const [owner, repo] = process.env.PR_REPO.split('/');
@@ -211,7 +277,7 @@ async function main() {
     // Check circuit breaker
     if (isBlocked(repo, prNumber, agent)) {
       const msg = `⚠️ <b>Rework 중단 (Circuit Breaker)</b>\nCircuit breaker activated: too many consecutive failures.\nAgent: ${agent}\nPR: #${prNumber}`;
-      telegram(msg);
+      telegram(msg, { reply_markup: prActionKeyboard(process.env.PR_REPO, prNumber) });
 
       // Post comment to PR
       await gh.issues.createComment({
@@ -241,7 +307,10 @@ async function main() {
 
     const maxRounds = roundCount >= 2 && hasReviseSignal ? 3 : 2;
     if (roundCount >= maxRounds) {
-      telegram(`⚠️ <b>Rework 중단</b>\nRepo: ${process.env.PR_REPO}\nPR: #${process.env.PR_NUMBER}\nReason: max rounds ${maxRounds} reached`);
+      telegram(
+        `⚠️ <b>Rework 중단</b>\nRepo: ${process.env.PR_REPO}\nPR: #${process.env.PR_NUMBER}\nReason: max rounds ${maxRounds} reached`,
+        { reply_markup: prActionKeyboard(process.env.PR_REPO, parseInt(process.env.PR_NUMBER, 10)) }
+      );
       console.log('Max rounds reached. Skipping rework.');
       return;
     }
@@ -303,8 +372,30 @@ Output JSON only:
     if (!jsonMatch) throw new Error('No JSON in response');
 
     const result = JSON.parse(jsonMatch[0]);
+
+    // Capture the branch HEAD *before* we push — this is the "Before"
+    // commit for the visual-report stage.
+    let prevSha = null;
+    try {
+      prevSha = await getBranchHeadSha();
+    } catch (err) {
+      console.warn('Could not read prevSha:', err.message);
+    }
+
     console.log('Pushing fixed files...');
     await pushFiles(result.updates);
+
+    // And capture the new HEAD — the "After" commit.
+    let newSha = null;
+    try {
+      newSha = await getBranchHeadSha();
+    } catch (err) {
+      console.warn('Could not read newSha:', err.message);
+    }
+
+    if (prevSha && newSha && prevSha !== newSha) {
+      writeVisualReportPayload({ prevSha, newSha });
+    }
 
     await gh.issues.createComment({
       owner,
@@ -316,7 +407,10 @@ Output JSON only:
     // Record success to reset circuit breaker
     recordSuccess(repo, prNumber, agent);
 
-    telegram(`✅ <b>Rework 완료</b>\nRepo: ${process.env.PR_REPO}\nPR: #${prNumber}\nAgent: ${agent}\nRound: ${roundCount + 1}/${maxRounds}`);
+    telegram(
+      `✅ <b>Rework 완료</b>\nRepo: ${process.env.PR_REPO}\nPR: #${prNumber}\nAgent: ${agent}\nRound: ${roundCount + 1}/${maxRounds}`,
+      { reply_markup: prActionKeyboard(process.env.PR_REPO, prNumber) }
+    );
 
     // Opt-in auto-merge: only fires if PR has 'auto-merge-when-ready' label.
     // GitHub gates the actual merge on all required checks passing.
@@ -328,7 +422,10 @@ Output JSON only:
         issue_number: prNumber,
         body: `🔀 **Auto-merge enabled.** PR will merge automatically once all required checks pass.`,
       });
-      telegram(`🔀 <b>Auto-merge 활성화</b>\nPR #${prNumber} — CI green 시 자동 머지`);
+      telegram(
+        `🔀 <b>Auto-merge 활성화</b>\nPR #${prNumber} — CI green 시 자동 머지`,
+        { reply_markup: prActionKeyboard(process.env.PR_REPO, prNumber) }
+      );
     } else if (autoMerge.reason && autoMerge.reason !== 'label-not-set') {
       console.log(`Auto-merge not enabled: ${autoMerge.reason}`);
     }

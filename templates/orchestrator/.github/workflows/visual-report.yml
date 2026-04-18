@@ -1,0 +1,179 @@
+name: Visual Report (Before/After)
+
+# Runs after rework-auto.yml successfully pushes a fix commit.
+# Captures screenshots at the previous-HEAD and new-HEAD of the PR branch
+# (resolved via Vercel preview URLs), composes side-by-side comparisons,
+# and posts a single PR comment + Telegram sendMediaGroup.
+#
+# Kill switch: set repo variable VISUAL_REVIEW_PROVIDER=off to skip silently.
+# Provider override: VISUAL_REVIEW_PROVIDER=browserless + BROWSERLESS_API_KEY.
+
+on:
+  workflow_run:
+    workflows: ["Auto Rework on Review"]
+    types: [completed]
+  repository_dispatch:
+    types: [visual-report-request]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number"
+        required: true
+      repo:
+        description: "Product repo (owner/name)"
+        required: true
+      branch:
+        description: "PR head branch"
+        required: true
+      prevSha:
+        description: "SHA before rework push"
+        required: true
+      newSha:
+        description: "SHA after rework push"
+        required: true
+
+concurrency:
+  group: visual-report-${{ github.event.client_payload.pr || github.event.inputs.pr || github.event.workflow_run.id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  visual-report:
+    # Only proceed when the upstream rework run succeeded (workflow_run path)
+    # or for explicit dispatch / manual runs.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve payload
+        id: payload
+        run: |
+          # Priority: dispatch inputs > client_payload > workflow_run artifact lookup
+          if [ -n "${{ github.event.inputs.pr }}" ]; then
+            echo "source=workflow_dispatch" >> $GITHUB_OUTPUT
+            echo "pr=${{ github.event.inputs.pr }}" >> $GITHUB_OUTPUT
+            echo "repo=${{ github.event.inputs.repo }}" >> $GITHUB_OUTPUT
+            echo "branch=${{ github.event.inputs.branch }}" >> $GITHUB_OUTPUT
+            echo "prev_sha=${{ github.event.inputs.prevSha }}" >> $GITHUB_OUTPUT
+            echo "new_sha=${{ github.event.inputs.newSha }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ github.event.client_payload.pr }}" ]; then
+            echo "source=repository_dispatch" >> $GITHUB_OUTPUT
+            echo "pr=${{ github.event.client_payload.pr }}" >> $GITHUB_OUTPUT
+            echo "repo=${{ github.event.client_payload.repo }}" >> $GITHUB_OUTPUT
+            echo "branch=${{ github.event.client_payload.branch }}" >> $GITHUB_OUTPUT
+            echo "prev_sha=${{ github.event.client_payload.prevSha }}" >> $GITHUB_OUTPUT
+            echo "new_sha=${{ github.event.client_payload.newSha }}" >> $GITHUB_OUTPUT
+          else
+            # workflow_run — the rework-agent committed artifacts we read here.
+            # We rely on the rework-auto workflow to upload a payload artifact.
+            echo "source=workflow_run" >> $GITHUB_OUTPUT
+            echo "pr=" >> $GITHUB_OUTPUT
+            echo "repo=" >> $GITHUB_OUTPUT
+            echo "branch=" >> $GITHUB_OUTPUT
+            echo "prev_sha=" >> $GITHUB_OUTPUT
+            echo "new_sha=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download rework payload artifact
+        if: steps.payload.outputs.source == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: visual-report-payload
+          path: .visual-report-payload
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Load payload from artifact
+        if: steps.payload.outputs.source == 'workflow_run'
+        id: artifact-payload
+        run: |
+          # actions/download-artifact@v4 extracts the artifact contents
+          # (not the artifact zip itself) into the target path, so the
+          # file uploaded as visual-report-payload.json lands at
+          # .visual-report-payload/visual-report-payload.json.
+          PAYLOAD_FILE=".visual-report-payload/visual-report-payload.json"
+          if [ ! -f "$PAYLOAD_FILE" ]; then
+            echo "No visual-report-payload artifact; skipping."
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "skip=false" >> $GITHUB_OUTPUT
+          node -e '
+            const p = require("./.visual-report-payload/visual-report-payload.json");
+            const map = { pr: "pr", repo: "repo", branch: "branch", prev_sha: "prevSha", new_sha: "newSha" };
+            for (const k of Object.keys(map)) console.log(k + "=" + (p[map[k]] || ""));
+          ' >> $GITHUB_OUTPUT
+
+      - name: Kill switch check
+        id: killswitch
+        env:
+          VISUAL_REVIEW_PROVIDER: ${{ vars.VISUAL_REVIEW_PROVIDER || 'playwright' }}
+        run: |
+          if [ "$VISUAL_REVIEW_PROVIDER" = "off" ]; then
+            echo "Visual review disabled by VISUAL_REVIEW_PROVIDER=off"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.killswitch.outputs.skip != 'true' && steps.artifact-payload.outputs.skip != 'true'
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        if: steps.killswitch.outputs.skip != 'true' && steps.artifact-payload.outputs.skip != 'true'
+        # Deps live ONLY in the workflow runner, never in the orchestrator
+        # package.json — keeps visual-reporter opt-in and zero-cost when off.
+        run: npm install --no-save @octokit/rest@21 playwright@1.48.0 sharp@0.33.5
+
+      - name: Install Playwright browsers
+        if: >-
+          steps.killswitch.outputs.skip != 'true' &&
+          steps.artifact-payload.outputs.skip != 'true' &&
+          (vars.VISUAL_REVIEW_PROVIDER || 'playwright') == 'playwright'
+        uses: microsoft/playwright-github-action@v1
+
+      - name: Ensure Chromium (fallback to npx)
+        if: >-
+          steps.killswitch.outputs.skip != 'true' &&
+          steps.artifact-payload.outputs.skip != 'true' &&
+          (vars.VISUAL_REVIEW_PROVIDER || 'playwright') == 'playwright'
+        # Belt-and-suspenders: the action above handles system deps +
+        # a default install, but we re-run `npx playwright install` to
+        # guarantee the version matches the pinned npm package
+        # (playwright@1.48.0) and that only chromium is fetched.
+        run: npx playwright install chromium --with-deps
+
+      - name: Run visual reporter
+        if: >-
+          steps.killswitch.outputs.skip != 'true' &&
+          steps.artifact-payload.outputs.skip != 'true' &&
+          (steps.payload.outputs.pr != '' || steps.artifact-payload.outputs.pr != '')
+        env:
+          GH_PAT: ${{ secrets.ORCHESTRATOR_PAT || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORCHESTRATOR_REPO: ${{ github.repository }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VISUAL_REVIEW_PROVIDER: ${{ vars.VISUAL_REVIEW_PROVIDER || 'playwright' }}
+          BROWSERLESS_API_KEY: ${{ secrets.BROWSERLESS_API_KEY }}
+          PR_NUMBER: ${{ steps.payload.outputs.pr || steps.artifact-payload.outputs.pr }}
+          PR_REPO: ${{ steps.payload.outputs.repo || steps.artifact-payload.outputs.repo }}
+          PR_BRANCH: ${{ steps.payload.outputs.branch || steps.artifact-payload.outputs.branch }}
+          PREV_SHA: ${{ steps.payload.outputs.prev_sha || steps.artifact-payload.outputs.prev_sha }}
+          NEW_SHA: ${{ steps.payload.outputs.new_sha || steps.artifact-payload.outputs.new_sha }}
+        run: node ops/agents/visual-reporter.js
+        # Never block rework success on visual-report failure.
+        continue-on-error: true

@@ -1,5 +1,7 @@
 ﻿// BDA Orchestrator Telegram Bot Command Handler
 
+const tc = require('./telegram-commands.js');
+
 const GITHUB_TOKEN = process.env.ORCHESTRATOR_PAT || process.env.GITHUB_TOKEN;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const AUTHORIZED_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
@@ -7,6 +9,46 @@ const GITHUB_OWNER = process.env.GITHUB_OWNER || '{{GITHUB_OWNER}}';
 const ORCH_REPO = process.env.ORCH_REPO || '{{ORCHESTRATOR_REPO}}';
 const DECISION_LOG_PATH = 'ops/orchestrator/decision-log.json';
 const TELEGRAM_SETTINGS_PATH = 'ops/orchestrator/telegram-settings.json';
+
+// Shared command surface — ghApi wrapper that matches bin/lib/telegram-commands.js
+// (endpoint, { method, body }) → parsed JSON
+async function _ghApiShared(endpoint, opts = {}) {
+  const method = (opts.method || 'GET').toUpperCase();
+  return gh(endpoint, method, opts.body || null);
+}
+
+function _buildSharedCtx(chatId, message) {
+  const env = {
+    ...process.env,
+    GITHUB_OWNER,
+    ORCH_REPO,
+    ORCH_REPO_SLUG: GITHUB_OWNER && ORCH_REPO ? `${GITHUB_OWNER}/${ORCH_REPO}` : process.env.ORCH_REPO_SLUG,
+  };
+  return {
+    chatId,
+    fromLabel: message?.from?.username || message?.from?.first_name || 'user',
+    env,
+    ghApi: _ghApiShared,
+    trackedRepos: _defaultTrackedRepos(env),
+    adminChatIds: tc.resolveAdminChatIds(env),
+  };
+}
+
+function _defaultTrackedRepos(env) {
+  const explicit = tc.resolveTrackedRepos(env, null);
+  if (explicit.length) return explicit;
+  // Fall back to the PROJECTS map slugs in this template.
+  const owner = GITHUB_OWNER;
+  if (!owner || owner.startsWith('{{')) return [];
+  const slugs = [];
+  for (const key of PROJECT_ORDER) {
+    const proj = PROJECTS[key];
+    if (proj && proj.repo && !proj.repo.startsWith('{{')) {
+      slugs.push(`${owner}/${proj.repo}`);
+    }
+  }
+  return slugs;
+}
 
 const PROJECTS = {
   {{PRODUCT_REPO_4}}: { repo: '{{PRODUCT_REPO_4}}', aliases: ['프로젝트B', 'sample-events', '{{PRODUCT_REPO_4}}', 'events', 'pb'] },
@@ -1113,6 +1155,26 @@ module.exports = async (req, res) => {
       }
       const locale = await resolveLocale(chatId, callback.message?.text || '');
 
+      // --- New ACTION|repo|pr callbacks routed through the shared module. ---
+      const callbackHead = String(data).split('|')[0];
+      if (tc.ACTION_CALLBACK_PREFIXES.includes(callbackHead)) {
+        const ctx = _buildSharedCtx(chatId, callback);
+        const result = await tc.dispatchCallback(data, ctx);
+        if (result.handled) {
+          const response = result.response || {};
+          await answerCallbackQuery(callback.id, response.text || (response.ok ? 'Done' : 'Failed'));
+          try {
+            await markDecisionMessageDone(
+              chatId,
+              callback.message?.message_id,
+              callback.message?.text || '',
+              response.text || result.action,
+            );
+          } catch {}
+          return res.status(200).json({ ok: true });
+        }
+      }
+
       const parsed = parseDecisionCallback(data);
       if (!parsed) {
         await answerCallbackQuery(callback.id, '알 수 없는 요청');
@@ -1207,6 +1269,28 @@ module.exports = async (req, res) => {
       const cmd = parts[0].toLowerCase();
       const projInput = parts[1];
       const projectKey = resolveProject(projInput);
+
+      // --- Shared CTO command surface takes precedence for the new commands
+      // when explicitly triggered. /status keeps its legacy behaviour below
+      // unless TRACKED_REPOS is set (explicit CTO-mode opt-in).
+      const parsedCto = tc.parseCommand(text);
+      const ctoCommands = ['/list', '/rework', '/approve', '/do', '/digest', '/merge'];
+      const trackedRepos = _defaultTrackedRepos({ ...process.env, GITHUB_OWNER });
+      const useCto = parsedCto && (
+        ctoCommands.includes(parsedCto.cmd)
+        || (parsedCto.cmd === '/status' && !!process.env.TRACKED_REPOS)
+      );
+      if (useCto) {
+        const ctx = _buildSharedCtx(chatId, message);
+        const result = await tc.dispatchCommand(parsedCto, ctx);
+        if (result.handled) {
+          const response = result.response || {};
+          if (response.text) {
+            await reply(chatId, response.text, response.extra || null);
+          }
+          return res.status(200).json({ ok: true });
+        }
+      }
 
       switch (cmd) {
         case '/start':

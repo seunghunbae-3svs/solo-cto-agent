@@ -6,6 +6,10 @@ const os = require('os');
 // Shared interactive helpers (extracted in PR-G7-impl).
 const { ask, isTTY } = require('./prompt-utils');
 
+// Repo auto-discovery helper (shells out to `gh api` — no new deps).
+let repoDiscovery;
+try { repoDiscovery = require('./repo-discovery'); } catch (_) { repoDiscovery = null; }
+
 /**
  * Check if --wizard or -w flag is present in arguments
  */
@@ -197,6 +201,38 @@ async function runWizard(targetDir, force = false) {
     config.language = language;
     config.githubOrg = githubOrg;
 
+    // Repo auto-discovery — only runs when the user gave an org/username.
+    // Any failure here is non-fatal: we just skip and let setup-pipeline
+    // collect --repos the old way.
+    if (githubOrg && repoDiscovery) {
+      try {
+        console.log(`\nDiscovering repositories for "${githubOrg}" via gh CLI...`);
+        const repos = repoDiscovery.fetchRepos({ org: githubOrg });
+        if (repos == null) {
+          console.log('⚠️  `gh` CLI not found on PATH.');
+          console.log('   Install from https://cli.github.com/ and run `gh auth login` to enable auto-discovery.');
+          const manual = await ask(rl, 'Paste repo slugs manually (comma-separated, or blank to skip)', '');
+          const selected = manual.split(',').map((s) => s.trim()).filter(Boolean);
+          if (selected.length) {
+            const file = repoDiscovery.saveSelection({ org: githubOrg, selected, discovered: [] });
+            console.log(`   Saved ${selected.length} repo(s) to ${file}`);
+            config.repos = selected;
+          }
+        } else if (repos.length === 0) {
+          console.log('   No repositories returned. Skipping auto-discovery.');
+        } else {
+          const preselected = repoDiscovery.defaultPreselect(repos);
+          const selected = await repoDiscovery.pickReposInteractive(rl, ask, repos, preselected);
+          const file = repoDiscovery.saveSelection({ org: githubOrg, selected, discovered: repos });
+          console.log(`   Saved ${selected.length} repo(s) to ${file}`);
+          config.repos = selected;
+        }
+      } catch (err) {
+        console.log(`⚠️  Repo discovery failed: ${err.message}`);
+        console.log('   Tip: run `gh auth login` then re-run `solo-cto-agent repos list` to finish setup.');
+      }
+    }
+
     // Detect build scripts and Prisma
     config.scripts = detectBuildScripts(targetDir);
     config.hasPrisma = detectPrisma(targetDir);
@@ -248,8 +284,10 @@ async function runWizard(targetDir, force = false) {
       const setupPipeline = await ask(rl, '\nRun setup-pipeline now?', 'y');
       const wantsPipeline = setupPipeline.toLowerCase() === 'y' || setupPipeline.toLowerCase() === 'yes';
       if (wantsPipeline) {
+        const orgArg = config.githubOrg || '<your-org>';
+        const reposArg = (config.repos && config.repos.length) ? config.repos.join(',') : '<repo1,repo2>';
         console.log('\nRun:\n');
-        console.log('  solo-cto-agent setup-pipeline --org <your-org> --repos <repo1,repo2>\n');
+        console.log(`  solo-cto-agent setup-pipeline --org ${orgArg} --repos ${reposArg}\n`);
       }
     } else {
       console.log('\ncowork-main mode: No CI/CD setup needed.');
