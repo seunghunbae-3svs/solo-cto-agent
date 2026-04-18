@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased — 2026-04-19
+## Unreleased
+
+* Merge pull request #110 from seunghunbae-3svs/claude/polish-sweep — 2026-04-19
 
 **Theme**: End-to-end automation complete. Install is fully automatic; review → rework → visual → merge runs without human copy-paste; Telegram / Discord carry the full operational loop.
 
