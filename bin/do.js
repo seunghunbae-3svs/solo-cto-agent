@@ -24,7 +24,7 @@
 
 "use strict";
 
-const { parseAndDispatch } = require("./lib/nl-orchestrator");
+const { parseIntent, dispatchOrder } = require("./lib/nl-orchestrator");
 let repoDiscovery;
 try {
   repoDiscovery = require("./repo-discovery");
@@ -108,19 +108,14 @@ async function main() {
     }
   }
 
-  // 2. Anthropic client
+  // 2. Anthropic client — thin fetch shim so solo-cto-agent keeps zero
+  //    runtime deps. The orchestrator worker uses the real SDK (installed
+  //    by its workflow) but the CLI doesn't need it.
   if (!process.env.ANTHROPIC_API_KEY) {
     console.error("❌ ANTHROPIC_API_KEY not set. Needed to parse natural-language intent.");
     process.exit(1);
   }
-  let Anthropic;
-  try {
-    Anthropic = require("@anthropic-ai/sdk");
-  } catch (_) {
-    console.error("❌ @anthropic-ai/sdk not installed. Run \`npm install -g solo-cto-agent\` to refresh.");
-    process.exit(1);
-  }
-  const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const anthropicClient = buildAnthropicFetchClient(process.env.ANTHROPIC_API_KEY);
 
   // 3. GitHub client (shell out to gh CLI to keep deps small). We wrap the
   // ghApi shape the nl-orchestrator expects around gh.
@@ -128,23 +123,15 @@ async function main() {
 
   // 4. Run
   try {
+    const intent = await parseIntent({ userText: args.text, trackedRepos, anthropicClient });
+    if (args.repo) intent.repo = args.repo;
+    if (args.agent) intent.agent = args.agent;
+
     if (args.dryRun) {
-      const { parseIntent } = require("./lib/nl-orchestrator");
-      const intent = await parseIntent({ userText: args.text, trackedRepos, anthropicClient });
-      if (args.repo) intent.repo = args.repo;
-      if (args.agent) intent.agent = args.agent;
       console.log(JSON.stringify(intent, null, 2));
       console.log("\n(dry-run — no issue created)");
       return;
     }
-    // Full path: parse + dispatch
-    const intentOverrides = {};
-    if (args.repo) intentOverrides.repo = args.repo;
-    if (args.agent) intentOverrides.agent = args.agent;
-
-    const { parseIntent, dispatchOrder } = require("./lib/nl-orchestrator");
-    const intent = await parseIntent({ userText: args.text, trackedRepos, anthropicClient });
-    Object.assign(intent, intentOverrides);
 
     const result = await dispatchOrder({ intent, ghApi });
     console.log(`✅ Issue created: ${result.issueUrl}`);
@@ -185,7 +172,35 @@ function buildGhApi(dry) {
   };
 }
 
-module.exports = { main, parseArgs, buildGhApi };
+/**
+ * Anthropic client shim with just the `.messages.create` method the
+ * nl-orchestrator expects, calling the public REST endpoint directly.
+ * Keeps the CLI free of `@anthropic-ai/sdk` as a runtime dep.
+ */
+function buildAnthropicFetchClient(apiKey) {
+  return {
+    messages: {
+      create: async ({ model, max_tokens, temperature, system, messages }) => {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ model, max_tokens, temperature, system, messages }),
+        });
+        if (!res.ok) {
+          const body = await res.text();
+          throw new Error(`Anthropic ${res.status}: ${body.slice(0, 300)}`);
+        }
+        return res.json();
+      },
+    },
+  };
+}
+
+module.exports = { main };
 
 if (require.main === module) {
   main().catch((e) => {

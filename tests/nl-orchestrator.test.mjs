@@ -236,34 +236,3 @@ describe("dispatchOrder", () => {
   });
 });
 
-// ── parseAndDispatch end-to-end with both mocked ─────────────────────────
-describe("parseAndDispatch", () => {
-  it("parses and dispatches in one shot", async () => {
-    const anth = mockAnthropic({
-      repo: "acme/ohmywork",
-      title: "Add field-report export",
-      body: "The operator dashboard needs a CSV export of daily field reports.",
-      agent: "codex",
-      scope: "code",
-      confidence: "high",
-    });
-    const ghCalls = [];
-    const gh = {
-      issues: {
-        create: async (a) => {
-          ghCalls.push(a);
-          return { data: { html_url: "https://x/1", number: 1 } };
-        },
-      },
-    };
-    const out = await nl.parseAndDispatch({
-      userText: "add field-report CSV export in ohmywork",
-      trackedRepos: TRACKED,
-      anthropicClient: anth,
-      ghApi: gh,
-    });
-    expect(out.repo).toBe("acme/ohmywork");
-    expect(out.agent).toBe("codex");
-    expect(ghCalls[0].labels).toContain("agent-codex");
-  });
-});

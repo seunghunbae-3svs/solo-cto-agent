@@ -22,59 +22,21 @@
  * Exports
  *   - parseIntent({ userText, trackedRepos, anthropicClient })
  *   - dispatchOrder({ intent, ghApi }) -> { issueUrl, issueNumber, repo }
- *   - parseAndDispatch({ userText, trackedRepos, anthropicClient, ghApi })
- *
- * Every function is exported so tests can exercise each stage without
- * hitting the live APIs.
+ *   - looksLikeDesignTask(text) — also tested independently
  */
 
 "use strict";
 
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
 
+// Narrow keyword set: only words unambiguously design-coded. Generic UI
+// primitives like "button" / "page" / "component" live in both design AND
+// plain CRUD tasks, so including them produced too many false positives.
 const DESIGN_KEYWORDS = [
-  "ui",
-  "ux",
-  "design",
-  "layout",
-  "css",
-  "style",
-  "styling",
-  "color",
-  "typography",
-  "font",
-  "spacing",
-  "padding",
-  "margin",
-  "responsive",
-  "mobile",
-  "dark mode",
-  "theme",
-  "button",
-  "modal",
-  "dialog",
-  "page",
-  "landing",
-  "hero",
-  "header",
-  "footer",
-  "navbar",
-  "sidebar",
-  "component",
-  "shadcn",
-  "tailwind",
-  "figma",
-  "screenshot",
-  "visual",
-  "look",
-  "feel",
-  "디자인",
-  "레이아웃",
-  "스타일",
-  "색상",
-  "폰트",
-  "모바일",
-  "반응형",
+  "ui", "ux", "design", "redesign", "layout", "css", "style", "styling",
+  "color", "typography", "spacing", "responsive", "dark mode", "theme",
+  "hero", "navbar", "sidebar", "shadcn", "tailwind", "figma", "screenshot",
+  "디자인", "레이아웃", "스타일", "색상", "폰트", "반응형",
 ];
 
 function looksLikeDesignTask(text) {
@@ -266,18 +228,10 @@ async function dispatchOrder({ intent, ghApi }) {
   };
 }
 
-async function parseAndDispatch({ userText, trackedRepos, anthropicClient, ghApi }) {
-  const intent = await parseIntent({ userText, trackedRepos, anthropicClient });
-  return dispatchOrder({ intent, ghApi });
-}
-
 module.exports = {
-  DESIGN_KEYWORDS,
   looksLikeDesignTask,
-  buildSystemPrompt,
   extractJson,
   validateIntent,
   parseIntent,
   dispatchOrder,
-  parseAndDispatch,
 };
