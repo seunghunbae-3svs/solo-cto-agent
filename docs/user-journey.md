@@ -261,6 +261,21 @@ Clicking edits the message to show "✅ Approved by @you" and performs the actio
 
 Admin gate: set `TELEGRAM_ADMIN_CHAT_IDS` (CSV of chat IDs) in the orchestrator env. `/merge` and the Merge button refuse unless the caller's `chat_id` is listed. Empty list → everyone blocked from /merge.
 
+### Deploying the Telegram webhook (if you want inline button callbacks)
+
+Plain `bin/telegram-bot.js` (long-polling) runs on your laptop and handles everything in cowork-main. For `codex-main` with inline action buttons from Telegram messages posted by CI workflows, you need the serverless webhook at `templates/orchestrator/api/telegram-webhook.js` deployed so Telegram has an endpoint to call back to.
+
+Fastest deploy target: **Vercel Functions** (there's a free tier, your orchestrator repo likely already deploys to Vercel). Drop `api/telegram-webhook.js` into any Vercel project's `api/` dir, set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `ORCHESTRATOR_PAT`, `GITHUB_OWNER`, `ORCH_REPO` as env vars, then register the webhook with Telegram:
+
+```bash
+curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+  -d "url=https://<your-vercel-project>.vercel.app/api/telegram-webhook"
+```
+
+Alternatives: Cloudflare Workers (repackage the file as a `fetch` handler), Netlify Functions, Deno Deploy, AWS Lambda. All work because the file has no Node-specific deps beyond `fetch` (built-in) and `https.request` fallbacks.
+
+If you skip the webhook entirely, you still get everything — you just won't see the ✅ Approve / ❌ Reject / 🔧 Rework / 🔀 Merge buttons fire back into GitHub from Telegram. You can still tap the "Open PR" button and act in the GitHub UI.
+
 ---
 
 ## 8. Local / cowork-main commands
