@@ -61,12 +61,15 @@ Installed product workflows on the live-project copy:
 claude-auto.yml
 codex-auto.yml
 comparison-dispatch.yml
-cross-review-dispatch.yml
 cross-review.yml
 preview-summary.yml
-rework-dispatch.yml
+solo-cto-pipeline.yml     # unified dispatcher with 7-layer anti-loop guards
 telegram-notify.yml
 ```
+
+> As of 2026-04, `cross-review-dispatch.yml` and `rework-dispatch.yml`
+> are no longer shipped to product repos — their per-event dispatch jobs
+> are subsumed by `solo-cto-pipeline.yml`.
 
 ## Pain reduced
 

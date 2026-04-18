@@ -56,7 +56,9 @@ solo-cto-agent setup-pipeline --org <github-org> --repos <repo1,repo2>
   - `ops/agents/` — codex-worker.js, claude-worker.js, cross-reviewer.js 등
   - `ops/scripts/` — 유틸리티 스크립트
 - 각 product repo에 `.github/workflows/` 설치
-  - codex-auto.yml, claude-auto.yml, cross-review-dispatch.yml 등
+  - claude-auto.yml, codex-auto.yml, preview-summary.yml, solo-cto-pipeline.yml 등
+  - `solo-cto-pipeline.yml`이 통합 디스패처 (7-layer anti-loop guards)로
+    모든 PR/review/comment 이벤트를 orchestrator로 라우팅합니다.
 
 CTO tier (multi-agent routing 포함):
 ```bash
@@ -155,21 +157,43 @@ Proof:
 
 ## 실행 플로우 (자동)
 
+PR 기반 (일반적인 코드 변경):
 ```
-PR 생성/업데이트
-  → product repo: claude-auto.yml 실행 → Claude 리뷰
-  → product repo: cross-review-dispatch.yml → orchestrator에 dispatch
-  → orchestrator: cross-reviewer.js → 양쪽 비교
-  → orchestrator: rework-auto.yml → 필요시 자동 수정 PR 생성
-  → orchestrator: telegram-notify.yml → 결과 알림
+PR 생성/업데이트/라벨 추가
+  → product repo: solo-cto-pipeline.yml (통합 디스패처, 7-layer guards)
+      → dispatch 'cross-review' to orchestrator
+  → orchestrator: cross-review-dispatch.yml (concurrency-gated per PR)
+      → cross-reviewer.js (3-round A/B 합의 debate, 조기 종료 가능)
+  → 블로커 발견 시 auto-dispatch 'rework-request'
+  → orchestrator: rework-auto.yml (concurrency-gated)
+      → rework-agent.js → PR 브랜치에 fix commit push
+  → workflow_run: rework 성공
+  → orchestrator: visual-report.yml → visual-reporter.js
+      → Vercel preview URL → Playwright 스크린샷 → before/after 합성
+      → PR comment + Telegram sendMediaGroup
+  → PR 라벨에 'auto-merge-when-ready' 있으면 GitHub 네이티브 auto-merge
+      (required checks 통과 시 머지)
 ```
 
-Issue 기반:
+Issue 기반 (agent label로 작업 지시):
 ```
-Issue에 'agent-codex' 라벨
-  → product repo: codex-auto.yml → orchestrator에 dispatch
-  → orchestrator: codex-worker.js → 작업 실행
-  → 결과 → Issue comment + 알림
+Issue에 'agent-claude' / 'agent-codex' 라벨
+  → product repo: claude-auto.yml / codex-auto.yml
+      → dispatch 'route-issue' to orchestrator
+  → orchestrator: route-issue.yml → routing-engine.js
+  → 해당 worker (claude-worker.js / codex-worker.js) 실행
+  → 작업 완료 후 PR 오픈 → 위 PR 플로우로 진입
+```
+
+자연어 오더 기반 (NL work order):
+```
+CLI: solo-cto-agent do "<지시>"
+  또는 Telegram: /do "<지시>"
+      → dispatch 'nl-order-process' to orchestrator
+  → orchestrator: nl-processor.yml → nl-processor.js
+      → Claude에게 target repo + spec 결정 의뢰
+      → 해당 product repo에 agent-{claude|codex} 라벨 붙인 issue 생성
+      → 위 Issue 기반 플로우로 진입
 ```
 
 ---
