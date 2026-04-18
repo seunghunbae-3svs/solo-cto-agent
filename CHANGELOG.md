@@ -183,6 +183,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* Merge pull request #113 from seunghunbae-3svs/claude/v1.4.1-hotfix
+
 * Merge pull request #112 from seunghunbae-3svs/claude/polish-v2
 
 * Merge pull request #111 from seunghunbae-3svs/claude/release-v1.4.0
