@@ -121,6 +121,8 @@ non-interactive verify in CI, and tear it all down with one command.
 
 ## Unreleased
 
+* Merge pull request #105 from seunghunbae-3svs/claude/friendly-black-efec58
+
 * docs: sharpen README intro — feature-first, install in 2 lines
 
 * chore: v1.3.2 — clean up README slop, sync versions, update metrics
