@@ -1,4 +1,4 @@
-﻿const fs = require("fs");
+const fs = require("fs");
 const { verifyBuild, postBuildStatus } = require("../lib/build-verifier");
 const { filterHealthyRepos } = require("../lib/repo-health-checker");
 

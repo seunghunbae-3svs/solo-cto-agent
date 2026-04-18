@@ -1,4 +1,4 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 
 const TOKEN = process.env.ORCHESTRATOR_PAT || process.env.GITHUB_TOKEN;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
